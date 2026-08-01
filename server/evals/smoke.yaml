@@ -7,6 +7,15 @@ name: smoke_basic_qa
 #   uv run pipecat eval run evals/smoke.yaml -v
 
 turns:
+  # bot.py's on_client_ready kicks off a greeting LLM call on connect. A turn
+  # with no `user:` just waits for/absorbs that response so the real question
+  # below doesn't race it — sending user text immediately risks an
+  # interruption that corrupts context (two consecutive "user" messages, no
+  # assistant turn between) before the greeting is recorded (reproduced
+  # 20260801: flaky 60s timeout, root-caused via broadcast_interruption log).
+  - expect:
+      - event: response
+
   - user: "北京是哪个国家的首都？"
     expect:
       - event: response

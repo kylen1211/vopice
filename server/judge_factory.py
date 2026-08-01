@@ -25,6 +25,14 @@ def judge_llm(config: dict) -> OpenAILLMService:
     Args:
         config: The scenario's `judge.eval:` block. Unused — endpoint, key,
             and model come from env (same source as bot.py's LLM service).
+
+    Note:
+        This module loads inside the globally-installed `pipecat` CLI's own
+        isolated env (verified: `ModuleNotFoundError` for both `judge_factory`
+        and `dotenv` until fixed), not bot.py's project venv — it has no
+        `python-dotenv`. Export the 3 required vars in the invoking shell
+        before `pipecat eval run` (e.g. `export $(grep -v '^#' .env | xargs)`);
+        this factory only reads already-exported env, same as bot.py's.
     """
     cfg = load_config()
     return OpenAILLMService(
