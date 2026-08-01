@@ -39,10 +39,17 @@ from pipecat.runner.utils import create_transport
 from pipecat.services.kokoro.tts import KokoroTTSService
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.whisper.stt import WhisperSTTService
+from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.workers.runner import WorkerRunner
 
+import prompts
+from config import load_config
+
 load_dotenv(override=True)
+
+# R5: validate all required config at startup, fail fast with the full list.
+cfg = load_config()
 
 
 async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
@@ -57,26 +64,35 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     """
     logger.info("Starting bot")
 
-    # Speech-to-Text service
+    # Speech-to-Text service. Official default (Language.EN) is hardcoded and
+    # never overridden by our config — forces English decoding of Chinese
+    # speech (human dogfood 20260801, same pattern found in Kokoro below).
     stt = WhisperSTTService(
         settings=WhisperSTTService.Settings(
             model=os.getenv("OPENAI_MODEL"),
+            language=Language.ZH,
         ),
     )
 
-    # Text-to-Speech service
+    # Text-to-Speech service. Same default-language gap as Whisper above, but
+    # NOT fixed the same way: pipecat-ai 1.6.0's language_to_kokoro_language()
+    # maps Language.ZH -> "zh", while the bundled espeak-ng data only has a
+    # "cmn" dict (verified: espeak-ng-data/ has cmn_dict, no zh_dict) — an
+    # upstream bug, not ours to patch here. Left at the EN default: degraded
+    # (accented) Chinese pronunciation but functional, vs. a hard TTS error.
     tts = KokoroTTSService(
         settings=KokoroTTSService.Settings(
             voice=os.getenv("KOKORO_VOICE_ID"),
         ),
     )
 
-    # LLM service
+    # LLM service — U2: 指向本地 8045 网关（design §5.1 B2）
     llm = OpenAILLMService(
-        api_key=os.getenv("OPENAI_API_KEY"),
+        api_key=cfg.llm_api_key,
+        base_url=cfg.llm_base_url,
         settings=OpenAILLMService.Settings(
-            model=os.getenv("OPENAI_MODEL", "gpt-4.1"),
-            system_instruction="You are a helpful assistant in a voice conversation. Your responses will be spoken aloud, so avoid emojis, bullet points, or other formatting that can't be spoken. Respond to what the user said in a creative, helpful, and brief way.",
+            model=cfg.llm_model,
+            system_instruction=prompts.SYSTEM_PROMPT,
         ),
     )
 
@@ -110,9 +126,11 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     @worker.rtvi.event_handler("on_client_ready")
     async def on_client_ready(rtvi):
-        # Kick off the conversation
+        # Kick off the conversation. A lone "developer"-role message with no
+        # user turn gets rejected (400 invalid argument) by the 8045 gateway
+        # (human dogfood 20260801) — use "user" instead.
         context.add_message(
-            {"role": "developer", "content": "Start by concisely introducing yourself."}
+            {"role": "user", "content": "Start by concisely introducing yourself."}
         )
         await worker.queue_frames([LLMRunFrame()])
 
