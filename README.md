@@ -16,9 +16,14 @@ cd client && npm run dev         # 2. front end, http://localhost:5173
 cd server && uv run pytest       # 3. unit tests (self-authored modules only)
 ```
 
-Requires the local LLM gateway from §"Environment variables" below to be
-running first — the server refuses to start without it (fails fast, lists
-what's missing).
+Requires the 5 required env vars (§"Configure environment variables" below)
+to be set to real, non-placeholder values — the server refuses to start if
+any of them is missing (fails fast, lists what's missing). This checks
+*presence*, not *reachability*: if the values are present but the gateway
+itself isn't actually running, the server still starts — the first LLM call
+will just fail (non-fatal, logged; see the known-gaps note in §13 of
+`openspec/changes/pipecat-native-p1/design.md` for what's and isn't
+surfaced to the user when that happens).
 
 ## Configuration
 
@@ -89,11 +94,17 @@ From `server/`, run the bot with the eval transport, then drive scenarios agains
 
 ```bash
 uv run bot.py -t eval
-# In another terminal:
-uv run pipecat eval run evals/starter_text.yaml -v    # fast text-mode check
-uv run pipecat eval run evals/starter_audio.yaml -v   # full audio round trip (local models, no API keys)
-uv run pipecat eval run evals/smoke.yaml -v           # deterministic link-check (text_contains, no judge)
+# In another terminal — this project's actual gate set (`pipecat eval run`
+# takes individual scenario files, not a directory):
+uv run pipecat eval run evals/smoke.yaml -v                     # deterministic link-check (text_contains, no judge)
+uv run pipecat eval run evals/r4_no_false_completion.yaml -v    # see judge setup below
+uv run pipecat eval run evals/r4_knowledge_qa.yaml -v           # see judge setup below
 ```
+
+Two more scenarios ship from the scaffold, `evals/starter_text.yaml` and
+`evals/starter_audio.yaml` — they use the official default Ollama judge
+(`ollama pull gemma2:9b`), which this project doesn't install (see below),
+so they aren't part of this project's gate and will fail judge setup as-is.
 
 `eval:` criteria are scored by a judge LLM — a local Ollama by default (`ollama pull gemma2:9b`). We don't run Ollama; `evals/r4_*.yaml` point `judge.eval.factory` at `judge_factory.judge_llm`, which reuses the same gateway as the bot's own LLM (the official `ollama`/`openai` judge paths can't reach it — see `judge_factory.py`). Because the `pipecat` CLI is a separately-installed global tool, not this project's venv, running the `factory:` judge needs the project on `PYTHONPATH` and the 3 `LLM_*` vars pre-exported in the shell (not auto-loaded from `.env` the way `bot.py` does it):
 
@@ -151,7 +162,7 @@ Each distinct eval measurement should run against a freshly-started `bot.py -t e
 ```
 voice-agent/
 ├── server/                  # Python bot server
-│   ├── bot.py               # Pipeline assembly (scaffold + 3 authorized edit points)
+│   ├── bot.py               # Pipeline assembly (scaffold + 5 authorized edit points, see design.md §5.1)
 │   ├── config.py            # [added] startup env validation, fail-fast
 │   ├── prompts.py           # [added] system prompt (official + capability-boundary + language sections)
 │   ├── judge_factory.py     # [added] points eval judge LLM at our gateway
@@ -161,7 +172,8 @@ voice-agent/
 │   ├── .env.example         # Environment variables template
 │   ├── .env                 # Your real values (git-ignored)
 │   └── ...
-├── client/                  # React application (voice-ui-kit), scaffold, unmodified
+├── client/                  # React application (voice-ui-kit), scaffold + 1 config edit
+│   ├── src/config.ts        # [1-line edit] enableDefaultIceServers: false (local/LAN-only, no public STUN)
 │   ├── src/                 # Client source code
 │   ├── package.json         # Node dependencies
 │   └── ...
