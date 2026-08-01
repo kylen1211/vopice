@@ -1,6 +1,24 @@
 # voice-agent
 
 A Pipecat AI voice agent built with a cascade pipeline (STT → LLM → TTS).
+This is the R6-B P1 voice loop for the personal AI assistant project
+(`voice-translate-v2`'s 语音快脑层) — a standalone dogfood/PoC scope: real-time
+voice conversation only, no task dispatch, no memory, no multi-agent routing.
+Built almost entirely from the official `pipecat init` scaffold; the only
+custom pieces are `server/config.py`, `server/prompts.py`,
+`server/judge_factory.py`, and `scripts/check_frozen_repo.sh`.
+
+## Quick start (three commands, three terminals, all local/CPU, zero paid keys)
+
+```bash
+cd server && uv run bot.py       # 1. server (STT/LLM/TTS pipeline)
+cd client && npm run dev         # 2. front end, http://localhost:5173
+cd server && uv run pytest       # 3. unit tests (self-authored modules only)
+```
+
+Requires the local LLM gateway from §"Environment variables" below to be
+running first — the server refuses to start without it (fails fast, lists
+what's missing).
 
 ## Configuration
 
@@ -31,8 +49,27 @@ A Pipecat AI voice agent built with a cascade pipeline (STT → LLM → TTS).
 
    ```bash
    cp .env.example .env
-   # Edit .env and add your API keys
+   # Edit .env — see the required variables below
    ```
+
+   Required (server refuses to start if any is missing or left as a
+   `CHANGE_ME_*` placeholder — `config.py` reports the full list at once):
+
+   | Variable | Purpose |
+   |---|---|
+   | `LLM_BASE_URL` | Local OpenAI-compatible gateway URL (1 期: `:8045`) |
+   | `LLM_API_KEY` | Gateway key |
+   | `LLM_MODEL` | Model name the gateway routes to |
+   | `OPENAI_MODEL` | Whisper (STT) model size, e.g. `small` — local, no API key despite the var name (faster-whisper convention) |
+   | `KOKORO_VOICE_ID` | Kokoro (TTS) voice, e.g. `af_heart` — local, no API key |
+
+   Whisper/Kokoro run entirely on local CPU; only the LLM needs the gateway.
+   Chinese is a known-degraded path: STT is forced to `Language.ZH`, but
+   Kokoro's Chinese pronunciation is accented (upstream `pipecat-ai` 1.6.0
+   gap — see `bot.py` comments) and, per 20260801 dogfood, multi-sentence
+   replies can overlap in playback. Both are tracked as known limitations,
+   not fixed here (see the change's backlog, §10 K3 for the switch-tier path
+   if this ever needs a paid TTS).
 
 4. **Run the bot**:
 
@@ -55,9 +92,26 @@ uv run bot.py -t eval
 # In another terminal:
 uv run pipecat eval run evals/starter_text.yaml -v    # fast text-mode check
 uv run pipecat eval run evals/starter_audio.yaml -v   # full audio round trip (local models, no API keys)
+uv run pipecat eval run evals/smoke.yaml -v           # deterministic link-check (text_contains, no judge)
 ```
 
-`eval:` criteria are scored by a judge LLM — a local Ollama by default (`ollama pull gemma2:9b`). The comments in the scenario files cover the schema and how to use an OpenAI judge instead.
+`eval:` criteria are scored by a judge LLM — a local Ollama by default (`ollama pull gemma2:9b`). We don't run Ollama; `evals/r4_*.yaml` point `judge.eval.factory` at `judge_factory.judge_llm`, which reuses the same gateway as the bot's own LLM (the official `ollama`/`openai` judge paths can't reach it — see `judge_factory.py`). Because the `pipecat` CLI is a separately-installed global tool, not this project's venv, running the `factory:` judge needs the project on `PYTHONPATH` and the 3 `LLM_*` vars pre-exported in the shell (not auto-loaded from `.env` the way `bot.py` does it):
+
+```bash
+set -a && source .env && set +a
+PYTHONPATH="$(pwd)" pipecat eval run evals/r4_no_false_completion.yaml -v
+PYTHONPATH="$(pwd)" pipecat eval run evals/r4_knowledge_qa.yaml -v
+```
+
+Each distinct eval measurement should run against a freshly-started `bot.py -t eval` — the eval transport keeps one `LLMContext` for the whole process lifetime (by design, so you can "leave it running and re-run evals as you edit"), so repeated runs against the same process accumulate turns onto each other rather than starting clean.
+
+### R6: verify the old repo stayed frozen
+
+`voice-translate-v2` must stay untouched outside its own `openspec/changes/pipecat-native-p1/**` for as long as this project is implemented there:
+
+```bash
+./scripts/check_frozen_repo.sh
+```
 
 ### Client
 
@@ -96,19 +150,25 @@ uv run pipecat eval run evals/starter_audio.yaml -v   # full audio round trip (l
 
 ```
 voice-agent/
-├── server/              # Python bot server
-│   ├── bot.py           # Main bot implementation
-│   ├── evals/           # Behavioral eval scenarios
-│   ├── pyproject.toml   # Python dependencies
-│   ├── env.example      # Environment variables template
-│   ├── .env             # Your API keys (git-ignored)
+├── server/                  # Python bot server
+│   ├── bot.py               # Pipeline assembly (scaffold + 3 authorized edit points)
+│   ├── config.py            # [added] startup env validation, fail-fast
+│   ├── prompts.py           # [added] system prompt (official + capability-boundary + language sections)
+│   ├── judge_factory.py     # [added] points eval judge LLM at our gateway
+│   ├── evals/               # Behavioral eval scenarios (starter_* + smoke + r4_*)
+│   ├── tests/                # Unit tests for config.py
+│   ├── pyproject.toml       # Python dependencies
+│   ├── .env.example         # Environment variables template
+│   ├── .env                 # Your real values (git-ignored)
 │   └── ...
-├── client/              # React application
-│   ├── src/             # Client source code
-│   ├── package.json     # Node dependencies
+├── client/                  # React application (voice-ui-kit), scaffold, unmodified
+│   ├── src/                 # Client source code
+│   ├── package.json         # Node dependencies
 │   └── ...
-├── .gitignore           # Git ignore patterns
-└── README.md            # This file
+├── scripts/
+│   └── check_frozen_repo.sh # [added] R6: verifies voice-translate-v2 stayed frozen
+├── .gitignore                # Git ignore patterns
+└── README.md                 # This file
 ```
 ## Building with an AI coding agent
 
