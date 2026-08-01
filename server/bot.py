@@ -20,8 +20,6 @@ Run the bot using::
     uv run bot.py
 """
 
-import os
-
 from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -69,7 +67,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     # speech (human dogfood 20260801, same pattern found in Kokoro below).
     stt = WhisperSTTService(
         settings=WhisperSTTService.Settings(
-            model=os.getenv("OPENAI_MODEL"),
+            model=cfg.stt_model,
             language=Language.ZH,
         ),
     )
@@ -82,7 +80,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
     # (accented) Chinese pronunciation but functional, vs. a hard TTS error.
     tts = KokoroTTSService(
         settings=KokoroTTSService.Settings(
-            voice=os.getenv("KOKORO_VOICE_ID"),
+            voice=cfg.tts_voice,
         ),
     )
 

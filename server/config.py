@@ -17,6 +17,10 @@ _REQUIRED_ENV_TO_FIELD = {
     "LLM_BASE_URL": "llm_base_url",
     "LLM_API_KEY": "llm_api_key",
     "LLM_MODEL": "llm_model",
+    # 门三 20260801(REQ-001)：STT/TTS 均无框架默认值(bot.py 直接 os.getenv 传入)，
+    # 留空此前会让服务正常启动、TTS 在运行期每句话静默失败。
+    "OPENAI_MODEL": "stt_model",
+    "KOKORO_VOICE_ID": "tts_voice",
 }
 
 
@@ -33,12 +37,15 @@ class Config:
     llm_base_url: str
     llm_api_key: str
     llm_model: str
+    stt_model: str
+    tts_voice: str
     scenario: str = _ALLOWED_SCENARIO
 
     def __repr__(self) -> str:
         return (
             f"Config(llm_base_url={self.llm_base_url!r}, llm_api_key='***', "
-            f"llm_model={self.llm_model!r}, scenario={self.scenario!r})"
+            f"llm_model={self.llm_model!r}, stt_model={self.stt_model!r}, "
+            f"tts_voice={self.tts_voice!r}, scenario={self.scenario!r})"
         )
 
 
@@ -48,11 +55,17 @@ def load_config() -> Config:
     Raises ConfigError listing every missing/placeholder required variable,
     or rejecting a 2-期 scenario value with a "not yet available" hint.
     """
+    # 门三 20260801(REQ-003)：白名单而非黑名单——只放行已知的 1 期场景值，
+    # 未知值(含拼错、未来新增的 2 期名字)一律拒绝，不静默放行。
     scenario = os.getenv("SCENARIO", _ALLOWED_SCENARIO)
-    if scenario in _PHASE2_SCENARIOS:
+    if scenario != _ALLOWED_SCENARIO:
+        if scenario in _PHASE2_SCENARIOS:
+            raise ConfigError(
+                f"SCENARIO={scenario!r} 属后续阶段，暂未开放"
+                f"（1 期仅支持 {_ALLOWED_SCENARIO!r}）"
+            )
         raise ConfigError(
-            f"SCENARIO={scenario!r} 属后续阶段，暂未开放"
-            f"（1 期仅支持 {_ALLOWED_SCENARIO!r}）"
+            f"SCENARIO={scenario!r} 不是有效值（1 期仅支持 {_ALLOWED_SCENARIO!r}）"
         )
 
     values: dict[str, str] = {}
