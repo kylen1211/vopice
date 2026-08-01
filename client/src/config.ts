@@ -48,7 +48,12 @@ const smallWebRTCConfig: APIRequest = {
   headers,
   requestData: {
     createDailyRoom: false,
-    enableDefaultIceServers: true,
+    // PRD: service is local/LAN-only, never exposed to the public internet.
+    // The scaffold default (true) makes ICE negotiate via Google's public
+    // STUN server even for same-machine connections, which turned out to be
+    // the cause of random mid-session disconnects during human dogfood
+    // (20260801) — direct host candidates are simpler and more reliable here.
+    enableDefaultIceServers: false,
     transport: 'webrtc',
   },
 };
