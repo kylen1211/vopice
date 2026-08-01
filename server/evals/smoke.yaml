@@ -1,0 +1,13 @@
+name: smoke_basic_qa
+
+# Deterministic link-check (design §8.2): confirms STT/LLM/TTS/gateway wiring
+# hasn't broken after an edit. Text mode, no judge — fast and non-flaky.
+#
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/smoke.yaml -v
+
+turns:
+  - user: "北京是哪个国家的首都？"
+    expect:
+      - event: response
+        text_contains: "中国"
