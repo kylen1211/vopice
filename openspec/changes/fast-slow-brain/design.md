@@ -320,6 +320,8 @@ content: "[慢脑深析要点|问题#{turn}|已完成] 以上素材已齐。由�
 | `ELEVENLABS_API_KEY` | 是 | — | 同上 |
 | `ELEVENLABS_VOICE_ID` | 是 | 无默认;**实现期先填一个官方多语音色 ID 占位** | M1 试听后替换为最终值。**不得用 `CHANGE_ME_*`** —— `config.py:31-32` 的 `_is_missing` 会把该前缀判为缺失、启动即拒,导致 T2.x 之后到 M1 之前所有 pytest/eval 都跑不起来(fresh 复验第三节 8)。占位值必须是**真实可用**的音色 ID,只是待用户拍板替换 |
 | `ELEVENLABS_MODEL` | 是 | `eleven_flash_v2_5` | 官方多语白名单内且可显式传 language(`elevenlabs/tts.py:59` 实读) |
+| `STT_PROVIDER` | 否 | `soniox` | §6.3 定案。**有默认值 + 白名单校验,不进必需项** —— 与 1 期 `SCENARIO` 同构(`config.py:60` 实读:`os.getenv("SCENARIO", 默认)` 后校验白名单)。故必需项仍恰为下方 8 项,U1 断言不变 |
+| `TTS_PROVIDER` | 否 | `elevenlabs` | 同上 |
 | ~~`OPENAI_MODEL`~~ / ~~`KOKORO_VOICE_ID`~~ | — | — | **删除**,同步删 `.env.example` 与 `test_config.py` 断言 |
 
 慢脑复用 `LLM_BASE_URL`/`LLM_API_KEY`(同一网关),不新增 base_url/key 配置项。
@@ -330,11 +332,10 @@ content: "[慢脑深析要点|问题#{turn}|已完成] 以上素材已齐。由�
 - R8 的"超时"路径实际由底层 SDK/网关的连接与读超时兜底,表现为异常 → `ErrorFrame` → 与"失败"同路,验收判据不变(§6.4 `slow-failed` 日志行)。
 - **PRD R8 措辞据实收窄**:"慢脑调用失败**或自身超时(API 超时配置项)**"中的括号部分本期无落点。此为设计对 PRD 的**收窄**,不改变 R8-S1/R8-S2 的可验收行为(两条场景都只断言"失败→静默降级"),故不回门一;若用户认为必须有独立超时旋钮,则须回门一改 R8。
 
-### 6.3 服务装配契约:provider 可配置 —— ⏸ **本节待定,未拍板**
+### 6.3 服务装配契约:provider 可配置(**已拍板**,用户 2026-08-02)
 
-> **状态(用户 2026-08-02):厂商配置方案等整体方案定稿后再谈,在此之前不改动本节、也不据此写码。**
-> 下方是已完成的现状核实与候选方案,**仅作待议材料**;§6.2 的配置项命名、§8.2 的 U6 用例、§11 RTM 的「PRD §7-4」行若最终采纳另一方案,需一并回改。
-> 已排除项:`ServiceSwitcher`(运行期切换)—— 用户明确"只要启动前能换,不需要运行期更换"。
+> **决策:只注册当前在用的那一家**(STT=soniox,TTS=elevenlabs)。备用厂商**不进代码**,只在注册表旁留一段注释说明接口形状——"要换就照这个形状加一行"。
+> 已排除项:①`ServiceSwitcher`(运行期切换)—— 用户"只要启动前能换,不需要运行期更换";②预注册多家备用厂商 —— 用户"干嘛注册那么多,没用"。
 
 **需求**:STT/TTS 应当"接口 + 不同实现",换厂商不该到处改。
 
@@ -343,14 +344,20 @@ content: "[慢脑深析要点|问题#{turn}|已完成] 以上素材已齐。由�
 | 层 | 官方提供什么 | 位置 | 对本需求够不够 |
 |---|---|---|---|
 | 接口抽象 | `STTService.run_stt(audio)` / `TTSService.run_tts(text, context_id)`,全厂商实现同一契约 | `services/stt_service.py:51,294`;`services/tts_service.py:107,487` | **够** —— 换厂商时管线其余部分零改 |
-| 生成期 registry | 全厂商 import 路径 + 构造代码 + extras 包名(含 `soniox_stt`/`elevenlabs_tts`) | `cli/registry/_imports.py:82,149`、`_configs.py:89`、`service_metadata.py:420,954` | 不够 —— 是 `pipecat init` **写代码进 bot.py**,运行期不参与 |
+| 生成期 registry | **全厂商**(实测 **27 STT / 32 TTS**)import 路径 + 构造代码模板 + extras 包名 | `cli/registry/service_metadata.py` 的 `SERVICE_CONFIGS` / `IMPORTS`(venv 1.6.0 实读) | **是现成的抄写事实源** —— 但它是 `pipecat init` 的**代码生成**数据,不是运行期工厂 |
 | 运行期切换 | `ServiceSwitcher`(ParallelPipeline 子类)+ `ServiceSwitcherStrategyFailover`(非 fatal 错误自动切下一家) | `pipeline/service_switcher.py:158-265` | 过重 —— 要求**候选厂商全部同时构造**(每家 key 都得配齐) |
 | 运行期"按名字造 service"工厂 | **不存在** | 全局 grep 零命中(`from_config` 仅 eval harness 自用) | — |
+| "一个文件里按 env 切多家"的官方示例 | **不存在** | `~/git/pipecat/examples/voice/` 共 **67 个文件、一家一个**;全 examples grep `STT_PROVIDER\|TTS_PROVIDER\|importlib` **零命中** | 官方范式就是"用哪家写哪家" |
 
-**本设计的处置**:官方在这一层本就没有件(不属于"官方达不到就造零件补"的情形,而是应用装配层的常规写法),写一层**十几行的 provider 映射**放 `bot.py`,构造代码直接照抄 CLI registry 那份官方事实源:
+**本设计的处置**:官方在这一层本就没有件(不属于"官方达不到就造零件补"的情形,而是应用装配层的常规写法),写一层**十几行的 provider 映射**放 `bot.py`,构造代码直接照抄上表 registry 那份官方事实源。**注册表内只放当前在用的一家**,备用厂商留注释说明形状、不进代码:
 
 ```python
-# bot.py —— provider 名 → 构造器。换厂商 = 这里加一行 + 改 .env,config.py/tests/管线全不动。
+# bot.py —— provider 名 → 构造器。
+# 换厂商 = ①这里加一行 ②pyproject 加对应 extras ③改 .env,config.py/tests/管线全不动。
+# 构造代码照抄官方事实源:pipecat/cli/registry/service_metadata.py 的 SERVICE_CONFIGS["<name>_stt"]
+# (27 家 STT / 32 家 TTS 全在里面,含 import 路径与 extras 包名)。
+# 只注册在用的一家:未验证的厂商预注册进来既没 key 也没测过,且 deepgram/azure 这类缺 extras
+# 时顶部 import 会启动即崩(§6.3 实测)。要哪家再按上面三步引入。
 STT_BUILDERS = {
     "soniox": lambda c: SonioxSTTService(
         api_key=c.stt_api_key,
@@ -367,6 +374,9 @@ TTS_BUILDERS = {
 stt = STT_BUILDERS[cfg.stt_provider](cfg)
 tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 ```
+
+**为什么不预注册多家备用(实测支撑,2026-08-02)**:注册一家 = `bot.py` 顶部要 import 它的类。当前 venv(7 个 extras)实测:`soniox`/`elevenlabs`/`cartesia`/`assemblyai`/`openai_tts` 不装 extras 即可 import(纯 aiohttp+websockets 实现),但 `deepgram` → `No module named 'deepgram'`、`azure` → `No module named 'azure'`,**启动即崩**。规避要么装齐全部 extras(拖重环境),要么把 import 藏进 builder 体内做惰性 import(多几行、且换来的是一堆没 key 没验证过的死选项)。用户拍板:不做,**用哪家注册哪家,关键位置写清说明、按需引入**。
+> 复现该实测须带 `NLTK_DISABLE_IMPORT_SECURITY=1`;漏带会得到 `ImportError: Blocked import of regex ... for security reasons`,那是**环境拦截**不是缺依赖,勿误判为"这家也要装 extras"(台账 2026-08-02)。
 
 **硬约束(防旧库 B19 复现)**:一律走 `settings=`,禁止把 `language_hints`/`voice`/`model` 当裸构造参数传 —— 旧库实测该写法被 `**kwargs` 静默吞掉、无异常无警告,STT 语言绑定完全失效。装配后须断言生效值(§8 U4)。
 **provider 白名单**:`config.py` 校验 `STT_PROVIDER`/`TTS_PROVIDER` ∈ 对应 BUILDERS 的键,未知值启动即拒(**沿用 1 期 `SCENARIO` 的白名单而非黑名单模式**,`config.py:58-69`)。
