@@ -652,7 +652,7 @@ turns:
 | U1 | `test_config.py::test_required_env_set_updated` | 必需项恰为新 8 项;`OPENAI_MODEL`/`KOKORO_VOICE_ID` 不再必需 |
 | U2 | `test_config.py::test_placeholder_rejected` | `CHANGE_ME_` 前缀值仍被判缺失(沿用 1 期语义) |
 | U3 | `test_dual_brain.py::test_pipeline_shape` | 管线装配后:Consumer 在快脑 user aggregator 之前;慢脑分支无输出件 |
-| U4 | `test_dual_brain.py::test_stt_tts_settings_take_effect` | 构造后 `stt._settings.language_hints` / `tts._settings.voice` 为期望值(**旧库 B19 就是这里静默失效**) |
+| U4 | `test_bot.py::test_stt_builder_sets_language_hints_to_zh` / `test_tts_builder_sets_voice_from_config`(2026-08-02 组末评审订正落点:任务 1.4b 执行时 `test_dual_brain.py` 尚不存在,新建独立文件 `test_bot.py` 测 `bot.py` 的装配逻辑,避免与第 3 组"先写测试"抢建同一文件;两条用例拆分自单条原描述。**先红证据例外**:该组 1.4b 测试提交(`723fc0f`)晚于 1.4 实现提交(`6681b3f`)——1.4 已先落地 `settings=` 正确写法,1.4b 补的是断言而非驱动实现,故此处未走标准 R6 先红顺序;组末评审已用独立变异验证(改回裸构造参数)证实两条用例仍有真实杀伤力,判定可接受,不要求补红) | 构造后 `stt._settings.language_hints` / `tts._settings.voice` 为期望值(**旧库 B19 就是这里静默失效**) |
 | U5 | `test_dual_brain.py::test_rtvi_ignores_slow_branch` | 传给 `PipelineWorker` 的 `rtvi_observer_params.ignored_sources` 恰含慢脑三件(`slow_llm`/句聚合/Producer)且**不含**快脑 LLM(§5.1.1;漏了就是慢脑原文上面板) |
 | U6 | `test_config.py::test_provider_whitelist`(2026-08-02 订正落点:第 1 组执行时 `test_dual_brain.py` 尚不存在) | 未知 `STT_PROVIDER`/`TTS_PROVIDER` 启动即拒(沿用 1 期白名单模式) |
 

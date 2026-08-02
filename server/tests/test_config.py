@@ -144,8 +144,6 @@ def test_placeholder_rejected(monkeypatch):
     """T1.1/U2（fast-slow-brain design §6.2）：CHANGE_ME_ 前缀值在新必需项上
     仍被判定为缺失——沿用 1 期 `_is_missing` 语义（config.py:31-32）。"""
     _set_new_required_env(monkeypatch)
-    monkeypatch.setenv("OPENAI_MODEL", REQUIRED_ENV["OPENAI_MODEL"])
-    monkeypatch.setenv("KOKORO_VOICE_ID", REQUIRED_ENV["KOKORO_VOICE_ID"])
     monkeypatch.setenv("SONIOX_API_KEY", "CHANGE_ME_SONIOX_API_KEY")
 
     with pytest.raises(ConfigError) as exc_info:
@@ -159,8 +157,6 @@ def test_provider_whitelist(monkeypatch):
     test_dual_brain.py 尚不存在，改放本文件）：未知的 STT_PROVIDER/TTS_PROVIDER
     值必须启动即拒——沿用 1 期 SCENARIO 白名单模式（config.py:58-69）。"""
     _set_new_required_env(monkeypatch)
-    monkeypatch.setenv("OPENAI_MODEL", REQUIRED_ENV["OPENAI_MODEL"])
-    monkeypatch.setenv("KOKORO_VOICE_ID", REQUIRED_ENV["KOKORO_VOICE_ID"])
     monkeypatch.setenv("STT_PROVIDER", "not_a_real_provider")
     monkeypatch.setenv("TTS_PROVIDER", "not_a_real_provider")
 
