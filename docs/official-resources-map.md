@@ -8,7 +8,7 @@
 | 源 | 位置 | 版本 | 取数方式 |
 |---|---|---|---|
 | **本地源码 clone** | `~/git/pipecat`(含 `examples/` `tests/` `src/`) | main `v1.6.0-122-g46a1bd9d3`(罗盘 §0.1 已证:对 1.6.0 结论零影响) | 直接 Read;**已建 codegraph 索引**,结构问题一次 `codegraph_explore` 解决 |
-| **运行版** | `server/.venv` 内 `pipecat-ai==1.6.0`(`uv.lock` 锁定,extras: evals/kokoro/openai/runner/silero/webrtc/whisper) | 1.6.0(GitHub 最新 release,无落后) | 行为地面真值;疑难时以 site-packages 实际代码为准 |
+| **运行版** | `server/.venv` 内 `pipecat-ai==1.6.0`(`uv.lock` 锁定,extras: evals/kokoro/openai/runner/silero/webrtc/whisper) | 1.6.0(**已落后:PyPI 2026-08-02 实查最新 1.7.0**,升级影响待评估,升级前 1.6.0 仍是行为地面真值) | 行为地面真值;疑难时以 site-packages 实际代码为准 |
 | **官方文档站** | `docs.pipecat.ai`(源仓库 `pipecat-ai/docs`) | 随 main 滚动 | 导航树 = `gh api repos/pipecat-ai/docs/contents/docs.json`(一条命令);**正文页 WebFetch 被本机策略禁**,用 tavily/firecrawl extract 取 |
 | **周边仓库** | `pipecat-ai/{voice-ui-kit, whisker, tail, skills}` | — | gh 直查;whisker 接入已 PoC 实测(罗盘 §7.2a) |
 

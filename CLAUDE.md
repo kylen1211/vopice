@@ -15,7 +15,8 @@ G1 实时语音对话 / G2 慢脑质量升级(快脑先答→慢脑深析→回�
 
 ## 事实源指针(按需读,索引优先不整读)
 
-- **能力账单对照表(2 期主工作底稿)**:`docs/capability-ledger.md`
+- **能力账单对照表(2 期主工作底稿)**:`docs/capability-ledger.md`(含官方件核对记录 + 核心能力/优化方案二分)
+- **外部方案参考(已核实自含版)**:`docs/external-design-references.md`(qwen Work 派活底稿 / 快慢脑三参照 / kit 对比佐证;原始 `~/research/` 调研目录可清理)
 - 旧项目历史能力查询清单:`docs/legacy-capability-index.md`(旧库 `~/git/voice-translate-v2` 整库冻结只读,按此清单定点取材)
 - pipecat 官方资料地图:`docs/official-resources-map.md`
 - 已知限制:`docs/backlog.md`;需求事实源:`openspec/specs/`(1 期基线 voice-assistant-p1 已迁入)

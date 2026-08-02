@@ -29,8 +29,8 @@
 |---|---|---|---|---|
 | 基础回路 STT→LLM→TTS、双通道输出、快速失败 | — | 1 期即官方脚手架 | ✅ | 网页端 |
 | 打断 | voice-interaction R9-R11 | `fundamentals/interruptions`、`turn-management-interruption-config.py` | ⚠️ | 有但未专测(R2) |
-| 语义轮次 | butler.py:507 | **`LocalSmartTurnAnalyzerV3`** + `turn-management-smart-turn-local.py` | ❌ | 接官方件即可,零自研 |
-| 外放回声(AEC) | 回声隔离 `vt/audio/` | 浏览器 AEC(网页/Electron 白捡);官方另有 krisp 等付费 audio filter | ⚠️ | 网页端已白捡;桌面端选型定成败 |
+| 语义轮次 | butler.py:507 | **`LocalSmartTurnAnalyzerV3`** + `turn-management-smart-turn-local.py` | ❌ | 已核(2026-08-02):**V3 是框架默认停顿策略**(`turns/user_turn_strategies.py:46`),连显式构造都不用,确认默认生效+调参即可 |
+| 外放回声(AEC) | 回声隔离 `vt/audio/` | 浏览器 AEC(网页/Electron 白捡);官方 audio filters 全是**降噪类无 AEC 件**(`KrispVivaFilter`/koala/rnnoise/aic,无 `KrispFilter` 类名) | ⚠️ | 网页端已白捡;桌面端选型定成败 |
 | STT/TTS/LLM 可插拔 | `vt/providers/registry.py`、`va/services/llm_factory.py` | service 构造注入 + `ServiceSwitcher` | ❌ | 现硬编码;改造方向明确(核对结论 4) |
 | 场景装配/开关(陪练在此层) | `va/scenarios/` 配方 + dual-pipeline-core | 官方无场景配方层;薄装配(llm_factory 模式) | ❌ | **陪练=换 prompt/换 LLM,随此层自然获得** |
 | 断连韧性、云 API 失败恢复 | scenario-assembly R17/R18 | `client/concepts/session-lifecycle` | ❌ | B1 断线重连现在还是坏的 |
@@ -43,13 +43,13 @@
 
 | 子能力 | 旧库参考 | 官方对应件 | 现状 | 备注 |
 |---|---|---|---|---|
-| 快脑先答→慢脑深析→回流补充 | **`vt/processors/assist.py`(成功版)**;简化版 `va/processors/assist_answer.py` | 无现成件;组装件=ParallelPipeline、async FrameProcessor、producer/consumer | ❌ | 2 期核心;NFR 旧标准可参考:首响 ≤1s、衔接静默 ≤2s、不自相矛盾(spec R7/R8) |
+| 快脑先答→慢脑深析→回流补充 | **`vt/processors/assist.py`(成功版)**;简化版 `va/processors/assist_answer.py` | 无现成件;组装件=ParallelPipeline、async FrameProcessor、producer/consumer;**最佳参照实例=`features-concurrent-llm-evaluation.py`(双 LLM 并行,2026-08-02 核出)**;注意 producer/consumer 在官方 examples 零用例,用法须读源码 | ❌ | 2 期核心;NFR 旧标准可参考:首响 ≤1s、衔接静默 ≤2s、不自相矛盾(spec R7/R8) |
 
 ## G3 · 派活(独立功能)
 
 | 子能力 | 旧库参考 | 官方对应件 | 现状 | 备注 |
 |---|---|---|---|---|
-| 任务派发、状态查询、多任务独立、紧急中止 | assistant-orchestration + `va/orchestration/` | **`bus/` + `workers/`**(罗盘 §3 六项能力实测)、`learn/` 多 agent 6 页、`examples/multi-worker/` | ❌ | 执行载体待定;判据底稿=qwen Work 状态机 |
+| 任务派发、状态查询、多任务独立、紧急中止 | assistant-orchestration + `va/orchestration/` | **`bus/` + `workers/`**(罗盘 §3 六项能力实测)、`learn/` 多 agent 6 页、`examples/multi-worker/` | ❌ | 执行载体待定;判据底稿=qwen Work 状态机(自含版见 `docs/external-design-references.md` §1,2026-08-02 拍板采用) |
 | 派发期间对话不中断 | — | bus 异步派发(processor 异常不致命已实测,罗盘 §3.6) | ❌ | 本次新明确的硬需求 |
 | 完成确认铁律、关键节点播报、状态未知处置 | R6B-R3/R4/R5/R5b | 无官方件,文本契约层自装 | ❌ | "未确认完成绝不报办好了" |
 | 授权确认链 + 审计 | assistant-orchestration R4-R12 | 无官方件,业务层自装 | ❌ | |
@@ -74,4 +74,58 @@
 
 ## 横切约束
 
-契约字段第一天带 user/tenant(实现单用户)/ 鉴权多用户后置(暴露公网前必补)/ 会话恢复 2 期+候选 / 慢脑 70B 级永远云 API / 官方脚手架结构不动(2026-08-02 口径)。
+契约字段第一天带 user/tenant(实现单用户)/ 鉴权多用户后置(暴露公网前必补)/ 会话恢复 2 期+候选 / 慢脑 70B 级永远云 API / 官方脚手架结构不动(2026-08-02 口径)/ **STT/TTS 沿用原付费 API,本地语音服务暂停**(2026-08-02 用户拍板)/ **派活流程与状态机直接采用 qwen Work 底稿(状态+投递不变量),不新增其他形式**(2026-08-02 用户拍板)。
+
+## 官方件核对记录(2026-08-02,本地 clone v1.6.0-122 实锤,以源码为准)
+
+逐项核对结论:**账单映射全部核实成立,无一虚指**。实锤路径:
+
+- 打断:`examples/turn-management/turn-management-interruption-config.py`(同目录 9 例)✅
+- 语义轮次:`audio/turn/smart_turn/local_smart_turn_v3.py:28`,且为默认策略 ✅(增量发现①)
+- 可插拔:`pipeline/service_switcher.py:211` `ServiceSwitcher`(Manual/Failover 策略)+ `features-service-switcher.py` ✅
+- 出错告知:`frames/frames.py:950` `ErrorFrame` ✅;TTS 完整性:`services/tts_service.py` `stop_frame_timeout` ✅
+- 上下文:`context-summarization/` 4 例 + `persistent-context/` 8 例 ✅
+- G2 组装件:`pipeline/parallel_pipeline.py`、`processors/{producer,consumer}_processor.py` ✅(增量发现②:`features-concurrent-llm-evaluation.py` 双 LLM 并行最佳参照;增量发现③:producer/consumer 官方 examples 零用例)
+- G3:`src/pipecat/bus/` + `src/pipecat/workers/` + `examples/multi-worker/` 7 例 ✅
+- G4:`services/mcp_service.py` + `examples/mcp/` 4 例 + `examples/vision/` 7 例 ✅
+- 无官方件确认(自装,与账单一致):场景装配层、音频设备自检、完成确认铁律/授权链、AT-SPI2/注入防线
+- 文档级待取:`client/concepts/session-lifecycle`(断连韧性,要用时 tavily extract)
+
+### 0802 参考资料(livekit-vs-pipecat 调研)核对结论(2026-08-02)
+
+逐条核对 0802 调研资料(核实后的自含版已落 `docs/external-design-references.md`,原始调研目录待用户清理),结果:**实体断言基本属实,4 处出入**。
+
+已核实为真:PyPI pipecat-ai=1.7.0、livekit-agents=1.6.7(curl 实查);stars 量级吻合;LiveKit `_FillerScheduler`(`voice/filler_scheduler.py`,gh code search 实锤);LiveKit examples frontdesk/survey/hotel_receptionist 均在;`SalesforceAIResearch/VoiceAgentRAG`(2026-07-28 新库)、`ServiceNow/eva`、`kwindla/aiewf-eval` 三仓库真实;本地实锤 `InterruptionFrame`(frames.py:1019)、`EvalJudge`(evals/judge.py:107)、`01a-local-audio.py`、`update-settings/`。
+
+4 处出入:①报告所有"源码链接"均错挂 `file:///home/ky/git/data-foundation-agent`(链接坏,所指文件本身真实);②运行命令应为 `pipecat eval run`(`python -m pipecat.evals` 有 `__main__.py` 可跑但非官方口径);③"Pipecat 原生内置快慢脑"措辞过强——实为组装件(ParallelPipeline)存在,无快慢脑现成件,与罗盘结论一致;④aiewf-eval 实际描述是"A long-context eval",报告"多轮语音评测集"说法待确认。Silero VAD 参数(250/400ms)未验证。
+
+**连带发现**:我们资料地图原口径"1.6.0 无落后"已过时(PyPI 已出 1.7.0),地图已更正;本地 clone(main v1.6.0-122)已含 1.7.0 方向代码(如 InterruptionFrame),锁定版 1.6.0 升级影响待门二评估。
+
+## 能力二分:核心能力 vs 优化方案(草稿,待用户核,2026-08-02)
+
+> 口径:**核心能力** = 构成最终目标 G0-G4 与场景真功能的新建能力;**优化方案** = 围绕既有 G1 回路的质量/健壮性/体验改进。后续迭代围绕此二分推进。
+
+### 核心能力
+
+| # | 能力 | 出处 |
+|---|---|---|
+| C1 | 桌面客户端载体(壳 + 悬浮面板 + 语音任务入口) | G0 全部 |
+| C2 | 服务可插拔 + 场景装配层(使能层:陪练配置态、同传/面试均挂此层) | G1 |
+| C3 | 快慢脑(快答→深析→回流续接) | G2 全部 |
+| C4 | 派活(派发/状态/多任务/中止 + 不中断 + 完成确认铁律 + 授权审计 + 手动接管) | G3 全部 |
+| C5 | 页面监控(浏览器采集 + 截屏 VLM + AT-SPI2 + 感知降级/注入防线) | G4 全部 |
+| C6 | 同声翻译(真功能①,放最后) | 场景层 |
+| C7 | 面试辅助(真功能②,放最后) | 场景层 |
+
+### 优化方案
+
+| # | 项 | 出处 | 依赖 |
+|---|---|---|---|
+| O1 | 打断专测(有但未专测) | G1 | — |
+| O2 | 语义轮次:确认 V3 默认生效 + 调参 | G1 | — |
+| O3 | AEC:网页已白捡;桌面端随 C1 选型连带定 | G1 | C1 |
+| O4 | 断连韧性(B1 重连修复 + 云 API 失败恢复) | G1 | — |
+| O5 | TTS 播放完整性(B2,`stop_frame_timeout_s` 修法已验证) | G1 | — |
+| O6 | 出错口头告知(ErrorFrame→TTS) | G1 | — |
+| O7 | 会话上下文 / 语言模板会话绑定增强 | G1 | — |
+| O8 | 音频设备自检/失效检测(桌面端才需要) | G1 | C1 |
