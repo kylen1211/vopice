@@ -35,6 +35,7 @@ test_sentinel.py 都踩过/绕过这个坑）。故这里同样改用
 取值机制，因此不受这个实现细节影响。
 """
 
+import asyncio
 import contextlib
 import unittest
 
@@ -731,6 +732,63 @@ class TestAssemblePipeline:
         assert len(ignored) == 3, "ignored_sources 不得含重复/多余项"
         assert assembled.fast_llm not in ignored, "快脑 LLM 绝不能进 ignored_sources"
         assert params.user_llm_enabled is False, "user_llm_enabled 必须显式为 False"
+
+    def test_greeting_turn_emits_no_material(self, bot_module):
+        """T5.5(design §5.3/§8.1)：开场白轮零注入帧、零完成标记帧、零 slow-failed。
+
+        真实网关是否对开场白 no-op 消息("(会话开始,用户尚未提问)")返回零字符是
+        运行期 LLM 行为(由 `prompts.SLOW_BRAIN_PROMPT` 的"无深析价值则零输出"
+        约束,§8.3 M6 / design §15 PoC-6 已实测验证,3.53s 返回空),不是单测能力
+        范围。本用例验证的是：零输出发生时(等价帧序——`LLMFullResponseStartFrame`
+        后无任何 `TextFrame` 直接收到 `LLMFullResponseEndFrame`)，开场白 basis
+        (真实 seed 消息，非任意占位内容)不会让 `assemble_pipeline()` 真实装配出
+        的 Producer/filter 意外产出材料——把第 3 组已证的通用机制
+        (`test_failed_slow_turn_emits_no_completion_marker`)钉死在真实开场白流程
+        写入的 `slow_context` 上，而不是任意占位内容。
+
+        `slow-failed` 本身要到第 6 组(`on_pipeline_error` handler)才会被打印；
+        这里断言它不出现，在第 6 组落地前后都应恒成立(零要点turn 不是 pipeline
+        error)——先钉住这条契约，不等第 6 组补测。
+
+        用 `asyncio.run()` 包一层同步入口，不用 `async def` + pytest-asyncio：
+        venv 未装该插件(见本文件模块头 unittest.IsolatedAsyncioTestCase 的同型
+        选择理由)，`TestAssemblePipeline` 用纯 pytest 风格是为了直接吃
+        `bot_module` fixture，两者结合就只能这样绕。
+        """
+        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        assert hasattr(bot_module, "seed_greeting_messages"), "seed_greeting_messages 尚未定义"
+
+        transport = self._FakeTransport()
+        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+        bot_module.seed_greeting_messages(assembled.fast_context, assembled.slow_context)
+
+        slow_messages = assembled.slow_context.get_messages()
+        assert any(
+            isinstance(m, dict)
+            and m.get("role") == "user"
+            and m.get("content") == "(会话开始,用户尚未提问)"
+            for m in slow_messages
+        ), "开场白必须把慢脑 no-op 消息写入 slow_context(design §5.3)"
+
+        async def _drive():
+            pipeline = Pipeline([assembled.producer, assembled.consumer])
+            with _capture_dual_brain_logs() as captured:
+                down, _ = await run_test(
+                    pipeline,
+                    frames_to_send=[
+                        LLMFullResponseStartFrame(),
+                        SleepFrame(),
+                        LLMFullResponseEndFrame(),
+                        SleepFrame(),
+                    ],
+                )
+            return list(down), captured
+
+        down, captured = asyncio.run(_drive())
+
+        material_frames = [f for f in down if isinstance(f, LLMMessagesAppendFrame)]
+        assert material_frames == [], "开场白轮(零 TextFrame)必须零注入帧、零完成标记帧"
+        assert not any("slow-failed" in m for m in captured), "开场白轮不得出现 slow-failed"
 
 
 if __name__ == "__main__":
