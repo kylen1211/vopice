@@ -1,0 +1,49 @@
+name: dual_brain_fault
+
+# R8-S1 + R8-S2 (design.md §8.1/§8.1.1, tasks.md T7.6), run sequentially in
+# one session against the *fault-injected* bot process (see
+# dual_brain_fault.manifest.yaml — SLOW_LLM_MODEL points at a nonexistent
+# model, so every slow-brain call errors out).
+#
+#   R8-S1 (dual_brain_fault_silent, structural): a deep question still gets
+#   a normal fast-brain answer (the failure must not take down the fast
+#   branch), and — because a failed slow-brain call never reaches the
+#   `has_material and not aborted` gate — there must be NO second response.
+#   Hard precondition (design.md §8.1.1): `slow-failed` must appear in the
+#   bot's log for this to be a valid run at all.
+#
+#   R8-S2 (dual_brain_fault_recovery, structural): a normal question asked
+#   right after the fault turn still gets answered normally — the fault
+#   doesn't wedge the pipeline.
+#
+# This scenario MUST run against the independent fault bot process spawned
+# by the manifest (`pipecat eval suite`), never against the shared/common
+# dev instance used by the other scenarios — mixing it in would either make
+# the fault injection a no-op (real SLOW_LLM_MODEL) or poison later
+# scenarios in that same process (design.md §8.1.1).
+#
+#   cd /home/ky/git/voice-agent/server
+#   set -a && source .env && set +a
+#   PYTHONPATH="$(pwd)" uv run pipecat eval suite \
+#     evals/dual_brain_fault.manifest.yaml -v \
+#     --name dual_brain_fault-$(date +%Y%m%d_%H%M%S)
+
+turns:
+  - expect:
+      - event: response
+
+  # --- R8-S1: fault turn -> fast brain still answers, no supplement ---
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response
+
+  - expect:
+      - event: response
+        absent: true
+        within_ms: 20000
+
+  # --- R8-S2: recovery, same session ---
+  - user: "北京是哪个国家的首都？"
+    expect:
+      - event: response
+        text_contains: "中国"

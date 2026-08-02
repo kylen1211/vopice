@@ -1,0 +1,49 @@
+# R8 故障注入(design.md §8.1.1, tasks.md T7.6):独立 bot 进程,SLOW_LLM_MODEL
+# 指向不存在的模型,网关抛 InternalServerError(design.md PoC-7,2026-08-02
+# 实测),验证慢脑失败时快脑仍正常应答、且不产生虚假补充,故障轮后恢复正常。
+#
+# 为什么不能直接 `SLOW_LLM_MODEL=xxx uv run bot.py`:server/bot.py 里的
+# `load_dotenv(override=True)` 会用真实 server/.env 的值覆盖 shell 导出的同名
+# 环境变量,注入无效但表面全绿(tasks.md T7.6 已点名的陷阱)。
+#
+# 绕开方式(不改 server/bot.py、不污染真实 .env,已用隔离环境 PoC 验证机制):
+# `bot:` 字段只用于清单加载期的存在性校验(EvalManifest 对 bot_path 做
+# `.resolve()` + `.exists()`);真正被执行的入口由下面 `spawn:` 决定,它 `cd`
+# 进 evals/fault_run/ 后以*相对路径* `bot.py` 启动 —— fault_run/bot.py 是指
+# 向 ../../bot.py(真实 server/bot.py)的符号链接,fault_run/.env 是指向
+# ../fault.env 的符号链接。python-dotenv 的 `find_dotenv()`(bot.py 用它的
+# 默认参数,`usecwd=False`)按*被调用脚本自身的 __file__* 逐级向上找 `.env`,
+# 而 CPython 对通过相对路径调用的脚本,`__file__` 就是那个相对路径本身(不
+# 解析符号链接指向的真实位置)——已用最小复现脚本验证:`cd fault_run &&
+# python bot.py` 时 `__file__` = `.../fault_run/bot.py`,`find_dotenv()`
+# 因此先在 `fault_run/` 里找到并加载 fault.env,而不是真实的 `server/.env`。
+# `dual_brain`/`prompts`/`sentinel`/`config` 这几个 bot.py 依赖的同级模块不
+# 在 fault_run/ 里、也无需复制或额外符号链接——spawn 命令导出的 PYTHONPATH
+# 指回真实 server/ 目录,让它们照常从原文件导入,不产生任何过时副本。
+#
+# 前置校验(硬性,design.md §8.1.1 明写):必须在 bot 的日志里看到
+# `slow-failed` 才算注入生效,否则这个场景的结论无效,不能上报 PASS。
+#
+# 跑法(cwd 必须是 server/,PYTHONPATH/NLTK 前置同其余场景约定):
+#
+#   cd /home/ky/git/voice-agent/server
+#   set -a && source .env && set +a
+#   PYTHONPATH="$(pwd)" uv run pipecat eval suite \
+#     evals/dual_brain_fault.manifest.yaml -v \
+#     --name dual_brain_fault-$(date +%Y%m%d_%H%M%S)
+#   grep 'slow-failed' eval-runs/dual_brain_fault-<ts>/logs/*.log
+
+scenarios_dir: .
+runs_dir: ../eval-runs
+concurrency: 1
+# `python:` must be the project's own venv interpreter, NOT the global
+# `pipecat` CLI tool's interpreter (sys.executable default would be that
+# global tool's own venv, which has neither python-dotenv nor pipecat-ai's
+# elevenlabs/soniox/openai extras installed — confirmed by a real failed
+# run, 2026-08-03: `ModuleNotFoundError: No module named 'dotenv'`).
+python: "/home/ky/git/voice-agent/server/.venv/bin/python3"
+spawn: "bash -c 'export NLTK_DISABLE_IMPORT_SECURITY=1 PYTHONPATH=\"$(pwd)\" && cd evals/fault_run && exec {python} bot.py -t eval --port {port}'"
+
+suite:
+  - bot: fault_run/bot.py
+    scenarios: [dual_brain_fault]

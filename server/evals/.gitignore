@@ -1,0 +1,9 @@
+# Real secrets copy for R8 fault injection (tasks.md T7.6) — never commit,
+# same treatment as server/.env itself.
+fault.env
+
+# fault_run/.env is just a symlink (-> ../fault.env), no secret content of
+# its own — track it despite the root .gitignore's blanket `.env` pattern,
+# so a fresh checkout keeps the fault-injection machinery reproducible
+# (only fault.env's real secrets need re-creating locally, like server/.env).
+!fault_run/.env
