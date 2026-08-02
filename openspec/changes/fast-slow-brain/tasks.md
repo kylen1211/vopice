@@ -110,7 +110,7 @@
 > **变异验证项**:把 handler 里 `frame.processor is slow_llm` 的判断去掉(任何 `ErrorFrame` 都记 `slow-failed`)→ `test_non_slow_error_not_reported_as_slow_failed` 必红。这条是**防假绿专用**用例,它自己不红就等于没有。
 > 入口 manifest: 只读 design.md §6.4 日志行契约 + §6.5 面板契约 + §8.1 用例骨架(R8 派生条目) + **§5.2(`has_material` 与失败时保留已注入素材的口径)** + 第 5 组产出的 `bot.py` 中 `slow_llm` 符号名 + 全局约束头,不读 eval 节。
 
-- [ ] 6.1 **先写测试**:补 `test_slow_error_does_not_stop_fast_branch`、`test_non_slow_error_not_reported_as_slow_failed`(构造 `ErrorFrame(processor=<非 slow_llm>)` → 打 `pipeline-error` 而非 `slow-failed`,**防假绿**)、`test_slow_failure_pushes_server_message`,实跑确认**红** [R8/§8.1]
+- [x] 6.1 **先写测试**:补 `test_slow_error_does_not_stop_fast_branch`、`test_non_slow_error_not_reported_as_slow_failed`(构造 `ErrorFrame(processor=<非 slow_llm>)` → 打 `pipeline-error` 而非 `slow-failed`,**防假绿**)、`test_slow_failure_pushes_server_message`,实跑确认**红** [R8/§8.1]
 - [ ] 6.2 注册 `worker.on_pipeline_error` handler:**按 `frame.processor is slow_llm` 判分支归属**后记日志——**本任务负责 §6.4 的 `slow-failed` 与 `pipeline-error` 两行**(3.6 已明确不在那里实现);不做恢复、不做重试;慢脑失败时**保留已注入素材不清理**(参照 Talker-Reasoner 降级处理) [R8/§5.2/§6.4]
 - [ ] 6.3 慢脑失败时 push `RTVIServerMessageFrame(data={"type":"slow-brain-failed",...})`;**client 零改**(`voice-ui-kit` 的 EventsPanel 已订阅渲染 `RTVIEvent.Error` 与 `ServerMessage`) [R8/§6.5]
 
