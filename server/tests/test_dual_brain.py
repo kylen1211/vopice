@@ -47,12 +47,16 @@ except ModuleNotFoundError:
     dual_brain = None
 
 from pipecat.frames.frames import (
+    EndFrame,
+    ErrorFrame,
     InterruptionFrame,
     LLMContextFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
     SpeechControlParamsFrame,
+    StartFrame,
+    SystemFrame,
     TextFrame,
 )
 from pipecat.pipeline.parallel_pipeline import ParallelPipeline
@@ -61,6 +65,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMUserAggregator
 from pipecat.processors.consumer_processor import ConsumerProcessor
 from pipecat.processors.frame_processor import FrameProcessor
+from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
 from pipecat.processors.producer_processor import ProducerProcessor
 from pipecat.tests.utils import SleepFrame, run_test
 
@@ -99,6 +104,24 @@ def _capture_dual_brain_logs():
         yield captured
     finally:
         loguru.logger.remove(sink_id)
+
+
+class _ErrorEmitter(FrameProcessor):
+    """最小故障桩(第 6 组,design §15 PoC-2 S3 固化用)。
+
+    对任何非 `StartFrame`/`EndFrame`/`SystemFrame` 的帧 `push_error("boom",
+    fatal=False)`——控制帧原样透传下游,其余帧只报错、不继续下推(本用例里它
+    是分支内唯一/最后一个处理器,不下推不影响分支间同步,见
+    `test_slow_error_does_not_stop_fast_branch` docstring)。这条桩测的是
+    `ParallelPipeline` 框架本身的分支隔离行为,不是本组新写的代码。
+    """
+
+    async def process_frame(self, frame, direction):
+        await super().process_frame(frame, direction)
+        if isinstance(frame, (StartFrame, EndFrame, SystemFrame)):
+            await self.push_frame(frame, direction)
+            return
+        await self.push_error("boom", fatal=False)
 
 
 class TestDualBrain(unittest.IsolatedAsyncioTestCase):
@@ -659,6 +682,50 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
             "两个由工厂产出的实例，状态必须完全独立，不得互相污染",
         )
 
+    async def test_slow_error_does_not_stop_fast_branch(self):
+        """design §15 PoC-2 S3 固化(§8.1 R8 派生)：`ParallelPipeline` 分支隔离
+        本身——慢脑分支上行的非 fatal `ErrorFrame` 不得拖垮快脑分支的正常产出。
+
+        这条测的是官方 `ParallelPipeline` 的框架行为，不是本组(第 6 组)新写
+        的代码——本组唯一新代码是 `bot.make_pipeline_error_handler`，这条用例
+        不驱动它。**允许它在 6.2/6.3 实现之前就是绿的**：它的价值是把 PoC-2 S3
+        的实测结论钉成永久回归锁，和本文件 `test_stale_material_dropped_before_inject`
+        的写法是同一先例——"绿不证明生产正确，仅锁住该防线不被后续改动误删"，
+        不要因为它一开始就绿而怀疑实现有问题。
+        """
+        fast_context = LLMContext()
+        pipeline = Pipeline(
+            [
+                ParallelPipeline(
+                    [LLMUserAggregator(fast_context)],
+                    [_ErrorEmitter()],
+                )
+            ]
+        )
+
+        down, up = await run_test(
+            pipeline,
+            frames_to_send=[
+                LLMMessagesAppendFrame(
+                    messages=[{"role": "user", "content": "深问题"}], run_llm=True
+                )
+            ],
+        )
+
+        context_frames = [f for f in down if isinstance(f, LLMContextFrame)]
+        self.assertEqual(
+            1,
+            len(context_frames),
+            "快脑分支应恰好产出 1 条 LLMContextFrame，不受慢脑分支的错误拖累",
+        )
+
+        error_frames = [f for f in up if isinstance(f, ErrorFrame)]
+        self.assertTrue(error_frames, "慢脑分支的 ErrorFrame 应上行可见")
+        for frame in error_frames:
+            self.assertFalse(
+                frame.fatal, "PoC-2 S3 固化：非 fatal 的慢脑错误不得导致管线终止"
+            )
+
 
 class TestAssemblePipeline:
     """U3/U5(design §8.2)：`bot.assemble_pipeline()` 的结构性装配断言。
@@ -684,6 +751,19 @@ class TestAssemblePipeline:
 
         def output(self):
             return self._output
+
+    class _FakeWorker:
+        """最小 worker 桩(第 6 组)：只暴露 `make_pipeline_error_handler` 返回的
+        handler 实际调用到的 `queue_frames()`,把送进来的帧原样收集供断言
+        (design §6.5 面板契约——只验证 handler 是否 push 了正确的帧,不需要
+        真实 `PipelineWorker`/RTVI 事件循环)。
+        """
+
+        def __init__(self):
+            self.queued = []
+
+        async def queue_frames(self, frames):
+            self.queued.extend(frames)
 
     def test_pipeline_shape(self, bot_module):
         """U3：Consumer 必须在快脑分支内、且在 fast_pair.user() 之前；
@@ -789,6 +869,58 @@ class TestAssemblePipeline:
         material_frames = [f for f in down if isinstance(f, LLMMessagesAppendFrame)]
         assert material_frames == [], "开场白轮(零 TextFrame)必须零注入帧、零完成标记帧"
         assert not any("slow-failed" in m for m in captured), "开场白轮不得出现 slow-failed"
+
+    def test_non_slow_error_not_reported_as_slow_failed(self, bot_module):
+        """R8 派生·防假绿(design §6.4 分支归属表,§8.1 R8 派生·防假绿)。
+
+        非慢脑组件(STT 断线/TTS 401 等)触发的 `ErrorFrame` 必须打
+        `pipeline-error`,绝不能被误报成 `slow-failed`——否则真实故障(比如用户
+        完全听不到声音)会被 R8 的验收判据吞掉、误判成"慢脑降级正常工作"。
+        """
+        assert hasattr(bot_module, "make_pipeline_error_handler"), (
+            "make_pipeline_error_handler 尚未定义"
+        )
+
+        slow_llm = FrameProcessor(name="fake-slow-llm")
+        other_processor = FrameProcessor(name="fake-tts")
+        handler = bot_module.make_pipeline_error_handler(slow_llm)
+        worker = self._FakeWorker()
+
+        error_frame = ErrorFrame(error="boom", processor=other_processor, fatal=False)
+
+        with _capture_dual_brain_logs() as captured:
+            asyncio.run(handler(worker, error_frame))
+
+        assert any("pipeline-error" in m for m in captured), "非慢脑组件失败应打 pipeline-error"
+        assert not any("slow-failed" in m for m in captured), "非慢脑组件失败绝不能打 slow-failed"
+        assert worker.queued == [], "非慢脑组件失败不应向面板 push 任何消息"
+
+    def test_slow_failure_pushes_server_message(self, bot_module):
+        """R8 派生·面板(design §6.4 `slow-failed` 行,§6.5 面板契约)。
+
+        慢脑分支的 `ErrorFrame` 必须打 `slow-failed` 日志,且恰好向面板 push 1
+        个 `RTVIServerMessageFrame(data={"type": "slow-brain-failed", ...})`——
+        官方 `RTVIProcessor` 会把这个帧转发给 client 的 `EventsPanel`(§6.5,
+        `client/` 零改)。
+        """
+        assert hasattr(bot_module, "make_pipeline_error_handler"), (
+            "make_pipeline_error_handler 尚未定义"
+        )
+
+        slow_llm = FrameProcessor(name="fake-slow-llm")
+        handler = bot_module.make_pipeline_error_handler(slow_llm)
+        worker = self._FakeWorker()
+
+        error_frame = ErrorFrame(error="boom", processor=slow_llm, fatal=False)
+
+        with _capture_dual_brain_logs() as captured:
+            asyncio.run(handler(worker, error_frame))
+
+        assert any("slow-failed" in m for m in captured), "慢脑组件失败应打 slow-failed"
+        assert len(worker.queued) == 1, "慢脑失败应恰好向面板 push 1 条消息"
+        pushed = worker.queued[0]
+        assert isinstance(pushed, RTVIServerMessageFrame), "push 的帧类型必须是 RTVIServerMessageFrame"
+        assert pushed.data["type"] == "slow-brain-failed", "面板消息 data.type 必须是 slow-brain-failed"
 
 
 if __name__ == "__main__":
