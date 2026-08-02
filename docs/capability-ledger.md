@@ -43,7 +43,7 @@
 
 | 子能力 | 旧库参考 | 官方对应件 | 现状 | 备注 |
 |---|---|---|---|---|
-| 快脑先答→慢脑深析→回流补充 | **`vt/processors/assist.py`(成功版)**;简化版 `va/processors/assist_answer.py` | 无现成件;组装件=ParallelPipeline、async FrameProcessor、producer/consumer;**最佳参照实例=`features-concurrent-llm-evaluation.py`(双 LLM 并行,2026-08-02 核出)**;注意 producer/consumer 在官方 examples 零用例,用法须读源码 | ❌ | 2 期核心;NFR 旧标准可参考:首响 ≤1s、衔接静默 ≤2s、不自相矛盾(spec R7/R8) |
+| 快脑先答→慢脑深析→回流补充 | **`vt/processors/assist.py`(成功版)**;简化版 `va/processors/assist_answer.py` | 无现成件;组装件=ParallelPipeline、async FrameProcessor、producer/consumer;**最佳参照实例=`features-concurrent-llm-evaluation.py`(双 LLM 并行,2026-08-02 核出)**;注意 producer/consumer examples 零用例但官方 tests 有 5 用例(`tests/test_producer_consumer.py`,含跨 ParallelPipeline 分支搬运 `test_produce_parallel_pipeline_no_passthrough`,即快慢脑接法;2026-08-02 更正) | ❌ | 2 期核心;NFR 旧标准可参考:首响 ≤1s、衔接静默 ≤2s、不自相矛盾(spec R7/R8) |
 
 ## G3 · 派活(独立功能)
 
@@ -85,7 +85,7 @@
 - 可插拔:`pipeline/service_switcher.py:211` `ServiceSwitcher`(Manual/Failover 策略)+ `features-service-switcher.py` ✅
 - 出错告知:`frames/frames.py:950` `ErrorFrame` ✅;TTS 完整性:`services/tts_service.py` `stop_frame_timeout` ✅
 - 上下文:`context-summarization/` 4 例 + `persistent-context/` 8 例 ✅
-- G2 组装件:`pipeline/parallel_pipeline.py`、`processors/{producer,consumer}_processor.py` ✅(增量发现②:`features-concurrent-llm-evaluation.py` 双 LLM 并行最佳参照;增量发现③:producer/consumer 官方 examples 零用例)
+- G2 组装件:`pipeline/parallel_pipeline.py`、`processors/{producer,consumer}_processor.py` ✅(增量发现②:`features-concurrent-llm-evaluation.py` 双 LLM 并行最佳参照;增量发现③更正:producer/consumer examples 零用例但官方 tests 有 5 用例(`tests/test_producer_consumer.py`,含跨 ParallelPipeline 分支搬运 `test_produce_parallel_pipeline_no_passthrough`,即快慢脑接法;2026-08-02 更正))
 - G3:`src/pipecat/bus/` + `src/pipecat/workers/` + `examples/multi-worker/` 7 例 ✅
 - G4:`services/mcp_service.py` + `examples/mcp/` 4 例 + `examples/vision/` 7 例 ✅
 - 无官方件确认(自装,与账单一致):场景装配层、音频设备自检、完成确认铁律/授权链、AT-SPI2/注入防线

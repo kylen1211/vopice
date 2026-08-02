@@ -38,11 +38,18 @@
 
 | 参照 | 机制 | 实锤 | 用法 |
 |---|---|---|---|
-| pipecat 组装件 | ParallelPipeline 并行分支 + producer/consumer processor | 本地 clone `pipeline/parallel_pipeline.py`、`processors/{producer,consumer}_processor.py`;**最佳参照示例 `examples/features/features-concurrent-llm-evaluation.py`(双 LLM 并行)**;producer/consumer 官方 examples 零用例,用法读源码 | 我们的实现载体 |
-| LiveKit 垫话调度器 | `_FillerScheduler`:慢任务超时自动切入垫话,主任务算完自动接管流;垫话须提取前文实词,避免机械"嗯…" | gh code search 实锤:`livekit-agents/livekit/agents/voice/filler_scheduler.py` + `tests/test_filler.py`(2026-08-02) | **机制设计参考**(触发时长阈值等参数未验证,见 §5) |
+| pipecat 组装件 | ParallelPipeline 并行分支 + producer/consumer processor | 本地 clone `pipeline/parallel_pipeline.py`、`processors/{producer,consumer}_processor.py`;**最佳参照示例 `examples/features/features-concurrent-llm-evaluation.py`(双 LLM 并行)**;producer/consumer examples 零用例但官方 tests 有 5 用例(`tests/test_producer_consumer.py`,含跨 ParallelPipeline 分支搬运 `test_produce_parallel_pipeline_no_passthrough`,即快慢脑接法;2026-08-02 更正) | 我们的实现载体 |
+| LiveKit 机制群(2026-08-02 浅克隆逐段重研,修正旧记录) | **真主力=预生成** `PreemptiveGenerationOptions`(`voice/turn.py:201`,默认开启):轮次未确认即拿临时转写提前跑 LLM(`preemptive_tts` 可选连 TTS 预跑),轮次确认时答案已在路上。**垫话是配角**:`ctx.with_filler`(`voice/events.py`,底层 `filler_scheduler.py`)只挂在长工具调用场景,"持续空闲 ≥delay 才触发,默认至多一次";LiveKit 自己不拿垫话当答案路径。另有 `foreground()` 占场保序、`background_audio.py` 思考音(KEYBOARD_TYPING 等内置片段) | 本地浅克隆源码逐段核(2026-08-02):`voice/turn.py:201`、`voice/events.py` with_filler、`voice/filler_scheduler.py` 全文、`voice/background_audio.py:30-34` | 预生成→快脑首响优化;filler 的 idle-dwell 等待模式→慢脑回流"轮次间隙判定"的现成套路;思考音→无内容等待处理;垫话仅兜底不承载内容 |
 | Salesforce VoiceAgentRAG | 预判预拉取:前台 FastTalker 亚毫秒缓存查找,后台 SlowThinker 异步预拉取向量库 | 仓库实锤 `SalesforceAIResearch/VoiceAgentRAG`(2026-07-28 建库,gh 实查) | 思路参考,RAG 场景才用得上 |
 
 另:旧项目成功版快慢脑在 `~/git/voice-translate-v2` 的 `vt/processors/assist.py`(账单 G2 已录)。
+
+### 2b. 专业快慢脑方案(2026-08-02 补检,详表见 `~/git/voice-agent/openspec/changes/fast-slow-brain/research.md` §5 与 `~/research/2026-08-02-快慢脑专业方案调研/`)
+
+- **Talker-Reasoner**(DeepMind,arXiv:2410.08328):恒并发 + belief state 共享内存回流 + 快脑唯一发言——我方 2 期方案的范式正名;无官方代码。
+- **ConvFill**(华盛顿大学,arXiv:2511.07397,**开源** `vysri/conversational-infill`):知识块短语流 + 短语级追加续答 + 计时阈值填充语;与我方"恒双脑/实时增量注入/分句融入/垫话兜底"四项裁决逐条同构,门二工程参照首选。
+- **LTS-VoiceAgent**(美团+国科大,arXiv:2601.19952):DistilBERT 语义触发路由(我方已否此路由,留档)+ JSON State Snapshot 状态注入 + 思维回滚(中止保留已产状态);注入模板字段的专业参考;代码未寻获。
+- 共同空白:音频层 barge-in 均未实现——由 pipecat 原生打断语义补齐,互补。
 
 ## 3. 框架对比结论(kit=LiveKit Agents vs pipecat,选型佐证,已定不重开)
 
@@ -61,5 +68,5 @@
 ## 5. 未验证参数(引用前必须先验证,禁直接当事实用)
 
 - Silero VAD 推荐配置 `min_speech_duration_ms=250 / min_silence_duration_ms=400`;
-- 垫话触发阈值(一说 >200ms,一说 >250ms,两处来源自相出入);
+- ~~垫话触发阈值(一说 >200ms,一说 >250ms,两处来源自相出入)~~ **已解决(2026-08-02 源码核)**:框架不内置阈值,`with_filler` 的 `delay` 由调用方传入(默认 0,`interval=None` 即至多一次),旧两说作废;
 - "短于 200ms 噪音自动过滤"的 turn detector 行为。
