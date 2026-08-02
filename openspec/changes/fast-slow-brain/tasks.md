@@ -87,7 +87,7 @@
 > 入口 manifest: 只读 design.md §6.6 哨兵契约 + §8.1 用例骨架(R6 派生条目) + **§5.1 管线结构图(仅为知道 filter 将被挂在快脑 LLM 与 TTS 之间,挂载动作归 5.2)** + §6.4 日志行契约(`sentinel-muted` 一行) + 全局约束头。
 
 - [x] 4.1 **先写测试**:**新建 `server/tests/test_sentinel.py`**(不与第 3 组共用 `test_dual_brain.py`),写 `test_sentinel_round_emits_no_text`——哨兵轮零文本帧透出、正常轮全部透出(**两向**);另断言 `LLMFullResponseStartFrame`/`EndFrame` 在哨兵轮**仍被放行**,实跑确认**红** [R6/§6.6/§8.1]
-- [ ] 4.2 **新建 `server/sentinel.py`**(独立文件,与第 3 组的 `dual_brain.py` 零重叠,保证两组可并行),实现 `sentinel_gate` 谓词(**并负责 §6.4 的 `sentinel-muted` 日志行**):`LLMFullResponseStartFrame` 重置状态;本轮**首个** `LLMTextFrame` strip 后以 `∅` 开头 → 该轮所有 `LLMTextFrame` 静默;**其余帧类型一律 `return True`** —— `LLMFullResponseStart/EndFrame` 是 `ControlFrame`(`frames.py:1897,1912`),`FunctionFilter` 不自动放行(`function_filter.py:57-71` 只放行 Start/End/Cancel 与 SystemFrame),挡下它们会让快脑 assistant aggregator 收不到轮次起止钩子 [R6/§6.6]
+- [x] 4.2 **新建 `server/sentinel.py`**(独立文件,与第 3 组的 `dual_brain.py` 零重叠,保证两组可并行),实现 `sentinel_gate` 谓词(**并负责 §6.4 的 `sentinel-muted` 日志行**):`LLMFullResponseStartFrame` 重置状态;本轮**首个** `LLMTextFrame` strip 后以 `∅` 开头 → 该轮所有 `LLMTextFrame` 静默;**其余帧类型一律 `return True`** —— `LLMFullResponseStart/EndFrame` 是 `ControlFrame`(`frames.py:1897,1912`),`FunctionFilter` 不自动放行(`function_filter.py:57-71` 只放行 Start/End/Cancel 与 SystemFrame),挡下它们会让快脑 assistant aggregator 收不到轮次起止钩子 [R6/§6.6]
 - [ ] 4.3 用官方 `FunctionFilter(filter=sentinel_gate)` 承载并从 `sentinel.py` 导出构造函数 `build_sentinel_filter()`;**挂进管线的动作归 5.2**(第 4 组时 `ParallelPipeline` 尚不存在,本组无法验证挂载)。不自造过滤器 [R6/§6.6]
 
 ---
