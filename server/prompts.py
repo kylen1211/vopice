@@ -62,4 +62,11 @@ DUAL_BRAIN_SECTION = (
     "(不要重复已说过的);若没有值得补充的,则只输出一个字符 ∅ ,不要输出任何其他内容。"
 )
 
+# 注入模板常量（T2.3b, design §6.1）：是慢脑深析要点注入的唯一事实源。
+# 这两个常量必须被后续组引用（第 3 组 transformer 把慢脑要点转成 LLMMessagesAppendFrame、
+# 第 7 组 eval judge 负向锚检测输出不能泄漏模板痕迹），禁止各自内联字面串，否则两处会漂移不一致。
+INJECT_POINT_TEMPLATE = "[慢脑深析要点|针对上一个问题|进行中] {point}"
+
+INJECT_DONE_TEMPLATE = "[慢脑深析要点|针对上一个问题|已完成] 以上素材已齐。由你决定是否、以及如何融入对话。"
+
 SYSTEM_PROMPT = f"{OFFICIAL_SECTION}\n\n{CAPABILITY_BOUNDARY_SECTION}\n\n{LANGUAGE_SECTION}"
