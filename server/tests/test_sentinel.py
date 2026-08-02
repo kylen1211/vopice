@@ -56,6 +56,7 @@ class TestSentinelGate(unittest.IsolatedAsyncioTestCase):
     async def test_sentinel_round_emits_no_text(self):
         """哨兵轮零文本帧透出、正常轮全部透出（两向，含控制帧放行断言）。"""
         self._assert_sentinel_module_ready()
+        assert sentinel is not None  # pyright narrowing; runtime already asserted above
 
         # --- 场景一：哨兵轮 —— 首个 LLMTextFrame strip 后以 ∅ 开头 ---
         sentinel_round_frames = [

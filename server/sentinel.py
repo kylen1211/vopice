@@ -2,10 +2,16 @@
 
 When the fast brain judges that a turn has nothing to add, it is instructed
 to emit a single sentinel character (`∅`, U+2205) and nothing else. This
-module provides the `sentinel_gate` predicate — used as
-`FunctionFilter(filter=sentinel_gate)` — that mutes every `LLMTextFrame` of
-a turn whose first text frame starts with the sentinel character, so the
-turn is never spoken by TTS.
+module mutes every `LLMTextFrame` of a turn whose first text frame starts
+with the sentinel character, so the turn is never spoken by TTS.
+
+**Production callers (T5.2 pipeline assembly) must use `build_sentinel_filter()`**
+— it returns a fresh `FunctionFilter` backed by its own gate instance, so
+concurrent sessions in the same process never share mute/turn state. The
+module-level `sentinel_gate` singleton below is kept only so T4.1's unit
+tests can exercise the predicate directly; it must not be wired into a real
+pipeline or shared across sessions (see `build_sentinel_filter`'s docstring
+for why).
 
 See `openspec/changes/fast-slow-brain/design.md` §6.6 (sentinel contract)
 and §6.4 (structured log-line contract, `sentinel-muted` row) for the full
@@ -56,11 +62,12 @@ class _SentinelGate:
         return not self._muted
 
 
-# Module-level singleton so `FunctionFilter(filter=sentinel.sentinel_gate)`
-# works directly — `sentinel_gate` is a stateful callable instance, not a
-# plain function, since the predicate must remember state across calls.
-# Kept for T4.1's unit tests (each test process is independent, so sharing
-# this instance across assertions within one test run is safe).
+# Test-only singleton — do not wire this into a real pipeline (see the
+# module docstring and `build_sentinel_filter` below). `sentinel_gate` is a
+# stateful callable instance, not a plain function, since the predicate must
+# remember state across calls. Safe to reuse across scenarios within a
+# single test because it resets its own state on every
+# `LLMFullResponseStartFrame`, not because of any process/test isolation.
 sentinel_gate = _SentinelGate()
 
 
