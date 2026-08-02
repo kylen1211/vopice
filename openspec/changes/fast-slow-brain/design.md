@@ -119,7 +119,8 @@ $ ls .venv/.../pipecat/tests/utils.py → 存在(run_test 随包分发,PoC 载�
 | L10 | 付费 TTS | `pipecat/services/elevenlabs/tts.py` `ElevenLabsTTSService`(官方) | 官方类含中日文时间戳特判;`eleven_flash_v2_5` 在官方多语白名单内、可显式传 language | **原样采用** |
 | L11 | 慢脑 LLM | 复用 1 期 `OpenAILLMService` + 本地 8045 网关 | 网关实测提供 78 个模型;延迟实测见 §13.3 | **原样采用**,型号 `gemini-3-pro`(14.9s,**有意取慢档**验配合;用户 2026-08-02 拍板) |
 | L12 | 历史摘要段口子 | `processors/aggregators/llm_context_summarizer.py` | 阈值自动触发,可后续直挂 | **本期不启用**,仅在快脑 context 构成上留位 |
-| L13 | 面板系统提示 | `processors/frameworks/rtvi/processor.py:232,549` ErrorFrame→客户端;client `EventsPanel` | RTVI 默认开启(PipelineWorker),ErrorFrame 有转发路径 | **零改采用**(待 M2 人工联测确认可见性) |
+| L13 | 面板系统提示 | 服务端:`rtvi/processor.py:232,549`(ErrorFrame→客户端)+ `rtvi/frames.py:38` `RTVIServerMessageFrame`;客户端:`voice-ui-kit/dist/index.js:6741-6746,6762-6767` | RTVI 默认开启(PipelineWorker);**客户端 EventsPanel 已订阅并渲染 `RTVIEvent.Error` 与 `RTVIEvent.ServerMessage`** —— 服务端到面板整条链路官方齐全 | **原样采用,client 零改**(M2 仅做确认) |
+| L15 | 业务事件的自动化断言 | `pipecat/tests/utils.py:123` `run_test`(随包分发);`evals/harness.py:798-866` | eval harness 只认 14 类 RTVI 消息、自定义 `server-message` 落 `case _` 被丢弃 → **业务事件在 eval 体系内无官方断言通道**;官方对内部帧行为的验证方式是 `run_test` 帧级断言 | **原样采用 `run_test` 作主力**;eval 只管端到端可见行为 |
 | L14 | 轮次标识 | 无官方来源 —— `turns/user_turn_processor.py` 无公开 turn 编号(grep 实证) | 需一个整数计数器 | **自研**(自证见下) |
 
 **自研自证**
@@ -359,11 +360,21 @@ tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 > `within_ms`/`text_contains`/`calls`/`eval`/`absent`;harness 只 match RTVI server message
 > (`harness.py:771-846`),**bot 的 loguru stdout 从不进入 harness**。把"日志出现 xxx"写进
 > YAML 会在加载期直接报未知事件名。
-> 这个坑的来源是拍板 21 砍掉了"合成 RTVI 观测信号、改用普通日志行"——那次裁决砍掉的
-> 恰是唯一能让 eval 看见这些事件的通道,门一时未推导到该连带后果。
-> **处置(不推翻拍板 21,纯文档口径修正)**:eval 只断言事件;日志行降级为**同一次运行的旁路
-> 证据** —— 跑 bot 时 `2>&1 | tee eval-runs/<ts>/bot.log`,验收时对该文件 grep,gate 记录
-> 命令 + 时间戳 + 输出。§8/§11 已按此改写。
+> **归因更正(2026-08-02,查证后推翻红队与本文档初稿的共同误判)**:红队称"拍板 21 砍掉
+> 合成 RTVI 观测信号 = 砍掉了唯一能让 eval 看见这些事件的通道",**该归因错误**。
+> 实读:`RTVIServerMessageFrame` 确是官方件(`rtvi/frames.py:38`),observer 会把它转成
+> `RTVI.ServerMessage` 发给**客户端**(`rtvi/observer.py:550-551`);但 eval harness 的消息
+> match 表(`harness.py:798-866`)**没有 `server-message` 分支,落进 `case _: return []` 被
+> 静默丢弃**。即:那条通道通向面板,**从来就不通向 eval 断言**。门一砍它没有造成 eval 观测
+> 能力的任何损失。
+> **真实边界**:业务级事件(dispatch/inject/abort…)在 pipecat eval 体系里**没有**官方断言
+> 通道 —— 这是框架边界,不是选型失误。
+> **处置(官方分工,不是"塞进日志凑活")**:
+> - **主力验收 = 官方 pytest 帧级断言**(`pipecat.tests.utils.run_test`,随包分发)——业务事件
+>   本就该在帧层断言,§8.1 的结构类用例与 §15 的 PoC 都建在它上面;
+> - **eval 负责端到端用户可见行为**(那 10 个事件),不承担内部事件观测;
+> - **日志 = 给人看的旁路佐证**,跑 bot 时 `2>&1 | tee eval-runs/<ts>/bot.log`,gate 记录命令
+>   + 时间戳。日志不是验收主力,少一条日志不判 FAIL(判 FAIL 的是帧级断言)。
 
 | 事件 | 日志行(固定前缀,`logger.info`) | 触发点 |
 |---|---|---|
@@ -385,14 +396,18 @@ tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 
 慢脑失败 → `ErrorFrame(fatal=False)` 上行 → `RTVIProcessor` 转发(`rtvi/processor.py:232,549`)→ client `EventsPanel` 显示。
 
-**未验证部分**:`EventsPanel` 是否把 error 事件渲染成用户可读提示 —— 归 M2 人工联测。
+**客户端侧已开箱可用(实读 `voice-ui-kit` 产物,2026-08-02 —— 原稿"未验证、可能要改 client"的顾虑已排除)**:
+`client/node_modules/@pipecat-ai/voice-ui-kit/dist/index.js` 的 EventsPanel 已经订阅并渲染两类消息,各渲染成一行带时间戳的事件:
+- `:6741-6746` `useRTVIClientEvent(RTVIEvent.Error, …)` → `Error: {...}`
+- `:6762-6767` `useRTVIClientEvent(RTVIEvent.ServerMessage, …)` → `Server message: {...}`
 
-> **⚠️ 待用户签核项(设计红队 C6,不在门二自行豁免)**
-> 原稿写的"若不可见,接受仅日志有记录并记 backlog,不改 client"是**设计单方面把已批准 PRD 的 SHALL 降级**:PRD R8 原文"…静默放弃该轮深析、**仅面板提示**",R8-S1 判据含"面板有提示",PRD §1 角色矩阵也把"显示系统状态提示(如慢脑失败)"列为面板的能做项。门二文档无权豁免门一已批准的承诺。
-> **M2 若发现不可见,二选一,由用户拍板**:
-> (a) 认可 R8 面板部分必须实现 → client 加约 3 行渲染,`client/` 不再是"零改"(§1.1 需同步改);
-> (b) 接受降级 → **回门一改 PRD R8 措辞并重新批准**,不在本文档私自了结。
-> 在用户拍板前,§11 RTM 的 R8-S1 行保留"面板提示"这一验收要素。
+**因此 R8「仅面板提示」有完整官方落点,`client/` 保持零改**,不存在"设计降级已批准 SHALL"的问题(设计红队 C6 据此关闭)。
+
+**两条官方通道,都用**:
+1. **异常本身**:慢脑 `ErrorFrame(fatal=False)` 上行 → `RTVIProcessor` 自动转发(`rtvi/processor.py:232,549`)→ 面板出现 `Error: …` 行。**零代码**。
+2. **优雅提示**(用户 2026-08-02 要求"异常应有一种优雅显示"):`on_pipeline_error` 判定归属为慢脑后,额外 push 一个官方 `RTVIServerMessageFrame(data={"type": "slow-brain-failed", "turn": n})`(`rtvi/frames.py:38`)→ 面板出现可读的一行,而不是让用户直面内部 error JSON。**一行代码,官方帧,不是自造零件。**
+
+M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面板。
 
 ### 6.6 哨兵契约(非官方物 ②)
 
@@ -506,6 +521,7 @@ tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 | R8-S1 | `server/evals/dual_brain_fault.yaml`(**独立 bot 进程**)+ bot.log | `dual_brain_fault_silent` | eval:快脑正常应答且**无第二段**(`absent`,**结构**);**旁路**:`grep 'slow-failed' bot.log` 命中、且**不得**出现 `inject … done=true`;面板提示见 §6.5 待签核项 |
 | R8-S2 | 同上场景文件 | `dual_brain_fault_recovery` | 故障轮之后一轮正常问答仍成功(**结构**) |
 | R8(派生·防假绿) | `server/tests/test_dual_brain.py` | `test_non_slow_error_not_reported_as_slow_failed` | 构造 `ErrorFrame(processor=<非 slow_llm>)` → handler 打 `pipeline-error` 而非 `slow-failed`(**结构**,防 §6.4 所述假绿) |
+| R8(派生·面板) | `server/tests/test_dual_brain.py` | `test_slow_failure_pushes_server_message` | 慢脑失败时 handler push 出 `RTVIServerMessageFrame(data.type=='slow-brain-failed')`(**结构**;面板渲染由 M2 目视确认) |
 | R8(派生·防误触发) | `server/tests/test_dual_brain.py` | `test_failed_slow_turn_emits_no_completion_marker` | 慢脑零要点 + `LLMFullResponseEndFrame` → **不产生**完成标记帧、快脑生成次数不变(**结构**,固化 §5.2 表 ② 的 R8 击穿路径) |
 | R8(派生) | `server/tests/test_dual_brain.py` | `test_slow_error_does_not_stop_fast_branch` | PoC-2 S3 固化:非 fatal ErrorFrame 后快脑仍生成,且 `fatal is False` |
 | R7(派生) | `server/tests/test_dual_brain.py` | `test_stale_turn_material_ignored` | 中止后到达的旧轮要点被丢弃、不注入;新轮 `turn` 编号不被旧残片占用(**结构**,固化 §5.2 表 ③) |
@@ -610,7 +626,7 @@ tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 | R5 打断中止 / R5-S1 | §5.1 框架打断语义;§5.2 `aborted`;§6.4 `abort` 日志 | T3.5 | `test_interruption_reaches_both_branches` 绿 + `evals/dual_brain_interrupt.yaml` 该轮补充 absent;`grep 'abort … interruption' bot.log` 命中;M4 真机观察 | 结构 + 旁路 |
 | R6 逐句分发 / R6-S1 | §5.1 TTS 在快脑分支;§6.6 哨兵不送 | T3.6 | `test_sentinel_round_emits_no_text` 绿(结构);逐句播出与面板刷新由 **M7** 人工验(§8.0:本期不开 audio eval 场景) | 结构 + 质量 |
 | R7 单深析在途 / R7-S1 | §5.2 `turn`/`aborted`;§6.7② 快脑"只消化编号最大的一组" | T3.5 | `test_stale_turn_material_ignored` 绿 + `evals/dual_brain_supersede.yaml` judge 判补充只对应第二问;第一轮 `abort` 行命中 | 结构 + 质量 + 旁路 |
-| R8 慢脑失败降级 / R8-S1 | §6.4 分支归属 + `slow-failed`;§5.2 表② | T3.7 | `test_slow_error_does_not_stop_fast_branch` + `test_non_slow_error_not_reported_as_slow_failed` + `test_failed_slow_turn_emits_no_completion_marker` 三绿;`evals/dual_brain_fault.yaml`(独立 bot 进程)无第二段;**面板提示**见 §6.5 待签核项 | 结构 + 待签核 |
+| R8 慢脑失败降级 / R8-S1 | §6.4 分支归属 + `slow-failed`;§5.2 表②;§6.5 两条官方面板通道 | T3.7 | `test_slow_error_does_not_stop_fast_branch` + `test_non_slow_error_not_reported_as_slow_failed` + `test_failed_slow_turn_emits_no_completion_marker` 三绿;`evals/dual_brain_fault.yaml`(独立 bot 进程)无第二段;`test_slow_failure_pushes_server_message`(断言 push 了 `RTVIServerMessageFrame`)绿;面板可见性由 M2 确认 | 结构 |
 | R8 慢脑失败降级 / R8-S2 | 同上(非 fatal,管线不停) | T3.7 | `evals/…::dual_brain_fault_recovery`:故障轮之后一轮提问仍产生 `response` 事件且 `text_contains` 判据命中 | 结构 |
 | R9 回归保持 / R9-S1 | §9 配置/依赖变更;既有 gate set 不动 | T4.1 | README:97-101 的三个场景 + `pytest` + `check_frozen_repo.sh` 以本次运行时间戳全绿(`starter_*` 本就不在 gate,README:104-107) | 结构 |
 | PRD §7-4 STT/TTS 替换 | §6.2 配置;§6.3 provider 映射与装配契约 | T2.1 | `test_stt_tts_settings_take_effect`(U4)+ `test_provider_whitelist`(U6)绿;M1/M3/M6 人工联测 | 结构 + 质量 |
@@ -705,6 +721,8 @@ tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 | RTVI 在过滤器上游按 source 捕获 → 慢脑原文会上面板 | 源码实读(强) | `frame_processor.py:905,917`;`rtvi/observer.py:408-419,177` |
 | 慢脑失败时框架仍无条件推 `LLMFullResponseEndFrame` | 源码实读(强) | `services/openai/base_llm.py:571-573`;`frame_processor.py:722`(ErrorFrame 反向上行) |
 | `passthrough=False` 会截断慢脑自身历史 | 源码实读(强) | `producer_processor.py:83-88`;`llm_response_universal.py:1497-1498` |
+| 客户端 EventsPanel 渲染 Error / ServerMessage | 产物实读(强) | `voice-ui-kit/dist/index.js:6741-6746,6762-6767` |
+| eval harness 丢弃自定义 `server-message` | 源码实读(强) | `evals/harness.py:798-866` 的 `case _: return []` |
 | `ignored_sources` 能挡住慢脑上报 | **仅 API 可用性(弱)** | `worker.py:251,413` 接受该参数;**行为未实测** → 列入 U5 断言 + M2 观察 |
 | 打断后慢脑 HTTP 流是否即刻停止 | **未验证** | 只测到打断帧到达(PoC-2 S2);真实取消行为归 M4 观察,`aborted` 状态是对"未停止"的兜底 |
 | audio 模式端到端 | **未验证且本期不验** | `starter_audio.eval.log` 现存 ImportError;R6 改走 M7 人工(§8.0) |
