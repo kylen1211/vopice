@@ -57,7 +57,7 @@
 > 入口 manifest: 只读 design.md §6.7 Prompt 契约(三段全文) + §6.6 哨兵契约 + 全局约束头,不读管线/状态相关节。
 
 - [x] 2.1 **先写测试**:新建 `server/tests/test_prompts.py`,断言 `SLOW_BRAIN_PROMPT` 含"每条必须以句号"与"不要输出任何内容";`DUAL_BRAIN_SECTION` 含 `∅` 且**不含** `问题#`(防旧编号口径复活);拼装顺序含四段。实跑确认**红** [§6.7]
-- [ ] 2.2 `server/prompts.py` 新增 `SLOW_BRAIN_PROMPT`(慢脑 system,含"每条要点以句号结尾"硬约束 + "无深析价值则不要输出任何内容") [R3/§6.7①]
+- [x] 2.2 `server/prompts.py` 新增 `SLOW_BRAIN_PROMPT`(慢脑 system,含"每条要点以句号结尾"硬约束 + "无深析价值则不要输出任何内容") [R3/§6.7①]
 - [ ] 2.3 `server/prompts.py` 新增 `DUAL_BRAIN_SECTION`(快脑双脑规则段:素材不得转述原文、按对话顺序理解、无可补充时只输出 `∅`);**不含**任何编号/"只消化编号最大的一组"表述 [R2/R4/§6.7②]
 - [ ] 2.3b **模板常量落盘(审核补:原稿把模板内联进 3.4,导致 PRD"两处必须一致"无载体)**:`prompts.py` 新增 `INJECT_POINT_TEMPLATE` 与 `INJECT_DONE_TEMPLATE` 两个常量(字面串见 design §6.1);3.4 与 7.x 的 judge 负向锚**都引用它们**,不各写各的 [R2/R3/§6.1]
 - [ ] 2.4 把 `DUAL_BRAIN_SECTION` 追加进现有 `SYSTEM_PROMPT` 拼装(顺序:`OFFICIAL_SECTION` + `CAPABILITY_BOUNDARY_SECTION` + `LANGUAGE_SECTION` + `DUAL_BRAIN_SECTION`),**不重构现有分段结构**;官方段"回复会被朗读,避免 emoji/项目符号"必须保留 [§6.7]
