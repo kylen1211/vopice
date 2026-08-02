@@ -215,14 +215,29 @@ class _SlowMaterialFilter:
         return False
 
 
-# Module-level singleton so `dual_brain.slow_material_filter` is directly
-# usable as `ProducerProcessor(filter=dual_brain.slow_material_filter, ...)`
-# — mirrors `sentinel.py`'s `sentinel_gate = _SentinelGate()` (module-level
-# instance for tests / simple wiring). T5.2's real pipeline-assembly step
-# calls `slow_material_filter.bind_context(...)` once the slow-brain
-# `LLMContext` exists; a session-scoped factory (mirroring `sentinel.py`'s
-# `build_sentinel_filter()`) is that task's concern, not this one's.
+# Test-only singleton — do not wire this into a real pipeline (see
+# `build_slow_material_filter` below, same rationale as `sentinel.py`'s
+# `sentinel_gate`). Mirrors `sentinel.py`'s `sentinel_gate = _SentinelGate()`
+# (module-level instance for tests / simple wiring).
 slow_material_filter = _SlowMaterialFilter()
+
+
+def build_slow_material_filter() -> _SlowMaterialFilter:
+    """Construct a fresh, session-scoped `_SlowMaterialFilter` (T5.2, pipeline assembly).
+
+    Deliberately does **not** wrap the module-level `slow_material_filter`
+    singleton above. `bot(runner_args)` runs once per session (AGENTS.md
+    §1), but nothing about the runtime guarantees one OS process per
+    session — the same reasoning `sentinel.py`'s `build_sentinel_filter()`
+    documents (and the 4th group's end-of-group review already flagged as a
+    HIGH for `_SentinelGate`). `_SlowMaterialFilter` carries turn state
+    (`_state.has_material`/`_state.aborted`/`_state.basis`) that must not
+    leak across sessions sharing a process, so `bot.py::assemble_pipeline`
+    calls this once per session to get its own instance, then calls
+    `.bind_context(...)` on it once the session's slow-brain `LLMContext`
+    exists — the module singleton is reserved for direct unit-test use only.
+    """
+    return _SlowMaterialFilter()
 
 
 async def slow_material_transformer(frame: Frame) -> Frame:
