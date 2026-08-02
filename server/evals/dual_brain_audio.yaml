@@ -1,0 +1,58 @@
+name: dual_brain_audio
+
+# R6-S1 (design.md §8.1, tasks.md T7.8): full audio round trip, proving the
+# fast brain's multi-sentence reply is dispatched to TTS sentence-by-sentence
+# (one `tts_response` event per sentence) rather than as one blob.
+#
+# ============================================================================
+# WARNING — DO NOT RUN THIS SCENARIO. Written but never executed in this
+# task group. Audio modality makes the bot speak for real through its actual
+# ElevenLabs TTS service (server/bot.py TTS_BUILDERS["elevenlabs"]) — every
+# run burns real paid ElevenLabs quota. Per project policy, only the user
+# may execute a cost-incurring run, from their own real terminal. This file
+# is scaffolded to spec and ready to run, but has not been run by any agent.
+# Run manually (group-end / gate-three only, per tasks.md T7.8):
+#
+#   uv run bot.py -t eval
+#   set -a && source .env && set +a
+#   PYTHONPATH=$(pwd) uv run pipecat eval run evals/dual_brain_audio.yaml -v -a
+# ============================================================================
+#
+# judge.transcription.service is `whisper`, NOT `moonshine` — Moonshine
+# mis-transcribes Chinese into English-looking garbage (design.md §1.6/§15
+# PoC-8, already verified against the 1-期 bot). The `tts_response` count
+# assertion is a deterministic event count, not judged by an LLM — per
+# tasks.md, the exact count isn't pinned down (SLOW_BRAIN_PROMPT / fast-brain
+# rules make the reply "probably 3-4 sentences" but this isn't guaranteed),
+# so this only asserts a lower bound of 3 sequential `tts_response` events.
+
+user:
+  modality: audio
+  speech:
+    service: kokoro
+    voice: af_heart
+
+judge:
+  modality: audio
+  eval:
+    factory: "judge_factory.judge_llm"
+  transcription:
+    service: whisper
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      # tts_response fires per sentence as the fast brain's reply is spoken;
+      # `response` (the harness's own transcription of the complete audio)
+      # only finalizes after all of them, so it must be listed last —
+      # expectations consume a single shared event queue in order
+      # (harness.py:_next_matching_event drops non-matching events), so
+      # listing `response` first would silently swallow the tts_response
+      # events while waiting for it.
+      - event: tts_response
+      - event: tts_response
+      - event: tts_response
+      - event: response
