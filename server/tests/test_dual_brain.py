@@ -64,6 +64,21 @@ from pipecat.tests.utils import SleepFrame, run_test
 import prompts
 
 
+def _message_field(message, field: str):
+    """Safely read a field from an `LLMMessagesAppendFrame.messages[i]` entry.
+
+    Pyright types that field as a union including `LLMSpecificMessage`,
+    which has no `__getitem__`, and TypedDict variants where `content` isn't
+    a required key — direct `message["role"]`/`message["content"]` indexing
+    trips `reportIndexIssue`/`reportTypedDictNotRequiredAccess` (組末評審
+    HIGH-2 修复,组内其它位置已用 `isinstance(m, dict) and m.get(...)` 这个
+    模式,这里统一抽成一个小helper复用,不逐处重复写).
+    """
+    if isinstance(message, dict):
+        return message.get(field)
+    return None
+
+
 @contextlib.contextmanager
 def _capture_dual_brain_logs():
     """临时挂一个 loguru sink,只捕获本次 `with` 块内产生的日志文本(T3.5)。
@@ -104,6 +119,7 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
         ——给 Consumer 的后台任务一个机会把队列里的帧提前推到下游，避免
         `EndFrame` 到达时队列里还有帧没被 `ConsumerProcessor` 取走就被取消。
         """
+        assert dual_brain is not None  # pyright narrowing; callers already assert module readiness
         producer = ProducerProcessor(
             filter=dual_brain.slow_material_filter,
             transformer=dual_brain.slow_material_transformer,
@@ -143,16 +159,18 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
 
         increment = increment_frames[0]
         self.assertEqual(1, len(increment.messages))
-        self.assertEqual("user", increment.messages[0]["role"])
+        self.assertEqual("user", _message_field(increment.messages[0], "role"))
         self.assertEqual(
             prompts.INJECT_POINT_TEMPLATE.format(point=point),
-            increment.messages[0]["content"],
+            _message_field(increment.messages[0], "content"),
         )
 
         completion = completion_frames[0]
         self.assertEqual(1, len(completion.messages))
-        self.assertEqual("user", completion.messages[0]["role"])
-        self.assertEqual(prompts.INJECT_DONE_TEMPLATE, completion.messages[0]["content"])
+        self.assertEqual("user", _message_field(completion.messages[0], "role"))
+        self.assertEqual(
+            prompts.INJECT_DONE_TEMPLATE, _message_field(completion.messages[0], "content")
+        )
 
         # 隔离反证：慢脑自身的 passthrough 流里只有原样的 TextFrame，
         # 内容与条数都精确——不含被注入快脑的模板痕迹。
@@ -173,10 +191,24 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, sum(1 for f in down if isinstance(f, LLMFullResponseEndFrame)))
 
     async def test_failed_slow_turn_emits_no_completion_marker(self):
-        """§5.2 表②/PoC-2 S1 反向：零要点 + LLMFullResponseEndFrame 不得产出完成标记。"""
+        """§5.2 表②/PoC-2 S1 反向：零要点 + LLMFullResponseEndFrame 不得产出完成标记。
+
+        组末评审 HIGH-1 修复：原版只驱动"稳态下零要点"这一条路径——`down =
+        await self._run_slow_branch([])` 用的是模块级共享单例
+        `dual_brain.slow_material_filter`，而按 `unittest` 字母序执行，本用例
+        是文件里第一个真正触达该单例状态的用例，`has_material` 此刻本就还是
+        `__init__` 时的默认值 `False`。于是"`LLMFullResponseStartFrame` 必须把
+        `has_material` 复位为 `False`"这条 §5.2 明写的转移语义，从未被真正验证
+        过——删掉复位那一行代码，本用例（连同全套件）依然全绿（已用真实变异
+        独立复现确认）。下面新增一段：先用一个**独立** `_SlowMaterialFilter()`
+        实例人为造出"上一轮曾经 has_material=True"的前置状态，再验证新一轮
+        `LLMFullResponseStartFrame` 到达后确实被复位、且零要点的这一轮不产出
+        完成标记——直接断言内部状态字段，不依赖单例默认值或测试执行顺序。
+        """
         self._assert_dual_brain_module_ready()
         assert dual_brain is not None  # pyright narrowing; runtime already asserted above
 
+        # --- 原有路径：稳态（单例默认值）下零要点，验证帧级行为 ---
         # 慢脑本轮零输出（框架失败路径的 finally 块仍会推 LLMFullResponseEndFrame，
         # 但中间没有任何 TextFrame——has_material 全程保持 False）。
         down = await self._run_slow_branch([])
@@ -188,6 +220,33 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
             1, sum(1 for f in down if isinstance(f, LLMFullResponseStartFrame))
         )
         self.assertEqual(1, sum(1 for f in down if isinstance(f, LLMFullResponseEndFrame)))
+
+        # --- 新增路径：独立实例，人为造脏状态，直接验证 Start 帧的复位转移点 ---
+        filt = dual_brain._SlowMaterialFilter()
+
+        # Turn 1：产出一条要点，让 has_material 真的变成 True（前置条件，
+        # 用断言证明而非假设）。
+        await filt(LLMFullResponseStartFrame())
+        accepted = await filt(TextFrame(text="turn-1 的要点，用于弄脏状态。"))
+        self.assertTrue(accepted, "前置条件：turn 1 的要点应被正常接受")
+        self.assertTrue(
+            filt._state.has_material, "前置条件：turn 1 结束前 has_material 应已为 True"
+        )
+        turn1_completion = await filt(LLMFullResponseEndFrame())
+        self.assertTrue(turn1_completion, "turn 1 有材料，完成标记应正常产出")
+
+        # Turn 2：全新一轮，零要点。新的 LLMFullResponseStartFrame 必须把
+        # has_material 复位为 False——这正是被变异③证明此前未被覆盖的那一步。
+        await filt(LLMFullResponseStartFrame())
+        self.assertFalse(
+            filt._state.has_material,
+            "新一轮 LLMFullResponseStartFrame 到达后，has_material 必须被复位为 "
+            "False，即便上一轮曾经为 True(§5.2 状态迁移落点)",
+        )
+        turn2_result = await filt(LLMFullResponseEndFrame())
+        self.assertFalse(
+            turn2_result, "turn 2 零要点，即便上一轮遗留过 True，完成标记也不得产出"
+        )
 
         # 直接核对谓词契约本身：稳态(has_material=False, aborted=False)下，
         # 对 LLMFullResponseEndFrame 的返回值必须严格为 False（design §5.2 帧路由表）。
@@ -207,10 +266,13 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
         increment_frames = [
             f
             for f in material_frames
-            if f.messages[0]["content"] == prompts.INJECT_POINT_TEMPLATE.format(point=point)
+            if _message_field(f.messages[0], "content")
+            == prompts.INJECT_POINT_TEMPLATE.format(point=point)
         ]
         completion_frames = [
-            f for f in material_frames if f.messages[0]["content"] == prompts.INJECT_DONE_TEMPLATE
+            f
+            for f in material_frames
+            if _message_field(f.messages[0], "content") == prompts.INJECT_DONE_TEMPLATE
         ]
         self.assertEqual(1, len(increment_frames))
         self.assertEqual(1, len(completion_frames))
