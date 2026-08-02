@@ -35,4 +35,18 @@ CAPABILITY_BOUNDARY_SECTION = (
 # 故改为如实反映当前能力：始终用中文回复）。
 LANGUAGE_SECTION = "Always reply in Chinese (Mandarin), regardless of the language of the input text."
 
+# 慢脑系统提示（T2.2, design §6.7①）：用于 LLM 生成深度分析要点语义素材。
+# 这是独立的 system prompt，不进入快脑 SYSTEM_PROMPT 拼装。
+# 关键约束解释：
+# 1. 每条要点必须以句号结尾（硬约束）——官方 SentenceAggregator 仅在句末标点
+#    或 EndFrame 时 flush，缺少句号会导致最后一条要点滞留缓冲区丢失或串进下一轮。
+# 2. "不要输出任何内容"承载零输出语义——不使用任何约定 token（如"输出'无'"），
+#    直接空字符串结束即可。
+SLOW_BRAIN_PROMPT = (
+    "你是慢脑。对用户的问题做深度分析,产出可供另一个对话助手消化的语义素材要点,"
+    "不是给用户看的答案。每条要点一行,以 \"- \" 开头,最多 4 条,每条不超过 40 字,"
+    "每条必须以句号 。 结尾。只输出要点本身,不要开场白、不要总结。"
+    "若问题无深析价值(寒暄/简单事实),则不要输出任何内容,直接结束,一个字都不要说。"
+)
+
 SYSTEM_PROMPT = f"{OFFICIAL_SECTION}\n\n{CAPABILITY_BOUNDARY_SECTION}\n\n{LANGUAGE_SECTION}"
