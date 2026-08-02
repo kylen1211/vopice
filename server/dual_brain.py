@@ -9,6 +9,15 @@ transitions (when each field resets/flips) live in `slow_material_filter`
 
 from dataclasses import dataclass
 
+from pipecat.frames.frames import (
+    Frame,
+    InterruptionFrame,
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    TextFrame,
+)
+from pipecat.processors.aggregators.llm_context import LLMContext
+
 
 @dataclass
 class SlowBrainState:
@@ -66,3 +75,112 @@ class SlowBrainState:
     superseded question could be misattributed to a newer one in the
     conversation flow (design §5.2 row ①).
     """
+
+
+class _SlowMaterialFilter:
+    """Stateful Producer `filter` predicate for the slow-brain branch (T3.3).
+
+    `ProducerProcessor.filter` is typed `Callable[[Frame], Awaitable[bool]]`
+    (`producer_processor.py:40`) — a single positional `Frame` argument, no
+    room for an injected `LLMContext`. But design §5.2's state-transition
+    contract needs one: on `LLMFullResponseStartFrame` it must snapshot "the
+    content of the slow-brain context's last `role == 'user'` message" as
+    `basis`, then re-read the same thing on every later `TextFrame` /
+    `LLMFullResponseEndFrame` to compare. A plain function has nowhere to
+    keep that reference between calls.
+
+    Same shape as `sentinel.py`'s `_SentinelGate` — "predicate signature is
+    fixed, but it needs to remember something across calls" — solved the
+    same way: a stateful callable class with a module-level singleton
+    (`slow_material_filter` below) so `dual_brain.slow_material_filter` is a
+    ready-made `filter=...` value. This adds one more dimension beyond
+    `_SentinelGate`: the *external* `LLMContext` reference itself, supplied
+    late via `bind_context()` rather than at construction — T3.5's pipeline
+    assembly step doesn't have the slow-brain context built yet at the point
+    the filter needs to be wired into `ProducerProcessor(filter=...)`.
+
+    Until `bind_context()` is called, `_current_basis()` returns `""`. This
+    is not a test-only special case: `LLMFullResponseStartFrame` records
+    `basis = self._current_basis()` and the later `TextFrame` re-reads the
+    same method to compare — with no context bound, both calls return `""`
+    and the comparison passes on its own, so the unbound state walks the
+    same "happy path" branch a real bound-context run would take when the
+    question hasn't changed. `test_dual_brain.py` (T3.1, locked) never binds
+    a context and exercises exactly this path.
+    """
+
+    def __init__(self, context: LLMContext | None = None) -> None:
+        self._context = context
+        self._state = SlowBrainState(has_material=False, aborted=False, basis="")
+
+    def bind_context(self, context: LLMContext) -> None:
+        """Bind (or rebind) the real slow-brain `LLMContext` (T3.5, pipeline assembly)."""
+        self._context = context
+
+    def _current_basis(self) -> str:
+        """Snapshot of the last `role == "user"` message's `content`, as `str`.
+
+        Returns `""` when no context is bound, or the bound context has no
+        `role == "user"` message — never raises (design §5.2's comparison
+        must be total, not partial).
+
+        `get_messages()` returns the context's internal list *reference*,
+        not a snapshot (`llm_context.py:227-279`) — holding onto it or a
+        message dict from it would make every later comparison trivially
+        equal regardless of what actually changed. This method walks the
+        list and copies the `content` out as a plain `str` immediately, then
+        drops the reference; nothing here is ever retained across calls.
+        """
+        if self._context is None:
+            return ""
+        for message in reversed(self._context.get_messages()):
+            if not isinstance(message, dict) or message.get("role") != "user":
+                continue
+            content = message.get("content", "")
+            return content if isinstance(content, str) else str(content)
+        return ""
+
+    async def __call__(self, frame: Frame) -> bool:
+        """Design §5.2 predicate frame-routing table — the sole authority.
+
+        Every branch below is an observation/control frame from the
+        slow-brain branch's point of view: `LLMFullResponseStartFrame` /
+        `LLMFullResponseEndFrame` / `InterruptionFrame` must always return
+        `False` (they must never be `_produce`d into the fast-brain branch,
+        which would pollute its context) — only a `TextFrame` that clears
+        the `not aborted` + `basis`-match check returns `True`.
+        """
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._state.has_material = False
+            self._state.aborted = False
+            self._state.basis = self._current_basis()
+            return False
+
+        if isinstance(frame, TextFrame):
+            if self._state.aborted or self._current_basis() != self._state.basis:
+                return False
+            self._state.has_material = True
+            return True
+
+        if isinstance(frame, LLMFullResponseEndFrame):
+            return (
+                self._state.has_material
+                and not self._state.aborted
+                and self._current_basis() == self._state.basis
+            )
+
+        if isinstance(frame, InterruptionFrame):
+            self._state.aborted = True
+            return False
+
+        return False
+
+
+# Module-level singleton so `dual_brain.slow_material_filter` is directly
+# usable as `ProducerProcessor(filter=dual_brain.slow_material_filter, ...)`
+# — mirrors `sentinel.py`'s `sentinel_gate = _SentinelGate()` (module-level
+# instance for tests / simple wiring). T3.5's real pipeline-assembly step
+# calls `slow_material_filter.bind_context(...)` once the slow-brain
+# `LLMContext` exists; a session-scoped factory (mirroring `sentinel.py`'s
+# `build_sentinel_filter()`) is that task's concern, not this one's.
+slow_material_filter = _SlowMaterialFilter()
