@@ -1,0 +1,15 @@
+schema: spec-driven
+
+context: |
+  个人 AI 语音助手(pipecat-ai 二开,官方脚手架结构,uv 管理)。
+  技术栈:Python 3.11+(server/,pipecat-ai==1.6.0 锁定)+ React voice-ui-kit(client/)。
+  测试:pytest + pipecat evals(evals/*.yaml);门禁 = ruff/pyright/pytest/eval。
+  约定:官方脚手架结构不动;开发/测试/示例按 pipecat 官方标准;conventional commits(feat/fix/docs/…,无 co-author 尾注)。
+  领域:快慢脑语音交互(快脑先答→慢脑深析回流)、任务派活(派发不中断对话)、桌面感知;
+  旧项目 voice-translate-v2 整库冻结只读,取材按 docs/legacy-capability-index.md 定点定位。
+  三门流程(门一需求/门二评审/门三验收)按用户全局总纲执行,变更开在本目录 changes/。
+
+rules:
+  proposal:
+    - 契约字段从第一天带 user/tenant 维度(实现可单用户)
+    - 业务规则用 EARS 句式编号 R{n},验收 scenario 编号 R{n}-S{m} 且 1:1 映射
