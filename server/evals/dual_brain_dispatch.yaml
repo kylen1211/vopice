@@ -1,0 +1,25 @@
+name: dual_brain_dispatch
+
+# R1-S1 (design.md §8.1, tasks.md T7.1): the dual-brain ParallelPipeline
+# dispatches normally and the fast brain still answers like a normal bot —
+# this is the baseline "the plumbing didn't break" check for the whole
+# dual-brain assembly, deliberately not judged (structural only).
+#
+# Side evidence (optional, does not gate PASS): grep the bot.log from this
+# same run for `[dual-brain] dispatch turn=` — dual_brain.py:181 logs this on
+# every LLMFullResponseStartFrame the slow branch sees, fast or deep question
+# alike, so it should appear at least once.
+#
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/dual_brain_dispatch.yaml -v
+
+turns:
+  # Absorb the on_client_ready greeting turn before sending the real question
+  # (see smoke.yaml — sending user text as turn 0 risks an interruption that
+  # corrupts context, reproduced 20260801).
+  - expect:
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response
