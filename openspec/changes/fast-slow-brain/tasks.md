@@ -4,6 +4,7 @@
 > - 技术栈:Python 3.11 / pipecat-ai `==1.6.0`(venv 在 `server/.venv`)/ pytest / ruff / pyright。
 > - **跑任何 python(含 `python -c` 临时探查)必须带 `NLTK_DISABLE_IMPORT_SECURITY=1`**;漏带会得到 `ImportError: Blocked import of regex ... for security reasons`,那是环境拦截不是缺依赖,勿误判。
 > - 质量线(每组完成信号必含):`pytest` 全绿 + `ruff check .` 零 error + `pyright` 无**新增**错误。
+> - **变异验证(用户 2026-08-02 追加,治"测试全绿但验收一堆问题")**:标了"变异验证"的组,组末评审前**必须按组头列出的变异逐项做一次**——故意把实现改坏,确认对应用例**变红**,截取红色输出后 `git checkout` 还原。**不红即该用例无杀伤力**,当场补强,不得以"测试已全绿"结案。历史实证(全局台账 8 条同型):替身构造生产上游产不出的值 → 语音说"拒绝"实际放行仍 16 条全绿;验收断内存属性而非落盘产物 → 同项目同型虚绿三次;期望值取自被验对象自身 → 一行未改也 PASS;负向断言锚点消失 → 840 测试全绿而断言已真空。
 > - 官方件优先(拍板 21):不自造官方已有的能力;确需自研须在 design.md 留自证。写任何 pipecat 类名/参数前先查 venv 源码或 codegraph,**不凭记忆**。
 > - 代码检索优先 `codegraph explore`(本仓库与 `~/git/pipecat` 均已建索引),grep/Read 作补充。
 > - 禁止:改 `openspec/specs/` 事实源;改 1 期既有 eval 场景文件;`git add -A`(只按路径 stage 本任务改动的文件)。
@@ -37,7 +38,8 @@
 
 ---
 
-## 1. 配置层与服务装配 【会话边界: 否 | 建议执行方式: 派子代理(单文件机械改动,接口签名已在 design 定死) | 模型档: 标准 | 完成信号: `server/tests/test_config.py` 全绿(含新增 U1/U2/U6)+ 先红证据(测试 commit 早于实现 commit)+ ruff/pyright 通过】
+## 1. 配置层与服务装配 【会话边界: 否 | 建议执行方式: 派子代理(单文件机械改动,接口签名已在 design 定死) | 模型档: 标准 | 完成信号: `server/tests/test_config.py` 全绿(含新增 U1/U2/U6)+ 先红证据(测试 commit 早于实现 commit)+ ruff/pyright 通过 + **变异验证**】
+> **变异验证项**:①删掉 `STT_PROVIDER`/`TTS_PROVIDER` 的白名单校验 → U6 必红;②把 1.4 的 `settings=` 改成裸构造参数(`SonioxSTTService(api_key=..., language_hints=[...])`)→ U4 必红(这正是旧库 B19 的形态:被 `**kwargs` 静默吞掉、无异常无警告)。
 > 入口 manifest: 只读 design.md §6.2 配置契约 + §6.3 服务装配契约 + §8.2 装配断言(U1/U2/U4/U6) + 全局约束头,不读管线/prompt 相关节。
 
 - [ ] 1.1 **先写测试**:在 `server/tests/test_config.py` 补 U1(必需项恰为新 8 项:`LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`/`SLOW_LLM_MODEL`/`SONIOX_API_KEY`/`ELEVENLABS_API_KEY`/`ELEVENLABS_VOICE_ID`/`ELEVENLABS_MODEL`;`OPENAI_MODEL`/`KOKORO_VOICE_ID` 不再必需)、U2(`CHANGE_ME_` 前缀仍判缺失)、U6(未知 `STT_PROVIDER`/`TTS_PROVIDER` 启动即拒),实跑确认**红** [R5/§8.2]
@@ -58,7 +60,8 @@
 
 ---
 
-## 3. 慢脑状态与 Producer 谓词 【会话边界: 否 | 建议执行方式: 派子代理(函数级明确、谓词帧路由表已写死) | 模型档: 标准 | 完成信号: `test_dual_brain.py` 中本组 6 条用例全绿 + 先红证据 + ruff/pyright 通过】
+## 3. 慢脑状态与 Producer 谓词 【会话边界: 否 | 建议执行方式: 派子代理(函数级明确、谓词帧路由表已写死) | 模型档: 标准 | 完成信号: `test_dual_brain.py` 中本组 6 条用例全绿 + 先红证据 + ruff/pyright 通过 + **变异验证**】
+> **变异验证项**(本组最关键,核对已指出这些错误实现会**静默恒过且测试同样绿**):①把 `basis` 比对改成恒真(直接 `return True`)→ `test_barge_in_drops_inflight_material` 与 `test_stale_material_dropped_before_inject` 必红;②把 `basis` 存成 `get_messages()` 返回的列表引用而非字符串拷贝 → 同上两条必红;③把 `has_material` 初值写死 `True` → `test_failed_slow_turn_emits_no_completion_marker` 必红;④让谓词对 `LLMFullResponseStartFrame` 返回 `True`(观测帧误入快脑分支)→ `test_material_lands_only_in_fast_context` 必红。
 > 入口 manifest: 只读 design.md §5.2 模块职责与状态迁移落点(**含谓词帧路由表**) + §6.1 注入模板 + §6.4 日志行契约 + §8.1 用例骨架(R3/R7/R8 派生条目) + 全局约束头,不读管线装配/哨兵/eval 节。
 
 - [ ] 3.1 **先写测试**:新建 `server/tests/test_dual_brain.py`,写 `test_material_lands_only_in_fast_context`、`test_failed_slow_turn_emits_no_completion_marker`、`test_incremental_inject_does_not_trigger`(反向:`run_llm=False` 不得增加生成次数),用官方 `pipecat.tests.utils.run_test` 做帧级断言,实跑确认**红** [R3/R4/R8/§8.1]
@@ -70,7 +73,8 @@
 
 ---
 
-## 4. 哨兵过滤器 【会话边界: 否 | 建议执行方式: 派子代理(单文件、逻辑独立,可与第 3 组并行——不同文件无符号依赖) | 模型档: 标准 | 完成信号: `test_sentinel_round_emits_no_text` 两向断言全绿 + 先红证据 + ruff/pyright 通过】
+## 4. 哨兵过滤器 【会话边界: 否 | 建议执行方式: 派子代理(单文件、逻辑独立,可与第 3 组并行——不同文件无符号依赖) | 模型档: 标准 | 完成信号: `test_sentinel_round_emits_no_text` 两向断言全绿 + 先红证据 + ruff/pyright 通过 + **变异验证**】
+> **变异验证项**:①谓词写死 `return True`(全放行)→ 用例必红;②谓词写死 `return False`(全静默)→ 用例的**正向**分支(正常轮全部透出)必红——两个方向都要红,只红一边说明用例是单向的。
 > 入口 manifest: 只读 design.md §6.6 哨兵契约 + §8.1 用例骨架(R6 派生条目) + 全局约束头,不读慢脑状态/管线节。
 
 - [ ] 4.1 **先写测试**:补 `test_sentinel_round_emits_no_text`——哨兵轮零文本帧透出、正常轮全部透出(**两向**);另断言 `LLMFullResponseStartFrame`/`EndFrame` 在哨兵轮**仍被放行**,实跑确认**红** [R6/§6.6/§8.1]
@@ -79,7 +83,8 @@
 
 ---
 
-## 5. 管线装配 【会话边界: 是 | 建议执行方式: 派子代理(多文件集成,但接口已由 3/4 组产出定死) | 模型档: 标准 | 完成信号: `bot.py -t eval` 干净启动无异常;U3/U4/U5 装配断言全绿 + 先红证据 + ruff/pyright 通过】
+## 5. 管线装配 【会话边界: 是 | 建议执行方式: 派子代理(多文件集成,但接口已由 3/4 组产出定死) | 模型档: 标准 | 完成信号: `bot.py -t eval` 干净启动无异常;U3/U4/U5 装配断言全绿 + 先红证据 + ruff/pyright 通过 + **变异验证**】
+> **变异验证项**:①把快脑 LLM 也加进 `ignored_sources` → U5 必红(漏这条 = 面板没有对话);②从 `ignored_sources` 里去掉慢脑三件中任一 → U5 必红(漏这条 = 慢脑原文上面板,违反 R2);③把 Consumer 挪到快脑 user aggregator **之后** → U3 必红。
 > 入口 manifest: 只读 design.md §5.1 管线结构(唯一承重结构图) + §5.1.1 RTVI 观测隔离 + §5.3 开场白路径 + §6.3 服务装配 + §8.2 装配断言(U3/U4/U5) + 全局约束头 + 第 3/4 组产出的符号签名,不读 eval/日志细节节。
 
 - [ ] 5.1 **先写测试**:补 U3(`test_pipeline_shape`:Consumer 在快脑 user aggregator **之前**;慢脑分支**无输出件**)、U4(`test_stt_tts_settings_take_effect`:构造后 `stt._settings.language_hints` / `tts._settings.voice` 为期望值,固化旧库 B19)、U5(`test_rtvi_ignores_slow_branch`:`ignored_sources` 恰含慢脑三件且**不含**快脑 LLM),实跑确认**红** [§8.2]
@@ -90,7 +95,8 @@
 
 ---
 
-## 6. 错误处理与面板 【会话边界: 否 | 建议执行方式: 派子代理(单文件、handler 逻辑明确) | 模型档: 标准 | 完成信号: R8 三条派生用例全绿 + 先红证据 + ruff/pyright 通过】
+## 6. 错误处理与面板 【会话边界: 否 | 建议执行方式: 派子代理(单文件、handler 逻辑明确) | 模型档: 标准 | 完成信号: R8 三条派生用例全绿 + 先红证据 + ruff/pyright 通过 + **变异验证**】
+> **变异验证项**:把 handler 里 `frame.processor is slow_llm` 的判断去掉(任何 `ErrorFrame` 都记 `slow-failed`)→ `test_non_slow_error_not_reported_as_slow_failed` 必红。这条是**防假绿专用**用例,它自己不红就等于没有。
 > 入口 manifest: 只读 design.md §6.4 日志行契约 + §6.5 面板契约 + §8.1 用例骨架(R8 派生条目) + 全局约束头,不读管线/eval 节。
 
 - [ ] 6.1 **先写测试**:补 `test_slow_error_does_not_stop_fast_branch`、`test_non_slow_error_not_reported_as_slow_failed`(构造 `ErrorFrame(processor=<非 slow_llm>)` → 打 `pipeline-error` 而非 `slow-failed`,**防假绿**)、`test_slow_failure_pushes_server_message`,实跑确认**红** [R8/§8.1]
