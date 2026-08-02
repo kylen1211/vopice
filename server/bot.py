@@ -59,7 +59,7 @@ from pipecat.workers.runner import WorkerRunner
 import dual_brain
 import prompts
 import sentinel
-from config import load_config
+from config import Config, load_config
 
 load_dotenv(override=True)
 
@@ -110,7 +110,7 @@ class AssembledPipeline:
     rtvi_observer_params: RTVIObserverParams
 
 
-def assemble_pipeline(cfg, transport: BaseTransport) -> AssembledPipeline:
+def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipeline:
     """Build the dual-brain `ParallelPipeline` worker for one session (design §5.1).
 
     Split out from `run_bot` so tests can construct it against a fake
