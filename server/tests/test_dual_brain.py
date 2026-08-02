@@ -54,10 +54,12 @@ from pipecat.frames.frames import (
     SpeechControlParamsFrame,
     TextFrame,
 )
+from pipecat.pipeline.parallel_pipeline import ParallelPipeline
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMUserAggregator
 from pipecat.processors.consumer_processor import ConsumerProcessor
+from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.processors.producer_processor import ProducerProcessor
 from pipecat.tests.utils import SleepFrame, run_test
 
@@ -618,6 +620,117 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
             "打断窗口内被拦下的要点应打 stale-drop reason=aborted"
             "(当前预期红，等 T3.6 落地打日志后才会绿)",
         )
+
+    async def test_build_slow_material_filter_returns_independent_instances(self):
+        """T5.2 会话隔离(比照 sentinel.py `build_sentinel_filter()` 同型修复)。
+
+        `bot(runner_args)` 每会话跑一次(AGENTS.md §1),但没有任何机制保证
+        "一进程一会话"——第 4 组组末评审已就 `sentinel.py` 的同构问题判过一次
+        HIGH(模块级单例被多会话共享会互相污染状态)。`dual_brain.py` 的
+        `_SlowMaterialFilter` 同样带跨调用状态(`SlowBrainState`),模块级单例
+        `slow_material_filter` 只应供测试直接用(见其模块内注释),生产装配
+        (T5.2 `bot.py::assemble_pipeline`)必须走一个"每次调用返回全新实例"的
+        工厂,不能把模块单例接进真实管线——否则并发的两个会话会共享同一份
+        `has_material`/`aborted`/`basis`。
+        """
+        self._assert_dual_brain_module_ready()
+        assert dual_brain is not None  # pyright narrowing
+        self.assertTrue(
+            hasattr(dual_brain, "build_slow_material_filter"),
+            "dual_brain.build_slow_material_filter 尚未定义",
+        )
+
+        filter_a = dual_brain.build_slow_material_filter()
+        filter_b = dual_brain.build_slow_material_filter()
+        self.assertIsNot(filter_a, filter_b, "每次调用必须返回互不相同的新实例")
+        self.assertIsNot(
+            filter_a,
+            dual_brain.slow_material_filter,
+            "工厂产出的实例不应是模块级测试单例本身",
+        )
+
+        # 状态隔离：filter_a 弄脏后，filter_b 的状态必须完全不受影响。
+        await filter_a(LLMFullResponseStartFrame())
+        await filter_a(TextFrame(text="要点。"))
+        self.assertTrue(filter_a._state.has_material, "前置条件：filter_a 应已被弄脏")
+        self.assertFalse(
+            filter_b._state.has_material,
+            "两个由工厂产出的实例，状态必须完全独立，不得互相污染",
+        )
+
+
+class TestAssemblePipeline:
+    """U3/U5(design §8.2)：`bot.assemble_pipeline()` 的结构性装配断言。
+
+    用纯 pytest 风格函数(而非 unittest.TestCase)，直接吃 `bot_module`
+    fixture（`conftest.py`，T5.1 从 `test_bot.py` 挪出以便本文件复用）——与
+    `TestDualBrain` 的 `unittest.IsolatedAsyncioTestCase` 风格不同，但两者可
+    在同一测试文件内共存，pytest 会分别正确收集。
+    """
+
+    class _FakeTransport:
+        """最小 transport 桩：只暴露 `assemble_pipeline()` 实际用到的
+        `input()`/`output()`，返回稳定的 FrameProcessor 实例（供 identity
+        比较），不需要真实网络/IO（design §8.2 U3/U5 只测结构，不测传输）。
+        """
+
+        def __init__(self):
+            self._input = FrameProcessor(name="fake-transport-input")
+            self._output = FrameProcessor(name="fake-transport-output")
+
+        def input(self):
+            return self._input
+
+        def output(self):
+            return self._output
+
+    def test_pipeline_shape(self, bot_module):
+        """U3：Consumer 必须在快脑分支内、且在 fast_pair.user() 之前；
+        慢脑分支不得含任何输出件(transport.output()/TTS)。"""
+        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+
+        transport = self._FakeTransport()
+        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+
+        top_level_processors = assembled.pipeline.processors
+        parallel = next(p for p in top_level_processors if isinstance(p, ParallelPipeline))
+        branches = parallel.processors
+        assert len(branches) == 2, "ParallelPipeline 必须恰好两个分支(快脑/慢脑)"
+
+        fast_branch = branches[0].processors
+        slow_branch = branches[1].processors
+
+        consumer_idx = next(
+            i for i, p in enumerate(fast_branch) if isinstance(p, ConsumerProcessor)
+        )
+        fast_user_idx = fast_branch.index(assembled.fast_user_aggregator)
+        assert consumer_idx < fast_user_idx, "Consumer 必须在快脑 user aggregator 之前"
+
+        assert transport.output() in fast_branch, "transport.output() 必须在快脑分支内"
+        assert transport.output() not in slow_branch, "慢脑分支不得含 transport.output()"
+        assert assembled.tts in fast_branch, "TTS 必须在快脑分支内"
+        assert assembled.tts not in slow_branch, "慢脑分支不得含 TTS"
+
+    def test_rtvi_ignores_slow_branch(self, bot_module):
+        """U5：ignored_sources 恰含慢脑三件(slow_llm/句聚合/Producer)且不含快脑
+        LLM；并显式断言 `user_llm_enabled is False`(§5.1.1 第二条泄漏路径——
+        注入模板经 `messages[-1]` 走 `user-llm-text` 上面板,eval 抓不到,只能
+        靠这个参数 + 本条断言兜住)。"""
+        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+
+        transport = self._FakeTransport()
+        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+
+        params = assembled.rtvi_observer_params
+        ignored = list(params.ignored_sources)
+        assert set(ignored) == {
+            assembled.slow_llm,
+            assembled.sentence_aggregator,
+            assembled.producer,
+        }, "ignored_sources 必须恰含慢脑三件"
+        assert len(ignored) == 3, "ignored_sources 不得含重复/多余项"
+        assert assembled.fast_llm not in ignored, "快脑 LLM 绝不能进 ignored_sources"
+        assert params.user_llm_enabled is False, "user_llm_enabled 必须显式为 False"
 
 
 if __name__ == "__main__":

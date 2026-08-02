@@ -11,7 +11,8 @@ test_bot.py 测的是 bot.py 里的装配逻辑（builder 字典 + Config → se
 
 导入 bot 模块的隔离处理：bot.py 顶层直接执行 `load_dotenv(override=True)` +
 `cfg = load_config()`——import bot 这一行本身就会读取真实环境变量甚至真实 .env
-文件。为了不依赖 server/.env 是否存在、也不依赖真实环境变量：
+文件。为了不依赖 server/.env 是否存在、也不依赖真实环境变量，改用 `bot_module`
+fixture（T5.1 起移至 `conftest.py` 复用，见其文档字符串）：
 1. 用 monkeypatch.setenv 注入一组自造的必需环境变量（值全是测试专用假数据）；
 2. 用 monkeypatch 把 dotenv.load_dotenv 替换成 no-op，阻止它加载/覆盖真实 .env；
 3. 强制重新 import（若 bot 已被其它测试文件 import 过则先从 sys.modules 移除），
@@ -22,51 +23,6 @@ test_bot.py 测的是 bot.py 里的装配逻辑（builder 字典 + Config → se
 service 的 `_settings` 上关键字段确实等于我们传入的期望值。这样断言完全不依赖
 模块级全局状态或 import 时机，比"断言 bot.cfg 的字段"更干净、更隔离。
 """
-
-import importlib
-import sys
-
-import pytest
-
-# bot.py 顶层强制读取的必需环境变量（同构 test_config.py 的 NEW_REQUIRED_ENV，
-# 值本身是任意测试假数据——本文件的断言不依赖这些值，只用于让 `import bot`
-# 顶层的 load_config() 能通过校验）。
-_FAKE_REQUIRED_ENV = {
-    "LLM_BASE_URL": "http://127.0.0.1:8045/v1",
-    "LLM_API_KEY": "sk-test-key",
-    "LLM_MODEL": "gemini-3.6-flash-high",
-    "SLOW_LLM_MODEL": "gemini-3-pro",
-    "SONIOX_API_KEY": "soniox-test-key",
-    "ELEVENLABS_API_KEY": "elevenlabs-test-key",
-    "ELEVENLABS_VOICE_ID": "voice-test-id",
-    "ELEVENLABS_MODEL": "eleven_multilingual_v2",
-}
-
-
-@pytest.fixture
-def bot_module(monkeypatch):
-    """Import (or re-import) server/bot.py under a fully isolated fake env.
-
-    - Sets all required env vars to test-only fake values (load_config() at
-      module scope must succeed).
-    - Neutralizes dotenv.load_dotenv so bot.py's `load_dotenv(override=True)`
-      cannot pull in a real server/.env and override the fake values above.
-    - Drops any cached `bot`/`config` modules first so the patches above are
-      guaranteed to be in effect while bot.py's top-level code re-executes.
-    """
-    for key, value in _FAKE_REQUIRED_ENV.items():
-        monkeypatch.setenv(key, value)
-
-    import dotenv
-
-    monkeypatch.setattr(dotenv, "load_dotenv", lambda *args, **kwargs: False)
-
-    sys.modules.pop("bot", None)
-    sys.modules.pop("config", None)
-    module = importlib.import_module("bot")
-    yield module
-    sys.modules.pop("bot", None)
-    sys.modules.pop("config", None)
 
 
 def _make_config(**overrides):
