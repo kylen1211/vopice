@@ -1,0 +1,30 @@
+name: dual_brain_inject
+
+# R3-S1 (design.md §8.1, tasks.md T7.2): while the slow brain is still
+# mid-analysis, its progressively injected material (`inject … done=false`,
+# dual_brain.py:198) must NOT make the fast brain speak again immediately —
+# only the completion marker (`done=true`, run_llm=True) may trigger a
+# second turn, and that happens only much later (§13.3: 10-50s). This
+# structural check picks a within_ms window that's clearly inside the
+# "still analyzing" period (well under the slow brain's fastest observed
+# completion) and asserts the second `response` is absent within it.
+#
+# Side evidence (optional, does not gate PASS): grep bot.log for
+# `[dual-brain] inject turn=.* done=false` — should appear at least once
+# during the window, proving material IS streaming in without a reply.
+#
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/dual_brain_inject.yaml -v
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response
+
+  - expect:
+      - event: response
+        absent: true
+        within_ms: 6000
