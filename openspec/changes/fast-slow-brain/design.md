@@ -129,7 +129,7 @@ $ ls .venv/.../pipecat/tests/utils.py → 存在(run_test 随包分发,PoC 载�
 
 **表末盲区问句 —— 这些解法没覆盖什么?**
 
-1. **慢脑"自身超时"没有官方件**:PRD R8 写"慢脑调用失败或自身超时(API 超时配置项)"。`OpenAILLMService` 的超时由底层 openai SDK 承担,pipecat 未暴露独立配置项 → 本设计以 SDK `timeout` 参数落地(§6.2),超时表现为异常→ErrorFrame,与"失败"同路;**不另造超时看门狗**(拍板 21)。
+1. **慢脑"自身超时"没有官方件,且比初稿判断的更弱**:`OpenAILLMService` 只有 `retry_timeout_secs`+`retry_on_timeout`,语义是"超时后重试一次且不带超时",不是"超时即放弃"(`base_llm.py:146-147,316-329`)。**§6.2 的最终处置是:不设该配置项、不开 retry**。诚实交代残余:`retry_on_timeout=False` 分支直接 `await create(**params)` **不传任何 timeout**(`base_llm.py:327-329`),openai SDK 默认读超时 600s —— 即 R8 的"自身超时"在最坏情况下 10 分钟内没有降级路径。按拍板 21 接受(不造看门狗),记 backlog。
 2. **"用户开口"到"慢脑 HTTP 请求真的被取消"之间无框架保证**:打断帧到达慢脑 LLM 处理器已实测(PoC-2 S2),但真实 `OpenAILLMService` 是否即刻断开在途 HTTP 流,属服务实现行为,只能人工联测观察(§8 M4);按拍板 21,观察到什么就是什么,不造取消层。
 3. **面板对"深析进行中"无任何提示**:PRD §6 已列为已知限制(面板只提示失败)。用户在等补充的 3-7 秒里没有任何视觉反馈。
 4. **哨兵谓词依赖模型服从性**:PoC-3 实测 `gemini-3-flash` 服从(精确输出 `∅`),但无兜底 —— 模型若哪次多说一个字,该轮补充就会被播出去。属"差不多就行"接受范围。
@@ -207,7 +207,8 @@ transport.input()
 worker = PipelineWorker(
     pipeline, ...,
     rtvi_observer_params=RTVIObserverParams(
-        ignored_sources=[slow_llm, slow_sentence_aggregator, slow_producer]),  ← R2 的关键
+        ignored_sources=[slow_llm, slow_sentence_aggregator, slow_producer],  ← R2 关键之一
+        user_llm_enabled=False),                                              ← R2 关键之二(见 5.1.1)
 )
 ```
 > 型号以 **§6.2 配置表为唯一事实源**,此图仅标配置项名;图中括注若与 §6.2 不一致,以 §6.2 为准。
@@ -220,8 +221,13 @@ worker = PipelineWorker(
 - 慢脑 LLM 吐出的每个 `LLMTextFrame` 都会被上报为 `bot-llm-text` → **client 对话面板直接显示慢脑原文**(违反 R2 与 PRD §1 角色矩阵"面板不显示慢脑原始产物");
 - 慢脑文本还会混进 eval 的 `llm_response`/`response` 事件流(`evals/harness.py:831-845`),使所有 eval 断言错乱。
 
-官方件解法(零自研):`PipelineWorker(rtvi_observer_params=...)`(`pipeline/worker.py:251,413` 实读)接受 `RTVIObserverParams(ignored_sources=list[FrameProcessor])`(`rtvi/observer.py:177,419`)。
+官方件解法(零自研):`PipelineWorker(rtvi_observer_params=...)`(`pipeline/worker.py:251,413` 实读)接受 `RTVIObserverParams(ignored_sources=list[FrameProcessor])`(`rtvi/observer.py:177,419`)。官方另有同构示例 `examples/features/features-concurrent-llm-rtvi-ignored-sources.py`,管线形态与 §5.1 一致。
 **快脑 LLM 不得放进该列表** —— 面板与文本模式 eval 的 `response` 事件都源自它。
+
+**第二条泄漏路径:注入模板会经 `user-llm-text` 上面板(fresh 复验 N5,承重)**
+`ignored_sources` 只挡住慢脑分支。但完成标记帧 `run_llm=True` → 快脑 user aggregator `push_context_frame()`(`llm_response_universal.py:1116-1119,487-494`)推出 `LLMContextFrame` → observer `_handle_context`(`rtvi/observer.py:792-818`)取 **`messages[-1]`**,只要 `role == "user"` 就发 `RTVI.UserLLMTextMessage` —— 而此刻 `messages[-1]` **正是注入模板全文**(模板角色固定 `user`,§6.1)。于是面板会显示 `[慢脑深析要点|问题#1|已完成] 以上素材已齐…`,**直接违反 R2-S1 与 PRD 角色矩阵**;更隐蔽的是 harness 没有 `user-llm-text` 的 case(落 `case _: return []`),**eval 抓不到,判据照样全绿**。
+处置:`RTVIObserverParams(user_llm_enabled=False)`(默认 `True`,`observer.py:169,464`)。用户自己说的话仍由 `user-transcription` 通道上报(STT 的 `TranscriptionFrame` 走 `observer.py` 另一分支),面板不丢失用户话语。
+**不能改用"把 `fast_pair.user()` 塞进 `ignored_sources`"** —— 那会连带屏蔽掉快脑 user aggregator 推出的其它上报。
 
 **结构约束(违反即功能错误,非风格问题)**:
 - Consumer **必须**在快脑分支内且在 `fast_pair.user()` 之前 —— 放在 ParallelPipeline 之前的公共段会让慢脑上下文同样被注入并被 `run_llm` 触发,违反 R3 与 R2(源码依据 `llm_response_universal.py:802-803,1116-1119`,PoC-1 实测)。
@@ -249,8 +255,9 @@ worker = PipelineWorker(
 | ②本轮是否产出过要点 `has_material` | `services/openai/base_llm.py:571-573`:`finally` 块**无论成功/超时/异常都无条件推 `LLMFullResponseEndFrame`**;而失败信号 `ErrorFrame` 走 `push_frame(..., UPSTREAM)`(`frame_processor.py:722`)**反向**上行,根本不经过下游的 Producer | 慢脑调用失败时 Producer 照样发"以上素材已齐"并 `run_llm=True` → 快脑在**零要点**下被触发,凭空多播一段莫名其妙的补充 → **直接击穿 R8-S1"无补充"** |
 | ③本轮是否已被中止 `aborted` | §2 盲区问句 2:打断帧到达慢脑已实测(PoC-2 S2),但真实 HTTP 流是否即刻停止**未验证** | 旧轮残片若在打断后继续流出,会被打上**新轮**编号 → 快脑无法分辨,把过期内容当本轮素材消化,**R7 反被摧毁** |
 
-**状态迁移落点写死(防实现期各自发挥)**:
-- `turn` 自增点 = 慢脑分支收到 `LLMFullResponseStartFrame` 时(同时置 `has_material=False`、`aborted=False`);
+**状态迁移落点写死(防实现期各自发挥;fresh 复验 N1 后统一口径,全文唯一事实源)**:
+- `turn` 自增点 = 慢脑分支收到 `LLMFullResponseStartFrame` 时(同时置 `has_material=False`、`aborted=False`)。**所有日志行(`dispatch`/`inject`/`no-material`/`abort`/`slow-failed`)共用这一刻起生效的同一个 `turn` 值** —— 不做"惰性自增",因为惰性化会让 `dispatch` 打出比 `inject` 小 1 的值,三条 grep 锚点全部错位。
+- **代价并显式接受**:开场白轮(§5.3)也会占用一个编号,**用户第一个真问题是 `turn=2` 而非 `turn=1`**。因此验收断言**一律不硬编码具体数字**,改断"同一轮内 dispatch/inject/完成标记的 turn 值一致"或"出现 ≥1 条该类日志行"(§8.1/§11 已按此写)。
 - `has_material` 置真点 = Producer 每产出一条要点注入帧时;
 - `aborted` 置真点 = 慢脑分支收到 `InterruptionFrame` 时;
 - Producer 见 `LLMFullResponseEndFrame` 时,**仅当 `has_material and not aborted`** 才产出完成标记帧(`run_llm=True`);否则只打 `no-material` 或 `abort` 日志,不注入、不触发。
@@ -258,14 +265,21 @@ worker = PipelineWorker(
 
 ### 5.3 开场白路径(设计红队后补,承重)
 
-**现状**:`server/bot.py:135-143` 的开场白是 `context.add_message(...)` + `worker.queue_frames([LLMRunFrame()])`;官方双 LLM 示例(`features-concurrent-llm-evaluation.py:147-155`)也是**给两个 context 各加一条、只推一个 `LLMRunFrame`,靠 ParallelPipeline 广播同时触发两个 LLM**。
+**现状**:`server/bot.py:125-133` 的开场白是 `context.add_message(...)` + `worker.queue_frames([LLMRunFrame()])`;官方双 LLM 示例(`features-concurrent-llm-evaluation.py:147-155`)也是**给两个 context 各加一条、只推一个 `LLMRunFrame`,靠 ParallelPipeline 广播同时触发两个 LLM**。
 
-**不处理会怎样**:客户端每次连上,慢脑就白跑一次 `gemini-3-pro`(约 15s);更糟的是 ①`turn` 从开场白就自增,用户第一个真问题变成 `turn=2`,而全部用例断言的是 `turn=1`,**整表偏移**;②慢脑若没输出 `无`,会在用户还没开口时凭空注入素材并触发一段"补充";③所有 eval 场景的首轮都是"空 `expect` 吸收开场白"(`evals/smoke.yaml:12-19` 记录了 20260801 的 race 根因),这段幽灵补充会被下一轮的 `- event: response` 吃掉 → 新旧场景**集体偶发红**,连带砸掉 R9。
+**不处理会怎样**:客户端每次连上,慢脑就白跑一次 `gemini-3-pro`(约 15s);更糟的是 ①`turn` 从开场白就自增,用户第一个真问题变成 `turn=2` —— 处置见 §5.2(接受占用 + 断言不硬编码数字),而非试图消除;②慢脑若没输出 `无`,会在用户还没开口时凭空注入素材并触发一段"补充";③所有 eval 场景的首轮都是"空 `expect` 吸收开场白"(`evals/smoke.yaml:12-19` 记录了 20260801 的 race 根因),这段幽灵补充会被下一轮的 `- event: response` 吃掉 → 新旧场景**集体偶发红**,连带砸掉 R9。
 
-**设计**(最小、无新机制):
-1. 开场白消息**只**加进快脑 context(`fast_ctx.add_message(...)`),慢脑 context 不加;
-2. 慢脑 system prompt 已含"无深析价值只输出 `无`"(§6.7①),对"没有用户输入的这一轮"天然走 `无` 分支 → 不注入、不触发;
-3. `turn` 起点口径写死:**开场白那一轮不计数**(慢脑输出 `无` → 不产出任何注入帧 → 用例断言的 `turn=1` 恒指用户第一个真问题)。因 `turn` 自增点在 `LLMFullResponseStartFrame`,开场白轮仍会 +1 —— 故**自增改在"本轮首次产出要点时"惰性生效**:`LLMFullResponseStartFrame` 只置 `pending=True`,首条要点注入前才真正 `turn += 1`。空转轮不消耗编号。
+**设计**(最小、无新机制;**fresh 复验 N1 + 实测后重写**):
+
+1. **两个 context 各加一条开场白消息**(照官方示例),但内容不同:
+   - 快脑:`{"role": "user", "content": "Start by concisely introducing yourself."}`(沿用 1 期原文,`bot.py:127-129`);
+   - 慢脑:`{"role": "user", "content": "(会话开始,用户尚未提问)"}` —— 一条 **no-op user 消息**。
+2. 慢脑 system prompt 的"无深析价值只输出 `无`"分支(§6.7①)接住这一轮 → 不注入、不触发补充。
+3. `turn` 口径见 §5.2:开场白轮**照常占用一个编号**,断言不硬编码数字。
+
+> **为什么不是"慢脑 context 干脆不加消息"(初稿写法,已推翻)**:实测 —— 给 8045 网关发**只有 system、无任何 user 消息**的请求,返回 **`400 INVALID_ARGUMENT`**(2026-08-02 实跑,见 §15 PoC-6)。那样每次客户端连接都会走 `push_error` → `ErrorFrame(processor=slow_llm)` → **每次连接打一条 `slow-failed`、面板每次弹错**,并使 R8-S1 的 `grep 'slow-failed'` 恒命中 → **故障注入是否生效无法区分,假绿**。这条与 `bot.py:127-129` 记录的"网关拒绝孤立 developer 消息"是同一类网关约束。
+>
+> **成本**:开场白轮慢脑仍真跑一次,实测 **3.53s 返回 `无`**(§15 PoC-6),不阻塞快脑、不注入、不播报。可接受。
 
 ---
 
@@ -287,8 +301,11 @@ content: "[慢脑深析要点|问题#{turn}|已完成] 以上素材已齐。由�
 - `{point}`:`SentenceAggregator` 切出的单条要点,**strip 后**注入。
 
 **flush 时序约束(源码实证,承重)**:`SentenceAggregator` 只在两种情况 flush —— ①累积文本命中句末模式;②收到 `EndFrame`(**管线结束**)。`LLMFullResponseEndFrame` 走 else 分支**原样透传但不触发 flush**(`aggregators/sentence.py:53-63` 实读)。因此:**慢脑 prompt 必须硬性要求每条要点以中文句号 `。` 结尾**,否则最后一条要点会滞留在聚合器 buffer 里,而由 `LLMFullResponseEndFrame` 触发的完成标记会**先**到达快脑 —— 快脑在素材不全时就被触发,滞留的那条要点直到会话结束才吐出(或串进下一轮)。
-残余风险:模型偶发不加句号 → 该条要点丢失。按拍板 20/21 接受(不造 flush 补偿件),记 backlog;`SentenceAggregator` 输出的是**普通 `TextFrame`**(非 `LLMTextFrame`,见 sentence.py:56),Producer 谓词须按 `TextFrame` 匹配。
-- 角色固定 `"user"` —— 依据:`bot.py:137-139` 记录了 8045 网关拒绝孤立 `developer` 消息的实测;本期不冒该风险,`developer` 角色的可用性留待 M5 人工联测,通过后可在后续变更切换。
+残余风险之一:模型偶发不加句号 → 该条要点丢失。
+**残余风险之二(fresh 复验 N3,`aborted` 兜不住)**:`SentenceAggregator.process_frame` 只处理 `InterimTranscriptionFrame`/`TextFrame`/`EndFrame` 三类,`InterruptionFrame` 走 else 原样透传、**`self._aggregation` 不清空**(`sentence.py:40-63` 实读)。于是打断时慢脑那半句未完成的要点留在聚合器缓冲里,下一轮首句流进来被拼成 `<旧轮残片><新轮首句。>` 一次性 flush —— 此刻 `LLMFullResponseStartFrame` 已把 `aborted` 复位,Producer 会把这条**混合内容**当新轮要点注入并打上新 turn 号。污染发生在 Producer **上游**的官方组件内部状态里,Producer 不可见,§5.2 表③ 的 `aborted` 覆盖不到。
+影响面:内容串轮 → `dual_brain_supersede` 的 judge 判据可能红,但该判据是**质量类不阻断 PASS**(§11);编号本身不会错位。按拍板 21(官方件不改、不造补偿层)接受,记 backlog;
+其余:`SentenceAggregator` 输出的是**普通 `TextFrame`**(非 `LLMTextFrame`,见 sentence.py:56),Producer 谓词须按 `TextFrame` 匹配。
+- 角色固定 `"user"` —— 依据:`bot.py:127-129` 记录了 8045 网关拒绝孤立 `developer` 消息的实测;本期不冒该风险,`developer` 角色的可用性留待 M5 人工联测,通过后可在后续变更切换。
 - 慢脑自判无可深析时输出单字 `无`,Producer 谓词据此**不产出任何注入帧**(R3 后半句)。
 
 ### 6.2 配置契约(`server/.env` / `config.py`)
@@ -301,7 +318,7 @@ content: "[慢脑深析要点|问题#{turn}|已完成] 以上素材已齐。由�
 | ~~`SLOW_LLM_TIMEOUT_S`~~ | — | — | **不设此配置项**(源码实证后撤销,见下) |
 | `SONIOX_API_KEY` | 是 | — | 无默认,快速失败 |
 | `ELEVENLABS_API_KEY` | 是 | — | 同上 |
-| `ELEVENLABS_VOICE_ID` | 是 | — | **M1 人工试听后填**,无默认 |
+| `ELEVENLABS_VOICE_ID` | 是 | 无默认;**实现期先填一个官方多语音色 ID 占位** | M1 试听后替换为最终值。**不得用 `CHANGE_ME_*`** —— `config.py:31-32` 的 `_is_missing` 会把该前缀判为缺失、启动即拒,导致 T2.x 之后到 M1 之前所有 pytest/eval 都跑不起来(fresh 复验第三节 8)。占位值必须是**真实可用**的音色 ID,只是待用户拍板替换 |
 | `ELEVENLABS_MODEL` | 是 | `eleven_flash_v2_5` | 官方多语白名单内且可显式传 language(`elevenlabs/tts.py:59` 实读) |
 | ~~`OPENAI_MODEL`~~ / ~~`KOKORO_VOICE_ID`~~ | — | — | **删除**,同步删 `.env.example` 与 `test_config.py` 断言 |
 
@@ -489,16 +506,23 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 
 **事实三:`absent: true` 只按事件类型匹配,不能与 `text_contains`/`eval`/`calls` 同用**(`scenario.py:63-70`)。
 
-**判据选型结论:全部留在文本模式,不引入 audio 场景。** 理由(项目现状实证):本项目的 gate set 是 `smoke.yaml` + `r4_no_false_completion.yaml` + `r4_knowledge_qa.yaml` 三个**文本模式**场景(README:97-101);脚手架自带的 `starter_text.yaml`/`starter_audio.yaml` **本就不属于本项目 gate**(用官方 Ollama judge,项目不装 —— README:104-107),且 `starter_audio.eval.log` 现存输出是 `ImportError: No module named 'requests'` —— **audio 链路在本机从未跑通过**。在"本期不做质量、只验配合"的口径下,为几条断言去趟一条未验证、且每跑一次真实烧 ElevenLabs 额度的路,不划算。
+**判据选型结论:全部留在文本模式,不引入 audio 场景。** 理由(项目现状实证):本项目的 gate set 是 `smoke.yaml` + `r4_no_false_completion.yaml` + `r4_knowledge_qa.yaml` 三个**文本模式**场景(README:97-101);脚手架自带的 `starter_text.yaml`/`starter_audio.yaml` **本就不属于本项目 gate**(用官方 Ollama judge,项目不装 —— README:104-107),且 `starter_audio.eval.log` 现存输出是 `ImportError: No module named 'requests'` —— **audio 链路在本机从未跑通过**。在"本期不做质量、只验配合"的口径下,为几条断言去趟一条**未验证**、且每跑一次真实烧 ElevenLabs 额度的路,不划算。
+**证据强度诚实标注(fresh 复验 N6 更正)**:`starter_audio.eval.log` 的 `ImportError: No module named 'requests'` 栈顶在**全局 uv tool 环境**(`/home/ky/.local/share/uv/tools/pipecat-ai/...`),而项目 venv 内 `requests`/`kokoro_onnx`/`moonshine_voice` 三个包**都在**。所以准确表述是"**audio 链路在本项目从未被验证跑通过**"(未验证),**不是**"链路已证坏"(已证伪)。本期不开 audio 场景的理由因此只剩"未验证 + 烧额度 + 本期不做质量",不含"它坏了"。
 
 据此,受影响的四条这样落:
 
 | 场景 | 原判据(不可用) | 改后判据(文本模式可行) |
 |---|---|---|
-| R4-S2 简单问题静默 | `response` `absent: true` | 第二个 `response` 事件加 `text_contains: "∅"` —— **比 absent 更强**:它证明哨兵机制真的触发了,而不只是"没东西出现" |
+| R4-S2 简单问题静默 | (初稿改成 `text_contains: "∅"`,**已推翻**) | **改回 `response` `absent: true`** |
 | R3-S1 注入不引发播报 | `tts_response` 不出现 | 注入后一个短窗口内 `response` `absent: true`(`within_ms` 显式设小),证明注入本身没触发生成 |
 | R2-S1 无模板泄漏 | judge 判"不含 `∅`" | judge 只判**模板痕迹**(`[慢脑深析要点`/`问题#`/`已完成`);`∅` 是预期的哨兵,不算泄漏,从判据里剔除 |
 | R6-S1 逐句分发 | audio 模式 `tts_response` 计数 | **降级为 M 组人工联测**(M7)——PRD 本就把面板逐句列为人工抽查/已知限制,本期不为它单开 audio 链路 |
+
+**事实一的适用边界(fresh 复验 N2 更正 —— 初稿"任何 absent 断言都会判败"是过度概括)**:
+事实一只在**哨兵轮**成立(慢脑产出了要点 → 完成标记触发快脑第二次生成 → 快脑输出 `∅` → 产生第二个 `response`)。
+而 R4-S2「简单问题」根本走不到哨兵轮:慢脑 system prompt 对"简单事实/寒暄"输出 `无`(§6.7①,**实测**:`gemini-3-pro` 对"现在几点了?"输出 `无`,3.77s,§15 PoC-6)→ 不注入 → 无完成标记 → **快脑压根不会被第二次触发** → 没有第二个 `response`。
+所以 R4-S2 用 `absent: true` 是**正确**的,初稿改成 `text_contains: "∅"` 反而会永远等不到事件、超时判败。同理 R3-S2 / R5-S1 / R8-S1 三处的 `absent` 也成立(那些场景同样没有第二轮)。
+**哨兵路径本身**(慢脑有要点 + 快脑判无可补充)难以稳定构造为 eval 场景(纯模型行为窗口),**由 pytest 结构用例 `test_sentinel_round_emits_no_text` 覆盖**,eval 层不强求。
 
 ### 8.1 用例骨架清单(每条 PRD 场景 ≥1 条三元组)
 
@@ -506,18 +530,18 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 |---|---|---|---|
 > **判据性质列**:`结构` = 确定性断言,红即 FAIL(门三 PASS 只由这类决定);`质量` = judge/观感类,**观察项,不阻断 PASS**(§8 本期口径);`旁路` = 同一次运行的 `bot.log` grep,需附命令+时间戳(§6.4)。
 
-| R1-S1 | `server/evals/dual_brain_dispatch.yaml` + bot.log | `dual_brain_dispatch` | eval 断言快脑正常应答(结构);**旁路**:同一次运行 `grep '\[dual-brain\] dispatch turn=1' bot.log` 命中 |
+| R1-S1 | `server/evals/dual_brain_dispatch.yaml` + bot.log | `dual_brain_dispatch` | eval 断言快脑正常应答(结构);**旁路**:同一次运行 `grep '\[dual-brain\] dispatch turn=' bot.log` 出现该轮的行,且与同轮 inject 行 turn 值一致 |
 | R1-S1(派生) | `server/tests/test_dual_brain.py` | `test_both_branches_receive_user_turn` | 用 `run_test` 双分支 stub,同一 user turn 后两个 context 各含该 user 消息(穷尽性的结构证明) |
 | R2-S1 | `server/evals/dual_brain_no_leak.yaml` | `dual_brain_no_leak` | judge 负向判据:输出不含 `[慢脑深析要点`/`问题#`/`已完成` 模板痕迹(**质量**,不阻断 PASS);`∅` 不计入泄漏(§8.0)。结构侧由 `test_slow_branch_has_no_output_processor` + §5.1.1 RTVI 隔离断言兜底 |
 | R2-S1(派生) | `server/tests/test_dual_brain.py` | `test_slow_branch_has_no_output_processor` | 慢脑分支处理器清单中不含 TTS/transport.output 类型(结构断言,防日后误接) |
-| R3-S1 | `server/evals/dual_brain_inject.yaml` + bot.log | `dual_brain_inject_silent` | eval:注入后短窗口内 `response` `absent: true`(`within_ms` 显式设小,证明增量注入未触发生成)(**结构**);**旁路**:`grep 'inject turn=1 seq=1 done=false' bot.log` 命中 ≥1 |
+| R3-S1 | `server/evals/dual_brain_inject.yaml` + bot.log | `dual_brain_inject_silent` | eval:注入后短窗口内 `response` `absent: true`(`within_ms` 显式设小,证明增量注入未触发生成)(**结构**);**旁路**:`grep 'inject .* done=false' bot.log` 命中 ≥1 |
 | R3-S2 | `server/evals/dual_brain_smalltalk.yaml` + bot.log | `dual_brain_smalltalk_no_inject` | eval:寒暄轮整轮仅一个 `response`,第二个 `response` `absent: true`(**结构**);**旁路**:`bot.log` 出现 `no-material`、零 `inject` 行 |
 | R3(派生) | `server/tests/test_dual_brain.py` | `test_material_lands_only_in_fast_context` | PoC-1 固化:注入后快脑 context 含素材、慢脑 context 不含(精确条数断言) |
 | R4-S1 | `server/evals/dual_brain_supplement.yaml` | `dual_brain_supplement` | 深问题:窗口内出现衔接第二段;judge 失败特征式判据(第二段与首答内容重复即判 no) |
-| R4-S2 | `server/evals/dual_brain_supplement.yaml` | `simple_question_silent` | 第二个 `response` 事件 `text_contains: "∅"`(**结构**)—— 不用 `absent`:过滤器挡不住 RTVI 观测,哨兵轮照样产生 response 事件(§8.0);本判据反而更强,直接证明哨兵机制触发了 |
+| R4-S2 | `server/evals/dual_brain_supplement.yaml` | `simple_question_silent` | 简单事实问题:整轮仅一个 `response`,其后 `response` `absent: true`(**结构**)。慢脑对这类问题输出 `无`→不注入→快脑不被二次触发,故确无第二个事件(§8.0 边界说明,实测佐证 §15 PoC-6) |
 | R4(派生) | `server/tests/test_dual_brain.py` | `test_completion_marker_triggers_one_generation` | PoC-2 S1 固化:`run_llm=True` 使快脑生成次数 1→2(**精确值 2,非 ≥2**) |
 | R4(反向/变异) | `server/tests/test_dual_brain.py` | `test_incremental_inject_does_not_trigger` | `run_llm=False` 的注入帧**不得**使生成次数增加(防"任何注入都触发"的短路实现) |
-| R5-S1 | `server/evals/dual_brain_interrupt.yaml` + bot.log | `dual_brain_interrupt_abort` | eval:插话后该轮不再出现补充 `response`(`absent`,**结构**);**旁路**:`grep 'abort turn=1 reason=interruption' bot.log` 命中 |
+| R5-S1 | `server/evals/dual_brain_interrupt.yaml` + bot.log | `dual_brain_interrupt_abort` | eval:插话后该轮不再出现补充 `response`(`absent`,**结构**);**旁路**:`bot.log` 出现该轮的 `abort … reason=interruption` 行 |
 | R5(派生) | `server/tests/test_dual_brain.py` | `test_interruption_reaches_both_branches` | PoC-2 S2 固化:打断帧两分支各收到 1 次 |
 | R6-S1 | **M 组人工联测 M7** | — | 人工听:多句回答逐句播出、哨兵轮完全无声。**不开 audio eval 场景**(§8.0 理由);结构侧由 `test_sentinel_round_emits_no_text` 兜底 |
 | R6(派生) | `server/tests/test_dual_brain.py` | `test_sentinel_round_emits_no_text` | 哨兵轮零文本帧透出;正常轮全部透出(PoC-2 S4 固化,两向断言) |
@@ -529,13 +553,40 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 | R8(派生·防误触发) | `server/tests/test_dual_brain.py` | `test_failed_slow_turn_emits_no_completion_marker` | 慢脑零要点 + `LLMFullResponseEndFrame` → **不产生**完成标记帧、快脑生成次数不变(**结构**,固化 §5.2 表 ② 的 R8 击穿路径) |
 | R8(派生) | `server/tests/test_dual_brain.py` | `test_slow_error_does_not_stop_fast_branch` | PoC-2 S3 固化:非 fatal ErrorFrame 后快脑仍生成,且 `fatal is False` |
 | R7(派生) | `server/tests/test_dual_brain.py` | `test_stale_turn_material_ignored` | 中止后到达的旧轮要点被丢弃、不注入;新轮 `turn` 编号不被旧残片占用(**结构**,固化 §5.2 表 ③) |
-| 开场白路径(§5.3) | `server/tests/test_dual_brain.py` | `test_greeting_does_not_consume_turn_number` | 开场白轮慢脑不产要点 → `turn` 不自增 → 用户首个真问题仍是 `turn=1`(**结构**) |
+| 开场白路径(§5.3) | `server/tests/test_dual_brain.py` | `test_greeting_turn_emits_no_material` | 开场白轮:慢脑收到 no-op user 消息 → 走 `无` 分支 → **零注入帧、零完成标记、零 `slow-failed`**(**结构**;编号被占用是既定口径,不作断言) |
 | R9-S1 | (既有) `evals/{smoke,r4_no_false_completion,r4_knowledge_qa}.yaml` + `tests/` + `scripts/check_frozen_repo.sh` | 三类基线重跑 | 全绿,以本次运行时间戳为证。**基线范围以 README:97-101 的 gate set 为准**:`starter_text.yaml`/`starter_audio.yaml` 用官方 Ollama judge、本项目不装,**本就不在 gate 内**(README:104-107),不因本变更纳入 |
+
+### 8.1.0 文本模式的打断语义(fresh 复验 N4,决定 R3-S1/R5-S1 的场景形态)
+
+**事实**:harness 发送每个 `user:` 文本前硬编码 `run_immediately=True`(`evals/harness.py:1002-1010`)→ `rtvi/processor.py:467-479` 无条件 `interrupt_bot()` → `frame_processor.py:740-745` 广播 `InterruptionFrame`。
+**即:文本模式下每一个 user turn 都会中止慢脑分支在途工作并打一条 `abort` 行。**
+
+推论(据此定场景形态,不与之对抗):
+- **单轮场景**(问一次、之后不再说话)不受影响 —— 中止发生在慢脑启动**之前**。R4-S1「有补充」必须是这种形态:提问 → 简答 → **不再发任何 user turn** → 等慢脑 ~15s → 补充。
+- **多轮场景里每轮开头必然出现 `abort`**,因此 `abort` 行**不能**单独作为"用户插话中止"的证据 —— 它同时是 R7「新轮顶替旧深析」的正常表现。R5-S1 的证据必须是**该轮没有补充**,而非日志里有 `abort`。
+- R3-S1 想证明的"增量注入不触发播报"在 eval 时间轴上无法与完成标记触发的补充可靠区分(注入与完成标记在慢脑流式产出末尾相隔极短)。**该判据下沉到帧级 pytest**(`test_incremental_inject_does_not_trigger`,PoC-1 已固化 `run_llm=False` 不触发),eval 只断端到端可见结果。
+
+**R5-S1 场景形态(写死)**:
+```yaml
+turns:
+  - expect: [{ event: response }]              # 吸收开场白(沿用 smoke.yaml:12-19 套路)
+  - user: "<深问题>"
+    expect: [{ event: response }]              # 快脑简答, t≈2s
+  - user: "<无关的简单问题>"                    # 此刻慢脑仍在深析(pro 档 ~15s), 构成"插话"
+    expect:
+      - event: response                        # 快脑回答插话本身
+      - event: response
+        absent: true
+        within_ms: 25000                       # 覆盖慢脑 14.9s + 余量; 窗口内不得出现第一问的补充
+```
+`within_ms: 25000` 的依据 = §13.3 实测慢脑 14.87s + 约 10s 余量;**非拍脑袋值**。插话选"无关的简单问题"是为了让它自己也走 `无` 分支(实测:简单事实问题输出 `无`,§15 PoC-6),避免它自己的补充污染窗口。
 
 ### 8.1.1 eval 执行约定(设计红队 T-M1)
 
 - **R8 故障场景必须独立起 bot 进程**:R8 要求 `SLOW_LLM_MODEL` 指向无效值,而其余场景需要慢脑真实可用 —— 两者对 env 的要求互斥。`dual_brain_fault.yaml` 走**独立 manifest / 独立 bot 进程**(`pipecat eval suite` 每场景起新 bot),**不与常驻实例共用**;塞进共用进程会导致故障注入无效,或污染同进程内后续场景。
 - **每次 eval run 的 bot 输出必须落盘**:`uv run bot.py -t eval 2>&1 | tee eval-runs/<ts>/bot.log`,旁路证据从该文件 grep(§6.4);gate 记录命令 + 时间戳。
+- **故障注入值写死(实测,2026-08-02)**:`SLOW_LLM_MODEL=definitely-not-a-real-model-xyz`。网关对未知 model **抛 `InternalServerError: No accounts available with quota for model: …`**,不静默回退到默认模型 —— 故 `OpenAILLMService` 的 `except Exception` 会接住并 `push_error`,R8 的 ErrorFrame 链路成立。**这是 R8-S1/S2 两条结构判据的前提,已验证,不留给实现期试**。
+- **证据包组织(fresh 复验第三节 6)**:每个场景一个目录 `eval-runs/<scenario>-<ts>/`,内含 `bot.log`(该场景专属 bot 进程的 tee 输出)+ `run.txt`(eval 命令原文 + 退出码)。R8 因需独立进程,天然自成一个目录。门三收的证据 = 这些目录 + 一份汇总表(场景 → 目录 → 结论)。
 - 沿用 1 期约定:每个独立测量点对着**新起的** `bot.py -t eval` 跑(eval transport 全进程共用一个 `LLMContext`,重复跑会累积轮次 —— README:117)。
 
 ### 8.2 装配断言(U 组,防旧库 B19 与配置回归)
@@ -621,13 +672,13 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 
 | PRD 规则/场景 | 设计落点 | 任务 | 验收方式 | 判据性质 |
 |---|---|---|---|---|
-| R1 恒双发 / R1-S1 | §5.1 ParallelPipeline 双分支;§6.4 `dispatch` 日志 | T3.1 | `test_both_branches_receive_user_turn` 绿 + `evals/dual_brain_dispatch.yaml` 快脑应答通过;`grep 'dispatch turn=1' bot.log` 命中 | 结构 + 旁路 |
+| R1 恒双发 / R1-S1 | §5.1 ParallelPipeline 双分支;§6.4 `dispatch` 日志 | T3.1 | `test_both_branches_receive_user_turn` 绿 + `evals/dual_brain_dispatch.yaml` 快脑应答通过;`grep '\[dual-brain\] dispatch turn=' bot.log` 命中 ≥1,且与同轮 inject 行的 turn 值一致 | 结构 + 旁路 |
 | R2 快脑唯一发言 / R2-S1 | §5.1 慢脑分支无输出件;**§5.1.1 RTVI 隔离**;§6.1 模板 | T3.2 | `test_slow_branch_has_no_output_processor` + `test_rtvi_ignores_slow_branch`(U5)绿;`evals/dual_brain_no_leak.yaml` judge 判无模板痕迹 | 结构 + 质量 |
 | R3 素材注入 / R3-S1 | §6.1 增量帧 `run_llm=False`;§5.1 Producer/Consumer 落位 | T3.3 | `test_material_lands_only_in_fast_context` 绿 + `evals/dual_brain_inject.yaml` 注入后短窗 `response` absent;`grep 'inject … done=false' bot.log` 命中 | 结构 + 旁路 |
 | R3 素材注入 / R3-S2 | §6.1 慢脑输出 `无` → 不产帧;§6.4 `no-material` | T3.3 | `evals/dual_brain_smalltalk.yaml` 第二个 `response` absent;`grep 'no-material' bot.log` 命中且零 `inject` 行 | 结构 + 旁路 |
 | R4 补充自判 / R4-S1 | §6.1 完成标记 `run_llm=True`(**前提 `has_material and not aborted`**);§6.6 哨兵 | T3.4 | `test_completion_marker_triggers_one_generation` 绿 + `evals/…::dual_brain_supplement` judge 判补充不复读首答 | 结构 + 质量 |
 | R4 补充自判 / R4-S2 | 同上(哨兵路径) | T3.4 | `evals/…::simple_question_silent` 第二个 `response` `text_contains: "∅"` + `test_incremental_inject_does_not_trigger` 绿 | 结构 |
-| R5 打断中止 / R5-S1 | §5.1 框架打断语义;§5.2 `aborted`;§6.4 `abort` 日志 | T3.5 | `test_interruption_reaches_both_branches` 绿 + `evals/dual_brain_interrupt.yaml` 该轮补充 absent;`grep 'abort … interruption' bot.log` 命中;M4 真机观察 | 结构 + 旁路 |
+| R5 打断中止 / R5-S1 | §5.1 框架打断语义;§5.2 `aborted`;§6.4 `abort` 日志 | T3.5 | `test_interruption_reaches_both_branches` 绿 + `evals/dual_brain_interrupt.yaml` 该轮补充 absent;该轮 `abort … reason=interruption` 行命中;M4 真机观察 | 结构 + 旁路 |
 | R6 逐句分发 / R6-S1 | §5.1 TTS 在快脑分支;§6.6 哨兵不送 | T3.6 | `test_sentinel_round_emits_no_text` 绿(结构);逐句播出与面板刷新由 **M7** 人工验(§8.0:本期不开 audio eval 场景) | 结构 + 质量 |
 | R7 单深析在途 / R7-S1 | §5.2 `turn`/`aborted`;§6.7② 快脑"只消化编号最大的一组" | T3.5 | `test_stale_turn_material_ignored` 绿 + `evals/dual_brain_supersede.yaml` judge 判补充只对应第二问;第一轮 `abort` 行命中 | 结构 + 质量 + 旁路 |
 | R8 慢脑失败降级 / R8-S1 | §6.4 分支归属 + `slow-failed`;§5.2 表②;§6.5 两条官方面板通道 | T3.7 | `test_slow_error_does_not_stop_fast_branch` + `test_non_slow_error_not_reported_as_slow_failed` + `test_failed_slow_turn_emits_no_completion_marker` 三绿;`evals/dual_brain_fault.yaml`(独立 bot 进程)无第二段;`test_slow_failure_pushes_server_message`(断言 push 了 `RTVIServerMessageFrame`)绿;面板可见性由 M2 确认 | 结构 |
@@ -730,6 +781,9 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 | `ignored_sources` 能挡住慢脑上报 | **仅 API 可用性(弱)** | `worker.py:251,413` 接受该参数;**行为未实测** → 列入 U5 断言 + M2 观察 |
 | 打断后慢脑 HTTP 流是否即刻停止 | **未验证** | 只测到打断帧到达(PoC-2 S2);真实取消行为归 M4 观察,`aborted` 状态是对"未停止"的兜底 |
 | audio 模式端到端 | **未验证且本期不验** | `starter_audio.eval.log` 现存 ImportError;R6 改走 M7 人工(§8.0) |
+
+| PoC-7 | R8 故障注入前提 | 网关对无效 model 抛 `InternalServerError`(不静默回退)→ ErrorFrame 链路成立 | **负向即本项本身**:无效/空 model 名两种输入均抛异常 |
+| PoC-6 | 开场白轮与静默路径(fresh 复验后补) | 慢脑收到 no-op user 消息 `(会话开始,用户尚未提问)` → **3.53s 输出 `无`**;寒暄 4.09s → `无`;简单事实问题「现在几点了?」3.77s → `无` | **负向**:慢脑 context 只有 system、无任何 user 消息 → 网关返回 **`400 INVALID_ARGUMENT`**(据此推翻 §5.3 初稿的"慢脑不加开场白消息") |
 
 **PoC-3 真实输出基线**(§8.4 对照基线,节选):
 - 慢脑·深问题:`- 物理网络故障必发,分区容错(P)是刚需前提,CAP定理本质是C与A的二维抉择。`(共 4 条)
