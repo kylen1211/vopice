@@ -2,7 +2,8 @@
 
 > 对应 PRD: 本变更 `proposal.md`(已批准)  状态: **草稿**  更新: 2026-08-02  级别: **L3**
 > 实现总原则(PRD 拍板 21):只用 pipecat 官方原语与组件;官方达不到理想要求不造零件补,接受官方原样行为。
-> 全案非官方物三样:①注入模板 prompt ②哨兵过滤谓词 ③`SlowBrainState`(轮次号 + 本轮是否产出过要点 + 本轮是否已中止,见 §5.2 —— 每项都由一条源码/实测证据逼出,非预防性设计)。PRD 原写"两样",本设计据实修正。
+> 全案非官方物两样:①注入模板 prompt ②哨兵过滤谓词 + `SlowBrainState` 的两个布尔(本轮是否产出过要点 / 本轮是否已中止,见 §5.2 —— 各由一条源码证据逼出,非预防性设计)。
+> **轮次号已撤销自研**(2026-08-02 复核):官方 `TurnTrackingObserver` 提供,且 `PipelineWorker(enable_turn_tracking=True)` **默认已启用**。原稿据"只 grep `turns/` 目录"误判为无官方件,详见 §2 L14 与 §4-3。
 > **型号事实源唯一为 §6.2 配置表**;其它章节的括注若与之不一致,以 §6.2 为准。
 
 ---
@@ -121,11 +122,19 @@ $ ls .venv/.../pipecat/tests/utils.py → 存在(run_test 随包分发,PoC 载�
 | L12 | 历史摘要段口子 | `processors/aggregators/llm_context_summarizer.py` | 阈值自动触发,可后续直挂 | **本期不启用**,仅在快脑 context 构成上留位 |
 | L13 | 面板系统提示 | 服务端:`rtvi/processor.py:232,549`(ErrorFrame→客户端)+ `rtvi/frames.py:38` `RTVIServerMessageFrame`;客户端:`voice-ui-kit/dist/index.js:6741-6746,6762-6767` | RTVI 默认开启(PipelineWorker);**客户端 EventsPanel 已订阅并渲染 `RTVIEvent.Error` 与 `RTVIEvent.ServerMessage`** —— 服务端到面板整条链路官方齐全 | **原样采用,client 零改**(M2 仅做确认) |
 | L15 | 业务事件的自动化断言 | `pipecat/tests/utils.py:123` `run_test`(随包分发);`evals/harness.py:798-866` | eval harness 只认 14 类 RTVI 消息、自定义 `server-message` 落 `case _` 被丢弃 → **业务事件在 eval 体系内无官方断言通道**;官方对内部帧行为的验证方式是 `run_test` 帧级断言 | **原样采用 `run_test` 作主力**;eval 只管端到端可见行为 |
-| L14 | 轮次标识 | 无官方来源 —— `turns/user_turn_processor.py` 无公开 turn 编号(grep 实证) | 需一个整数计数器 | **自研**(自证见下) |
+| L14 | 轮次标识 | `observers/turn_tracking_observer.py` `TurnTrackingObserver`(`_turn_count`,事件 `on_turn_started(turn)` / `on_turn_ended(turn, duration, was_interrupted)`) | **`PipelineWorker` 内建且默认开启**:`enable_turn_tracking: bool = True`,构造时实例化并挂进 observers,经 `worker.turn_tracking_observer` 属性取用(`pipeline/worker.py:242,357-359,554` 实读) | **原样采用**(**2026-08-02 复核翻正**:原判"无官方来源"错误,自研计数器已撤销) |
 
-**自研自证**
-- L8 哨兵过滤:搜过 `processors/filters/` 全部 7 个组件(frame/function/identity/null/wake_check/wake_notifier)+ `aggregators/gated.py`。`NullFilter` 丢弃**全部**帧不可条件化;`GatedAggregator` 语义是"缓冲后释放"而非丢弃;`FrameFilter` 按帧**类型**过滤,不能按内容。故只能由 `FunctionFilter` 承载,谓词必须自写(PRD 已预留此项)。
-- L14 轮次标识:`UserTurnProcessor` 只暴露 `on_user_turn_idle` 事件,无 turn 序号;`LLMContext` 无轮次概念。计数器与旧库"代次计数"(research.md §6)同构,是一个 int,不构成状态机(拍板 13 边界内)。
+**自研自证(否定性结论,附完整搜索路径供复核)**
+
+> **举证纪律(本次复核后加,承重)**:"官方无此件"是**否定性**结论,证据强度要求高于肯定性结论——必须**跨层穷举**并列出所搜路径,不得只搜"功能名直觉对应的那个目录"。本节两条原稿各栽一次(L14 只搜 `turns/`、L8 只搜 `processors/filters/`),均由用户凭直觉质疑"官方按道理该有"才暴露(台账 2026-08-02)。
+
+- **L8 哨兵过滤 —— 官方有两条候选壳,均需自写判断逻辑;选 `FunctionFilter`**。
+  搜索路径:`processors/filters/` 全 7 件(frame/function/identity/null/wake_check/wake_notifier)+ `processors/aggregators/gated.py` + **`utils/text/`**(`base_text_filter.py` / `markdown_text_filter.py` / `skip_tags_aggregator.py` / `pattern_pair_aggregator.py` / `simple_text_aggregator.py`)+ `services/tts_service.py` 的 `text_filters` 装配点。
+  - 排除:`NullFilter` 丢弃**全部**帧不可条件化;`GatedAggregator` 语义是"缓冲后释放"而非丢弃;`FrameFilter` 按帧**类型**过滤,看不到内容;`SkipTagsAggregator` 名似而非——它是"标签内不做句子边界匹配",内容照常输出,**不具备丢弃能力**。
+  - **候选 B(原稿漏列)**:`BaseTextFilter` + `TTSService(text_filters=[...])`(`services/tts_service.py:178,296,939,1082` 实读)。接口是 `filter(text) -> str`,语义为**文本改写**,可把 `∅` 改写成空串使 TTS 不发声。
+  - **选 A(`FunctionFilter` + 自写谓词)的理由**:两者在"模型完全服从"时等效,但在 §2 盲区 4(模型多说一个字)下**行为分叉** —— 候选 B 只会抹掉 `∅` 并把剩余内容照常朗读,候选 A 是**整轮静默**。R8/哨兵的语义是"这一轮不该说话",A 才是语义对齐的那个。候选 B 另有一处不利:它只作用于 TTS 入口,过滤发生在更下游,对上游可观测性无改善(对面板闪现问题两者同样无解)。
+- **L14 轮次标识 —— 官方有件,自研已撤销**(见上表)。原稿依据仅为 `turns/user_turn_processor.py` 无 turn 序号;**未搜 `observers/`**,而能力恰在该层,且 `PipelineWorker` 默认已启用——即该能力在现有 1 期代码里**本就在跑**。
+- **`SlowBrainState` 余下两个布尔 —— 官方无件,自证成立**(逐项证据见 §5.2 表)。搜索路径:`processors/producer_processor.py` / `consumer_processor.py`、`observers/`(全 4 件)、`pipeline/worker.py` 的内建装配与事件、`frames.py` 的 `ErrorFrame` 传播方向。`on_turn_ended(..., was_interrupted)` **形似可替代 `aborted` 但时序不匹配**,详见 §5.2 表③。
 
 **表末盲区问句 —— 这些解法没覆盖什么?**
 
@@ -170,7 +179,7 @@ $ ls .venv/.../pipecat/tests/utils.py → 存在(run_test 随包分发,PoC 载�
 
 1. **牺牲了"补充一定等得到"**:慢脑 `gemini-3-pro` 实测 14.9s 才出要点,而 R7 规定新一轮输入即中止旧深析 —— 用户若在简答播完后接着说话,该轮深析白跑、补充永不出现。**换来的是**零调度器、零状态机,以及一个**明显可辨的"先快后慢"时间差**(快脑 2.2s vs 慢脑 14.9s),这正是本期唯一要验的"配合"效果所需。**代价**:验收与日常使用都要求用户在简答后**主动保持沉默十几秒**,补充才会出现;这是有意接受的设定(用户 2026-08-02 拍板),不是缺陷,但也意味着本功能目前不适配"连珠炮式"对话节奏。
 2. **牺牲了实时性换可观察性**:慢脑本可选 `gemini-3.6-flash-high`(3.2s)让补充几乎无感衔接,但那样快慢两脑几乎同时到达,看不出"先快后慢"。本期**故意取慢档**以便观察配合链路。这是**测试期设定**,不是终态选型 —— 配合验证通过后可随时把 `SLOW_LLM_MODEL` 调回快档(纯 env 改动,零代码)。
-3. **牺牲了"全案只有两样非官方物"的承诺**:实读后确认轮次标识无官方来源(L14);设计红队又逼出另两项跨帧状态(慢脑失败时框架仍推 `LLMFullResponseEndFrame`、打断后残片归属),三者合成一个 `SlowBrainState`。非官方物从两样变三样,已在文档头据实修正,不粉饰。
+3. **没有牺牲"只有两样非官方物"的承诺,但过程中曾误判**:设计红队逼出两项跨帧状态(慢脑失败时框架仍无条件推 `LLMFullResponseEndFrame`、打断后残片归属),合成 `SlowBrainState`;原稿还把轮次标识一并判为自研,一度写成"三样"。**2026-08-02 复核翻正**:轮次号官方有件且默认已启用(§2 L14),自研计数器撤销,非官方物回到两样。留此条不删是为了记录**误判本身**——原判据只 grep 了 `turns/` 一个目录,是"否定性结论举证不足"的实例,已转成 §2 的举证纪律与全局台账条目。
 4. **牺牲了哨兵符的不可见性**:`∅` 会在 client 对话面板闪现一次(RTVI 在过滤器上游捕获,快脑 LLM 不能进 `ignored_sources`,§6.6)。不会被朗读,但面板上看得见。无官方解,接受。
 5. **牺牲了 audio 端到端的自动化覆盖**:R6 逐句分发降级为人工验证(M7),不开 audio eval 场景 —— 本项目 audio 链路从未跑通(`starter_audio.eval.log` 为 ImportError),且每跑一次真实烧 ElevenLabs 额度。换来的是不引入未验证路径。
 6. **牺牲了哨兵的可靠性兜底**:模型不服从(多说一个字)时补充会被播出,无二次防线。按"差不多就行"接受。
@@ -243,21 +252,23 @@ worker = PipelineWorker(
 |---|---|---|
 | 快脑分支 | 唯一发言者:应答用户、消化素材、自判补充 | 不知道慢脑存在,只见到上下文里的素材消息 |
 | 慢脑分支 | 深析产素材 | 不接触 TTS/transport/面板;产出只经 Producer 出去 |
-| `SlowBrainState`(单一小对象) | 承载 Producer 的三项跨帧状态:①轮次号 ②本轮是否已产出过要点 ③本轮是否已被中止 | 纯数据 + 三个判定,无调度、无状态迁移图(拍板 13 边界内) |
+| `SlowBrainState`(单一小对象) | 承载 Producer 的两项跨帧状态:①本轮是否已产出过要点 ②本轮是否已被中止;并**持有从官方 observer 事件抄来的当前轮次号**(只读快照,不自行计数) | 纯数据 + 两个判定,无调度、无状态迁移图(拍板 13 边界内) |
 | `sentinel_gate` 谓词 | 本轮首个文本帧命中哨兵 → 整轮静默 | 只看快脑输出流,不知上下文;控制帧一律放行(§6.6) |
 | `on_pipeline_error` handler | **按 `frame.processor` 判分支归属**后记日志 | 不做恢复、不做重试 |
 
-**`SlowBrainState` 的三项状态各自为什么必须存在(每项都由一条实测/源码证据逼出来,不是预防性设计)**:
+**`SlowBrainState` 的两项状态各自为什么必须存在(每项都由一条实测/源码证据逼出来,不是预防性设计)**:
 
 | 状态 | 逼出它的证据 | 不要它会怎样 |
 |---|---|---|
-| ①轮次号 `turn` | `turns/user_turn_processor.py` 无任何公开 turn 序号(grep 实证) | 注入模板的 `问题#{turn}` 无来源,R7 靠编号区分新旧素材无从谈起 |
+| ~~①轮次号 `turn`~~ | **已撤销自研**(2026-08-02 复核):官方 `TurnTrackingObserver` 提供,`PipelineWorker` 默认启用(§2 L14)。本对象只保存事件回调抄来的**只读快照** | — |
 | ②本轮是否产出过要点 `has_material` | `services/openai/base_llm.py:571-573`:`finally` 块**无论成功/超时/异常都无条件推 `LLMFullResponseEndFrame`**;而失败信号 `ErrorFrame` 走 `push_frame(..., UPSTREAM)`(`frame_processor.py:722`)**反向**上行,根本不经过下游的 Producer | 慢脑调用失败时 Producer 照样发"以上素材已齐"并 `run_llm=True` → 快脑在**零要点**下被触发,凭空多播一段莫名其妙的补充 → **直接击穿 R8-S1"无补充"** |
-| ③本轮是否已被中止 `aborted` | §2 盲区问句 2:打断帧到达慢脑已实测(PoC-2 S2),但真实 HTTP 流是否即刻停止**未验证** | 旧轮残片若在打断后继续流出,会被打上**新轮**编号 → 快脑无法分辨,把过期内容当本轮素材消化,**R7 反被摧毁** |
+| ③本轮是否已被中止 `aborted` | §2 盲区问句 2:打断帧到达慢脑已实测(PoC-2 S2),但真实 HTTP 流是否即刻停止**未验证**。**官方 `on_turn_ended(turn, duration, was_interrupted)` 形似可替代,但时序不匹配**:该事件要等"bot 停止说话 **且** 再过 `turn_end_timeout_secs=2.5s` 无更多语音"才触发(`turn_tracking_observer.py:40-44,106-116` 实读),而 `aborted` 必须在**打断当刻**生效才能拦住在途要点;等 2.5s 后再知道,残片早已注入 | 旧轮残片若在打断后继续流出,会被打上**新轮**编号 → 快脑无法分辨,把过期内容当本轮素材消化,**R7 反被摧毁** |
 
-**状态迁移落点写死(防实现期各自发挥;fresh 复验 N1 后统一口径,全文唯一事实源)**:
-- `turn` 自增点 = 慢脑分支收到 `LLMFullResponseStartFrame` 时(同时置 `has_material=False`、`aborted=False`)。**所有日志行(`dispatch`/`inject`/`no-material`/`abort`/`slow-failed`)共用这一刻起生效的同一个 `turn` 值** —— 不做"惰性自增",因为惰性化会让 `dispatch` 打出比 `inject` 小 1 的值,三条 grep 锚点全部错位。
-- **代价并显式接受**:开场白轮(§5.3)也会占用一个编号,**用户第一个真问题是 `turn=2` 而非 `turn=1`**。因此验收断言**一律不硬编码具体数字**,改断"同一轮内 dispatch/inject/完成标记的 turn 值一致"或"出现 ≥1 条该类日志行"(§8.1/§11 已按此写)。
+**状态迁移落点写死(防实现期各自发挥;fresh 复验 N1 统一口径 + 2026-08-02 轮次号翻正后重写,全文唯一事实源)**:
+- **`turn` 不自增,只读取**:在 `bot.py` 注册官方 `worker.turn_tracking_observer` 的 `on_turn_started(turn)` 事件,把值写进 `SlowBrainState.turn` 快照。官方语义:**pipeline 启动即第 1 轮,此后用户每次开口起新一轮**(`turn_tracking_observer.py:36-44`)。
+- `has_material=False` / `aborted=False` 的**重置点仍是慢脑分支收到 `LLMFullResponseStartFrame`**(与 turn 更新点解耦——前者跟随慢脑响应周期,后者跟随用户轮次)。
+- **两个时刻不同源,须显式确认无错位(实现期首验项)**:用户开口时 turn 已自增,而慢脑可能仍在为上一轮工作,其残片会被打上**新** turn 号。这正是 `aborted` 兜底的场景——用户开口必然伴随打断 → `aborted=True` → 残片全丢、不注入,故 `dispatch`/`inject`/完成标记三条日志仍落在同一 turn 值上。**此推论由源码时序得出,未经实测**,列为 T3.x 实现期首个验证项(§8.1 增 `test_turn_snapshot_consistent_under_barge_in`)。
+- **代价并显式接受**:开场白发生在官方的第 1 轮内,**用户第一个真问题是 `turn=2` 而非 `turn=1`**(结论与原稿一致,但来源由自研计数器换成官方语义)。因此验收断言**一律不硬编码具体数字**,改断"同一轮内 dispatch/inject/完成标记的 turn 值一致"或"出现 ≥1 条该类日志行"(§8.1/§11 已按此写)。
 - `has_material` 置真点 = Producer 每产出一条要点注入帧时;
 - `aborted` 置真点 = 慢脑分支收到 `InterruptionFrame` 时;
 - Producer 见 `LLMFullResponseEndFrame` 时,**仅当 `has_material and not aborted`** 才产出完成标记帧(`run_llm=True`);否则只打 `no-material` 或 `abort` 日志,不注入、不触发。
@@ -447,6 +458,7 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 - 谓词语义:`LLMFullResponseStartFrame` 重置状态 → 本轮**首个** `LLMTextFrame` 若 strip 后以 `∅` 开头则整轮静默,否则整轮放行。
 - **控制帧必须放行(设计红队 I-M5)**:`FunctionFilter._should_passthrough_frame` 只自动放行管线生命周期帧(`StartFrame`/`EndFrame`/`CancelFrame`)与 `SystemFrame`(`filters/function_filter.py:57-71`);而 `LLMFullResponseStartFrame`/`LLMFullResponseEndFrame` 是 **`ControlFrame`**(`frames.py:1898,1913`),**生死完全由谓词返回值决定**。谓词若按字面"整轮静默"把它们一并挡下,快脑 assistant aggregator 就收不到 turn 起止钩子(`llm_response_universal.py:1493-1496`),影响后续轮的聚合行为。**谓词只对 `LLMTextFrame` 按状态过滤,其余一律 `return True`。**
 - **已知限制(无官方解,记 backlog)**:哨兵符 `∅` 在被 `FunctionFilter` 挡下之前,已被 RTVI observer 在快脑 LLM 的 push 时刻上报为 `bot-llm-text`(§8.0 同源),因此**会在 client 对话面板上闪现一次**。快脑 LLM 不能放进 `ignored_sources`(那样面板就没有对话了),故无官方解;它不会被朗读(TTS 在过滤器下游),按拍板 20/21 接受,M2 顺带观察观感。
+- **为何不用官方 `BaseTextFilter`(2026-08-02 复核补,原稿漏列此候选)**:`TTSService(text_filters=[...])` 是官方的第二条壳,接口 `filter(text) -> str` 可把 `∅` 改写成空串。**未采用**,因其语义是"改写文本"而非"这轮不该说话":模型多说一个字时(§2 盲区 4),它会抹掉 `∅` 把剩余内容照常朗读,而本契约要的是**整轮静默**。两者在模型完全服从时等效,分叉只发生在失败路径上——恰是需要防的那条。完整搜索路径与排除理由见 §2 自研自证 L8。
 - 实测依据:PoC-2 S4(逐字符碎片下正确)+ PoC-3(真实 `gemini-3-flash` 精确输出 `∅`)。
 
 ### 6.7 Prompt 契约(`server/prompts.py`,三段写死)
@@ -563,6 +575,7 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 | R8(派生·防误触发) | `server/tests/test_dual_brain.py` | `test_failed_slow_turn_emits_no_completion_marker` | 慢脑零要点 + `LLMFullResponseEndFrame` → **不产生**完成标记帧、快脑生成次数不变(**结构**,固化 §5.2 表 ② 的 R8 击穿路径) |
 | R8(派生) | `server/tests/test_dual_brain.py` | `test_slow_error_does_not_stop_fast_branch` | PoC-2 S3 固化:非 fatal ErrorFrame 后快脑仍生成,且 `fatal is False` |
 | R7(派生) | `server/tests/test_dual_brain.py` | `test_stale_turn_material_ignored` | 中止后到达的旧轮要点被丢弃、不注入;新轮 `turn` 编号不被旧残片占用(**结构**,固化 §5.2 表 ③) |
+| R7(派生·轮次快照) | `server/tests/test_dual_brain.py` | `test_turn_snapshot_consistent_under_barge_in` | **2026-08-02 轮次号改用官方 observer 后新增**:turn 更新点(用户开口)与 `has_material`/`aborted` 重置点(慢脑响应起始)不同源,构造"慢脑在途 + 用户插话"时序,断言 `dispatch`/`inject`/完成标记三类日志落在同一 turn 值、且旧轮残片零注入(**结构**,固化 §5.2 迁移落点的未实测推论) |
 | 开场白路径(§5.3) | `server/tests/test_dual_brain.py` | `test_greeting_turn_emits_no_material` | 开场白轮:慢脑收到 no-op user 消息 → 走 `无` 分支 → **零注入帧、零完成标记、零 `slow-failed`**(**结构**;编号被占用是既定口径,不作断言) |
 | R9-S1 | (既有) `evals/{smoke,r4_no_false_completion,r4_knowledge_qa}.yaml` + `tests/` + `scripts/check_frozen_repo.sh` | 三类基线重跑 | 全绿,以本次运行时间戳为证。**基线范围以 README:97-101 的 gate set 为准**:`starter_text.yaml`/`starter_audio.yaml` 用官方 Ollama judge、本项目不装,**本就不在 gate 内**(README:104-107),不因本变更纳入 |
 
@@ -670,7 +683,7 @@ turns:
 | R9 | 漏配 `ignored_sources` → 慢脑原文直接上面板并污染 eval 事件流(R2 从根打穿) | 2 | 3 | 6 | §5.1.1 写死 + U5 断言逐项核对列表内容;设计红队实证,非假设 |
 | R10 | 慢脑失败仍发完成标记 → 零要点触发快脑补充(R8 击穿) | 2 | 3 | 6 | §5.2 `has_material` 前提 + `test_failed_slow_turn_emits_no_completion_marker` 固化 |
 | R11 | 旁路日志证据未与 eval run 同批留存,门三无法自证 | 2 | 2 | 4 | §6.4 规定 `tee eval-runs/<ts>/bot.log`,gate 记录命令+时间戳;T4.1 任务卡带此步骤 |
-| R12 | 开场白轮触发慢脑 → 幽灵补充 + 轮次错位 + 既有场景偶发红 | 2 | 3 | 6 | §5.3 三条处置(只加快脑 context / 慢脑走 `无` 分支 / `turn` 惰性自增)+ `test_greeting_does_not_consume_turn_number` |
+| R12 | 开场白轮触发慢脑 → 幽灵补充 + 轮次错位 + 既有场景偶发红 | 2 | 3 | 6 | §5.3 两条处置(只加快脑 context / 慢脑走 `无` 分支)+ `test_greeting_turn_emits_no_material`。**轮次错位一支已消解**:turn 改由官方 observer 提供(§2 L14),开场白落在官方第 1 轮内属既定语义,不再"错位";原写的第三条处置"`turn` 惰性自增"**与 §5.2 迁移落点直接矛盾**(§5.2 明写不做惰性自增),系 fresh 复验 N1 统一口径时漏改的残留,2026-08-02 复核一并删除 |
 
 **≥9 项**:无。原 R1(补充观察不到)经"有意取慢档 + M6 沉默要求 + `abort` 日志区分误触发"缓解后降为 6 分。
 
@@ -697,7 +710,7 @@ turns:
 | PRD §7-4 STT/TTS 替换 | §6.2 配置;§6.3 provider 映射与装配契约 | T2.1 | `test_stt_tts_settings_take_effect`(U4)+ `test_provider_whitelist`(U6)绿;M1/M3/M6 人工联测 | 结构 + 质量 |
 | PRD §7-3 慢脑选型 | §6.2 `SLOW_LLM_MODEL`;§13.3 实测对比 | T2.2 | 配置项存在且默认值 = **`gemini-3-pro`**(`test_config` 断言;型号事实源唯一为 §6.2) | 结构 |
 | PRD §7-2 注入模板定稿 | §6.1 模板全文;§6.7 三段 prompt | T3.3 | `test_inject_template_shape` 绿(模板常量形状)+ R2-S1 judge 负向判据 | 结构 + 质量 |
-| PRD §7-5 双分支上下文结构 | §5.1 / §5.3 开场白路径 / §7 数据流 | T3.1 | `test_material_lands_only_in_fast_context` + `test_greeting_does_not_consume_turn_number` 绿 | 结构 |
+| PRD §7-5 双分支上下文结构 | §5.1 / §5.3 开场白路径 / §7 数据流 | T3.1 | `test_material_lands_only_in_fast_context` + `test_greeting_turn_emits_no_material` 绿 | 结构 |
 | PRD §7-1 PoC 清单四项 | §15 PoC 记录(四项已实测) | T1.1 | §15 四项结论已落盘并被对应 pytest 固化(PoC-1→R3 派生、S1→R4 派生、S2→R5 派生、S4→R6 派生) | 结构 |
 | PRD §7-6 NFR 本期不设 | 本期无 NFR 目标值 | 无任务 | 不适用:PRD 明示本期不设 NFR 目标值,无验收项(显式声明,非空缺) | 不适用 |
 
