@@ -14,9 +14,12 @@ from pipecat.frames.frames import (
     InterruptionFrame,
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
+    LLMMessagesAppendFrame,
     TextFrame,
 )
 from pipecat.processors.aggregators.llm_context import LLMContext
+
+from prompts import INJECT_DONE_TEMPLATE, INJECT_POINT_TEMPLATE
 
 
 @dataclass
@@ -184,3 +187,47 @@ class _SlowMaterialFilter:
 # `LLMContext` exists; a session-scoped factory (mirroring `sentinel.py`'s
 # `build_sentinel_filter()`) is that task's concern, not this one's.
 slow_material_filter = _SlowMaterialFilter()
+
+
+async def slow_material_transformer(frame: Frame) -> Frame:
+    """Producer `transformer` for the slow-brain branch (T3.4, design §6.1).
+
+    `ProducerProcessor._produce()` calls `transformer` with a single `Frame`
+    and awaits a single `Frame` back (`producer_processor.py`: `transformer:
+    Callable[[Frame], Awaitable[Frame]]`, invoked once per consumer as
+    `new_frame = await self._transformer(frame)`) — no batching, no list
+    shape. This function only ever sees frames `slow_material_filter` has
+    already let through (`True`), which design §5.2's routing table limits
+    to two cases:
+
+    - `TextFrame` (an incremental material point): wrap it as the
+      "in-progress" injection using `INJECT_POINT_TEMPLATE`, `run_llm=False`
+      — it must not trigger a fast-brain generation by itself (design §6.1).
+    - `LLMFullResponseEndFrame` (the turn's completion marker, only produced
+      when `has_material and not aborted and basis` still matches): the
+      fixed, already-complete `INJECT_DONE_TEMPLATE` text, `run_llm=True` —
+      this is the one that lets the fast brain fold the material in.
+
+    No other frame type can reach here under the current filter, so there is
+    no third branch to write; a silent fallback would mask a real filter/
+    transformer contract mismatch instead of surfacing it, so an unexpected
+    frame type raises rather than being coerced into one of the two known
+    shapes.
+    """
+    if isinstance(frame, TextFrame):
+        content = INJECT_POINT_TEMPLATE.format(point=frame.text.strip())
+        run_llm = False
+    elif isinstance(frame, LLMFullResponseEndFrame):
+        content = INJECT_DONE_TEMPLATE
+        run_llm = True
+    else:
+        raise TypeError(
+            f"slow_material_transformer received an unexpected frame type: "
+            f"{type(frame).__name__} (filter should only pass TextFrame or "
+            "LLMFullResponseEndFrame)"
+        )
+
+    return LLMMessagesAppendFrame(
+        messages=[{"role": "user", "content": content}],
+        run_llm=run_llm,
+    )
