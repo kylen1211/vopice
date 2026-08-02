@@ -2067,10 +2067,6 @@ evals = [
     { name = "ruff" },
     { name = "typer" },
 ]
-kokoro = [
-    { name = "kokoro-onnx" },
-    { name = "requests" },
-]
 runner = [
     { name = "fastapi" },
     { name = "pipecat-ai-prebuilt" },
@@ -3486,7 +3482,7 @@ name = "voice-agent"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "pipecat-ai", extra = ["evals", "kokoro", "runner", "webrtc", "whisper"] },
+    { name = "pipecat-ai", extra = ["evals", "runner", "webrtc", "whisper"] },
 ]
 
 [package.dev-dependencies]
@@ -3497,7 +3493,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pipecat-ai", extras = ["evals", "kokoro", "openai", "runner", "silero", "webrtc", "whisper"], specifier = "==1.6.0" }]
+requires-dist = [{ name = "pipecat-ai", extras = ["elevenlabs", "evals", "openai", "runner", "silero", "soniox", "webrtc", "whisper"], specifier = "==1.6.0" }]
 
 [package.metadata.requires-dev]
 dev = [

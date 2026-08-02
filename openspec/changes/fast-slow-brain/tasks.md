@@ -33,10 +33,10 @@
 ## 0. 环境准备 【会话边界: 否 | 建议执行方式: 主会话亲写(安装类,授权链要求主会话执行并粘贴验证输出) | 模型档: 标准 | 完成信号: `uv sync` 成功;`python -c "import pipecat.services.soniox.stt, pipecat.services.elevenlabs.tts"` 无异常;`config.py` 启动校验通过(不报缺 key);`git check-ignore server/.env` 返回 0】
 > 入口 manifest: 只读 design.md §1.6 环境准备清单 + §6.2 配置契约 + 全局约束头,不读其余节。
 
-- [ ] 0.1 改 `server/pyproject.toml` 的 extras:**保留 `whisper`**、删显式 `kokoro`,加 `soniox,elevenlabs`,版本保持 `==1.6.0`;**不得动 `evals`**(它蕴含 kokoro/moonshine,harness 侧要用)。⚠️ `whisper` 看似该删(bot 侧不再用它当 STT)但**必须留**——audio eval 靠它把 bot 音频转回中文文字,Moonshine 拿不到中文模型(§1.6 实证)。改完 `uv sync`,粘贴输出 [§1.6]
-- [ ] 0.2 从 `~/git/voice-translate-v2/.env` 复制 `SONIOX_API_KEY` / `ELEVENLABS_API_KEY` 到 `server/.env`;**先确认 `server/.env` 已被 gitignore**(`git check-ignore server/.env`),再写入 [§1.6][security]
-- [ ] 0.3 `server/.env` 填 `ELEVENLABS_VOICE_ID` 为一个**真实可用的官方多语音色 ID** 作占位(**不得用 `CHANGE_ME_` 前缀** —— `config.py:31-32` 的 `_is_missing` 会判其为缺失、启动即拒,导致后续所有 pytest/eval 跑不起来);最终值由 M1 试听后替换 [§6.2]
-- [ ] 0.4 验证:带 `NLTK_DISABLE_IMPORT_SECURITY=1` 跑 `python -c "import pipecat.services.soniox.stt, pipecat.services.elevenlabs.tts; print('ok')"`,粘贴输出 [§1.6]
+- [x] 0.1 改 `server/pyproject.toml` 的 extras:**保留 `whisper`**、删显式 `kokoro`,加 `soniox,elevenlabs`,版本保持 `==1.6.0`;**不得动 `evals`**(它蕴含 kokoro/moonshine,harness 侧要用)。⚠️ `whisper` 看似该删(bot 侧不再用它当 STT)但**必须留**——audio eval 靠它把 bot 音频转回中文文字,Moonshine 拿不到中文模型(§1.6 实证)。改完 `uv sync`,粘贴输出 [§1.6]
+- [x] 0.2 从 `~/git/voice-translate-v2/.env` 复制 `SONIOX_API_KEY` / `ELEVENLABS_API_KEY` 到 `server/.env`;**先确认 `server/.env` 已被 gitignore**(`git check-ignore server/.env`),再写入 [§1.6][security]
+- [x] 0.3 `server/.env` 填 `ELEVENLABS_VOICE_ID` 为一个**真实可用的官方多语音色 ID** 作占位(**不得用 `CHANGE_ME_` 前缀** —— `config.py:31-32` 的 `_is_missing` 会判其为缺失、启动即拒,导致后续所有 pytest/eval 跑不起来);最终值由 M1 试听后替换 [§6.2]
+- [x] 0.4 验证:带 `NLTK_DISABLE_IMPORT_SECURITY=1` 跑 `python -c "import pipecat.services.soniox.stt, pipecat.services.elevenlabs.tts; print('ok')"`,粘贴输出 [§1.6]
 
 ---
 
