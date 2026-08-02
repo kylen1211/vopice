@@ -1,0 +1,31 @@
+name: dual_brain_interrupt
+
+# R5-S1 (design.md §8.1/§8.1.0, tasks.md T7.5): a deep question kicks off a
+# slow-brain analysis; while it's still deep-thinking (pro-tier model, ~15s+
+# per §13.3), the user "interrupts" with an unrelated question. The fast
+# brain must answer the interruption itself, and the ORIGINAL deep
+# question's supplement must never surface afterward within the window.
+#
+# The interrupting question is deliberately another zero-output case
+# ("现在几点了？", validated at PoC-6') so its own would-be supplement can't
+# contaminate the absence window.
+#
+# within_ms is fixed at design.md §8.1.0's measured worst case (50.30s) + a
+# 20s margin = 70000 — do NOT shrink this; the original 25000 was falsified
+# by re-measurement (random timeouts).
+#
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/dual_brain_interrupt.yaml -v
+
+turns:
+  - expect: [{ event: response }]              # 吸收开场白
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect: [{ event: response }]              # 快脑简答, t≈2s
+
+  - user: "现在几点了？"                        # 此刻慢脑仍在深析(pro 档 ~15s), 构成"插话"
+    expect:
+      - event: response                        # 快脑回答插话本身
+      - event: response
+        absent: true
+        within_ms: 70000                       # 覆盖慢脑实测上界 50.3s + 余量; 窗口内不得出现第一问的补充

@@ -1,0 +1,46 @@
+name: dual_brain_supersede
+
+# R7-S1 (design.md §8.1, tasks.md T7.5): the user interrupts a deep question
+# with ANOTHER deep question before the first one's slow-brain analysis has
+# finished. The eventual supplement must be about the SECOND question, not
+# stale leftover material from the first — this is the "supersede", not
+# just "goes quiet" (that's R5-S1, dual_brain_interrupt.yaml).
+#
+# Quality-class judge verdict is an observation per design §8 policy — it
+# doesn't gate this task group's PASS.
+#
+# Side evidence (optional, does not gate PASS): grep bot.log for
+# `[dual-brain] abort turn=.* reason=interruption` around the second
+# question's send time.
+#
+#   uv run bot.py -t eval
+#   set -a && source .env && set +a
+#   PYTHONPATH=$(pwd) uv run pipecat eval run evals/dual_brain_supersede.yaml -v
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response
+
+  # Sent while the CAP-theorem slow-brain analysis is still in flight
+  # (pro-tier, ~15s+) — a second deep question that itself has analytical
+  # depth, so its own supplement is expected to eventually land.
+  - user: "区块链的工作原理是什么？"
+    expect:
+      - event: response
+
+  - expect:
+      - event: response
+        within_ms: 70000
+        eval: >-
+          这段补充说明对应的是"区块链的工作原理"这个问题，而不是之前 CAP
+          定理问题的残留内容或重复；只要内容围绕区块链展开就判 yes，只有
+          当它明显还在讲 CAP 定理 / 分区容错 / 一致性可用性权衡这类第一个
+          问题的话题时才判 no。
