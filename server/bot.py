@@ -30,7 +30,7 @@ from dotenv import load_dotenv
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.evals.transport import EvalTransportParams
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.frames.frames import ErrorFrame, LLMRunFrame
 from pipecat.pipeline.parallel_pipeline import ParallelPipeline
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.worker import PipelineParams, PipelineWorker
@@ -43,7 +43,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.processors.aggregators.sentence import SentenceAggregator
 from pipecat.processors.audio.vad_processor import VADProcessor
 from pipecat.processors.consumer_processor import ConsumerProcessor
-from pipecat.processors.frameworks.rtvi import RTVIObserverParams
+from pipecat.processors.frameworks.rtvi import RTVIObserverParams, RTVIServerMessageFrame
 from pipecat.processors.producer_processor import ProducerProcessor
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
@@ -108,6 +108,46 @@ class AssembledPipeline:
     producer: ProducerProcessor
     consumer: ConsumerProcessor
     rtvi_observer_params: RTVIObserverParams
+
+
+def make_pipeline_error_handler(slow_llm: OpenAILLMService):
+    """Build a session-scoped `on_pipeline_error` handler (design §5.2/§6.4/§6.5).
+
+    `ErrorFrame` is a shared upstream system frame used by every processor in
+    the pipeline (STT disconnect, TTS 401/429, fast-LLM gateway 500, ...), so
+    the handler must attribute each error to its actual source
+    (`frame.processor`) before logging — misattributing e.g. a TTS outage as
+    `slow-failed` would hide a real "user hears nothing" incident behind a
+    "slow brain degraded gracefully" panel message (design §6.4 rationale).
+
+    Only the slow-brain LLM's errors get the `slow-failed` log line + panel
+    message; every other source gets the generic `pipeline-error` log line.
+    No recovery, no retry, no cleanup of already-injected material — the
+    handler doesn't touch `context`/`dual_brain` state at all (design §5.2:
+    "慢脑调用失败时,已注入的素材保留在快脑上下文,不做清理").
+
+    `turn` is a purely local, log-correlation-only counter (design §6.4's
+    `turn=<n>` clarification) — it never feeds into the injection template or
+    business logic, and is not read from/written to `sentinel.py`'s or
+    `dual_brain.py`'s own `_turn` counters (same non-coupling precedent).
+    """
+    state = {"turn": 0}
+
+    async def handle_pipeline_error(worker, frame: ErrorFrame) -> None:
+        if frame.processor is slow_llm:
+            state["turn"] += 1
+            logger.info(f"[dual-brain] slow-failed turn={state['turn']} error={frame.error}")
+            await worker.queue_frames(
+                [
+                    RTVIServerMessageFrame(
+                        data={"type": "slow-brain-failed", "turn": state["turn"]}
+                    )
+                ]
+            )
+        else:
+            logger.info(f"[dual-brain] pipeline-error src={frame.processor} error={frame.error}")
+
+    return handle_pipeline_error
 
 
 def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipeline:
@@ -225,6 +265,8 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
         ),
         rtvi_observer_params=rtvi_observer_params,
     )
+
+    worker.event_handler("on_pipeline_error")(make_pipeline_error_handler(slow_llm))
 
     return AssembledPipeline(
         pipeline=pipeline,
