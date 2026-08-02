@@ -99,7 +99,7 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
         """PoC-1 固化：要点落进 Consumer(快脑)侧，慢脑自身 passthrough 流不含注入痕迹。"""
         self._assert_dual_brain_module_ready()
 
-        point = "慢脑深析要点甲。"
+        point = "分区容错是分布式系统的刚性约束。"
         down = await self._run_slow_branch([point])
 
         # Consumer(代表快脑)侧应恰好收到 2 条 LLMMessagesAppendFrame：
@@ -148,6 +148,7 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
     async def test_failed_slow_turn_emits_no_completion_marker(self):
         """§5.2 表②/PoC-2 S1 反向：零要点 + LLMFullResponseEndFrame 不得产出完成标记。"""
         self._assert_dual_brain_module_ready()
+        assert dual_brain is not None  # pyright narrowing; runtime already asserted above
 
         # 慢脑本轮零输出（框架失败路径的 finally 块仍会推 LLMFullResponseEndFrame，
         # 但中间没有任何 TextFrame——has_material 全程保持 False）。
