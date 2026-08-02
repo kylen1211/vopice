@@ -1,0 +1,28 @@
+name: simple_question_silent
+
+# R4-S2 (design.md §8.1, tasks.md T7.4): a simple factual question ("现在
+# 几点了？" — validated 8/8 zero-output at PoC-6') never gets slow-brain
+# material (has_material stays False), so it gets exactly one `response`
+# and nothing more.
+#
+# Deliberately its own file, separate from R4-S1 (dual_brain_supplement.
+# yaml): see that file's header comment — mixing a quality-class judge
+# turn with a later structural turn in one scenario risks the harness
+# stopping after the judge turn fails, which would hide whether this
+# (blocking, structural) assertion actually passed.
+#
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/dual_brain_no_supplement.yaml -v
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "现在几点了？"
+    expect:
+      - event: response
+
+  - expect:
+      - event: response
+        absent: true
+        within_ms: 20000

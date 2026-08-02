@@ -1,0 +1,44 @@
+name: dual_brain_supplement
+
+# R4-S1 (design.md §8.1, tasks.md T7.4): a deep question gets a brief first
+# answer, then — after enough silence to cover the slow brain's measured
+# upper bound (§13.3: 10-50s, worst observed 50.30s) — a supplement arrives
+# that adds genuinely new content rather than repeating the first answer.
+#
+# Deliberately its OWN file, separate from R4-S2 (dual_brain_no_supplement.
+# yaml): this is a quality-class judge assertion (design §8 policy — its
+# verdict is an observation, doesn't gate PASS for the task group), and a
+# judge "no" here must never suppress evaluation of R4-S2's (structural,
+# blocking) assertion in a later turn of the same run — confirmed by an
+# actual run (2026-08-03): when this turn's judge said "no" (the fast brain
+# happened to emit the ∅ no-supplement sentinel this particular time —
+# legitimate model non-determinism, not a bug), the harness stopped driving
+# further turns entirely, which would have hidden whether R4-S2 passed.
+#
+# Quality-class judge verdict is an observation per design §8 policy — it
+# doesn't gate this task group's PASS. Record the judge's reasoning as-is.
+#
+#   uv run bot.py -t eval
+#   set -a && source .env && set +a
+#   PYTHONPATH=$(pwd) uv run pipecat eval run evals/dual_brain_supplement.yaml -v
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response
+
+  - expect:
+      - event: response
+        within_ms: 70000
+        eval: >-
+          这段回复是对刚才 CAP 定理问题的补充说明；仅当它与第一次回答的内容
+          明显重复（车轱辘话、没有任何新信息）时才判 no，只要确实包含新增的、
+          有别于首答的内容就判 yes。哨兵符 ∅（表示这一轮无值得补充的新内容）
+          属于合法结果，不算异常，但按判据字面意思判 no(它确实没有新增内容)。
