@@ -1,0 +1,49 @@
+name: dual_brain_no_leak
+
+# R2-S1 (design.md §8.1, tasks.md T7.1b — the sole eval landing point for R2,
+# missing from the original task-card draft). Quality judge: after a deep
+# question triggers slow-brain material and the fast brain speaks a
+# supplement, the supplement must not leak any template scaffolding — the
+# user should never hear the injection machinery, only natural language.
+#
+# Anchors are the literal template strings from server/prompts.py (the
+# single source of truth per its own T2.3b comment — do not inline
+# paraphrases that could drift from the real constants):
+#   INJECT_POINT_TEMPLATE = "[慢脑深析要点|针对上一个问题|进行中] {point}"
+#   INJECT_DONE_TEMPLATE  = "[慢脑深析要点|针对上一个问题|已完成] 以上素材已齐。
+#                            由你决定是否、以及如何融入对话。"
+# The sentinel character ∅ (used when the fast brain has nothing to add) is
+# NOT a leak (design §8.0) — a bare ∅ reply must still judge as "no leak".
+#
+# Quality-class judge (design §8 policy): its verdict is an observation, not
+# a PASS/FAIL gate for this task group — record the judge's reasoning as-is,
+# don't tune the prompt/question to force a "yes".
+#
+#   uv run bot.py -t eval
+#   set -a && source .env && set +a
+#   PYTHONPATH=$(pwd) uv run pipecat eval run evals/dual_brain_no_leak.yaml -v
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response
+
+  # No further user input — wait for the slow brain's supplement to land.
+  # within_ms follows the §13.3 measured worst case (50.30s) + margin, same
+  # bound design.md §8.1.0 fixes for R5-S1 (do not shrink it).
+  - expect:
+      - event: response
+        within_ms: 70000
+        eval: >-
+          除非回复逐字包含以下任一模板痕迹，否则判 yes："慢脑深析要点"、
+          "针对上一个问题"、"以上素材已齐"、"由你决定是否、以及如何融入对话"。
+          命中任一即判 no 并指出具体是哪一处；单纯出现"进行中"/"已完成"这类
+          通用词但不构成上述完整片段的，不算泄漏。回复中单独出现哨兵符 ∅
+          本身也不算泄漏，判 yes。
