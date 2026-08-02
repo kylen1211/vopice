@@ -91,9 +91,11 @@ $ ls .venv/.../pipecat/tests/utils.py → 存在(run_test 随包分发,PoC 载�
 
 | 项 | 版本/值 | 安装方式 | 授权 |
 |---|---|---|---|
-| `pipecat-ai` extras 调整 | 去 `whisper`(删 faster-whisper);去显式 `kokoro`;加 `soniox,elevenlabs`;版本仍 `==1.6.0` | 改 `server/pyproject.toml` 后 `uv sync` | 清单获批即授权,主会话执行 |
+| `pipecat-ai` extras 调整 | **保留 `whisper`**(见下方实证:bot 侧不用它,但 eval harness 侧靠它做中文转写);去显式 `kokoro`;加 `soniox,elevenlabs`;版本仍 `==1.6.0` | 改 `server/pyproject.toml` 后 `uv sync` | 清单获批即授权,主会话执行 |
 
 **extras 实证(防误删依赖)**:`evals` extra 本身蕴含 `pipecat-ai[kokoro]` 与 `[moonshine]`(`/home/ky/git/pipecat/pyproject.toml` 实读),而 `evals/starter_audio.yaml:26` 正是用 **Kokoro 合成"用户"语音**(eval harness 侧,不是 bot 的 TTS)。故去掉显式 `kokoro` 安全,audio 模式 eval 不受影响 —— **但不得连 `evals` 一起动**,否则 R6-S1 的 audio 场景直接跑不了。另:`soniox` 与 `elevenlabs` 两个 extra 的依赖列表**为空**(服务走内置 websockets/aiohttp),写进 extras 只为可读性,不引入新包。
+
+**`whisper` extra 不得删(2026-08-02 实跑推翻原稿"去 whisper"的决定)**:原稿理由是"bot 不再用 Whisper 当 STT",此点无误,但漏了 **harness 侧**——audio eval 需要把 bot 说出的音频转回文字才能断言,该转写服务由 `evals/services.py` 构造,**只透传 `model`、不透传 `language`**(`:88-95` whisper / `:109-110` moonshine 实读)。Moonshine 是按语言分模型的(中文模型 `base-zh` 确实存在,已实测下载成功),不给 language 就只能拿英文模型 → 中文语音转写为乱码(实测输出 `'Chinese air chains are a chainsaw chainsaw...'`);Whisper 的模型本身多语、自动检测语言,是**中文 audio eval 唯一可行的转写路径**。故 `whisper` extra 保留,用途由"bot 的 STT"改为"harness 的转写"。
 | `SONIOX_API_KEY` | 真实值 | 从 `~/git/voice-translate-v2/.env` 复制进 `server/.env`(不入 git) | 需用户点头(§10 R6) |
 | `ELEVENLABS_API_KEY` | 真实值 | 同上 | 同上 |
 | `ELEVENLABS_VOICE_ID` | **待定** | 人工联测 M1 试听后填 | 用户拍板 |
@@ -188,7 +190,7 @@ $ ls .venv/.../pipecat/tests/utils.py → 存在(run_test 随包分发,PoC 载�
    - **最终(用户直接拍板,PRD R7 同步修订)**:编号概念整个取消,归属改由"注入前校验 + 上下文时间顺序"承担。非官方物两样,且**消除了一条模型服从性依赖**(原方案靠提示词让快脑忽略旧编号素材,快脑不听话即失效)。
    - 两次误判已转成 §2 的举证纪律与两条全局台账条目。
 4. **牺牲了哨兵符的不可见性**:`∅` 会在 client 对话面板闪现一次(RTVI 在过滤器上游捕获,快脑 LLM 不能进 `ignored_sources`,§6.6)。不会被朗读,但面板上看得见。无官方解,接受。
-5. **牺牲了 audio 端到端的自动化覆盖**:R6 逐句分发降级为人工验证(M7),不开 audio eval 场景 —— 本项目 audio 链路从未跑通(`starter_audio.eval.log` 为 ImportError),且每跑一次真实烧 ElevenLabs 额度。换来的是不引入未验证路径。
+5. ~~**牺牲了 audio 端到端的自动化覆盖**~~ —— **本条 2026-08-02 实跑撤销**。原稿据 `starter_audio.eval.log` 的 `ModuleNotFoundError: No module named 'requests'` 判定"audio 链路从未跑通",但那是**过期日志**:`requests`/`kokoro_onnx`/`moonshine_voice` 当前均已随 `evals` extra 装齐(venv 实查)。实跑一次完整 audio 场景确认链路**全程通**(Kokoro 合成用户语音 → bot 真实 VAD/STT/LLM/TTS → 转写 → 网关 judge),并实测 **TTS 产生 4 个 `tts_response` 事件、正好对应 4 句** —— 即 R6-S1 的"事件次数=句数"是**确定性计数断言,不经 judge**,可完全自动化。故 R6 不降级(§8.1 已改回 audio eval),M7 人工项删除。**残留成本如实标注**:audio 场景会让 bot 真调 ElevenLabs,每跑一次烧付费额度(用户拍板"费用无忧",接受);中文内容类 judge 判据须用 `transcription.service: whisper`,不能用 Moonshine(§1.6)。
 6. **牺牲了哨兵的可靠性兜底**:模型不服从(多说一个字)时补充会被播出,无二次防线。按"差不多就行"接受。
 7. **牺牲了长会话的素材淘汰**:注入的素材永久留在快脑 context(PRD §6 已列已知限制),`LLMContextSummarizer` 本期不启用,长会话 token 单调增长。
 8. **牺牲了本地回退**:Whisper/Kokoro 移除后,断网或 Soniox/ElevenLabs 故障 = 语音功能整体不可用,无降级链(用户拍板"费用无忧、不留回退")。
@@ -590,7 +592,7 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 | R4(反向/变异) | `server/tests/test_dual_brain.py` | `test_incremental_inject_does_not_trigger` | `run_llm=False` 的注入帧**不得**使生成次数增加(防"任何注入都触发"的短路实现) |
 | R5-S1 | `server/evals/dual_brain_interrupt.yaml` + bot.log | `dual_brain_interrupt_abort` | eval:插话后该轮不再出现补充 `response`(`absent`,**结构**);**旁路**:`bot.log` 出现该轮的 `abort … reason=interruption` 行 |
 | R5(派生) | `server/tests/test_dual_brain.py` | `test_interruption_reaches_both_branches` | PoC-2 S2 固化:打断帧两分支各收到 1 次 |
-| R6-S1 | **M 组人工联测 M7** | — | 人工听:多句回答逐句播出、哨兵轮完全无声。**不开 audio eval 场景**(§8.0 理由);结构侧由 `test_sentinel_round_emits_no_text` 兜底 |
+| R6-S1 | `server/evals/dual_brain_audio.yaml` | `dual_brain_sentence_split` | **audio 模式**:断言 `tts_response` 事件次数 = 句数(**确定性计数,不经 judge**;2026-08-02 实跑证实四句回答产生 4 个事件)。`transcription.service` 必须用 **whisper**(多语,自动检测中文);Moonshine 拿不到中文模型,转写为乱码(§1.6)。结构侧另由 `test_sentence_round_emits_no_text` 兜底 |
 | R6(派生) | `server/tests/test_dual_brain.py` | `test_sentinel_round_emits_no_text` | 哨兵轮零文本帧透出;正常轮全部透出(PoC-2 S4 固化,两向断言) |
 | R7-S1 | `server/evals/dual_brain_supersede.yaml` + bot.log | `dual_brain_supersede` | judge 判补充语义只对应第二问(**质量**);**旁路**:第一轮 `abort` 行命中(**不强求 `stale-drop`** —— 打断已清空在途要点,该行通常一条都不会打,强求即误判 FAIL);结构侧由 `test_barge_in_drops_inflight_material` 兜底 |
 | R8-S1 | `server/evals/dual_brain_fault.yaml`(**独立 bot 进程**)+ bot.log | `dual_brain_fault_silent` | eval:快脑正常应答且**无第二段**(`absent`,**结构**);**旁路**:`grep 'slow-failed' bot.log` 命中、且**不得**出现 `inject … done=true`;面板提示见 §6.5 待签核项 |
@@ -661,7 +663,7 @@ turns:
 | M4 | 真机打断:深析中插话,慢脑 HTTP 是否即刻停(观察日志时序) | 用户说话,我读日志 | `abort` 行出现且该轮无补充 |
 | M5 | `developer` 角色注入是否被 8045 网关接受(为后续变更留数据) | 我跑 | 记录结论,本期不改 |
 | **M6**(本期**主测项**) | 完整一轮真机对话验"配合":深问题 →(约 2s)快脑简答 →**用户保持沉默约 15s** → 补充自动到来。**联测时同屏 `tail -f bot.log`** | 用户对话 + 我读日志 | 只判链路通不通:补充出现、且不是首答的复读、且不出现模板痕迹。**内容好坏不判**(本期不做质量)。**若补充没出现,先看日志有无 `abort` 行**:有 = 用户在等待期出声(咳嗽/环境噪声)被 VAD 判为开口、本轮被正常中止 → **判为误触发,重跑**,不是缺陷;无 `abort` 才是真缺陷,回本门查装配 |
-| M7 | R6 逐句分发人工验证:多句回答是否逐句播出;哨兵轮是否完全无声;面板是否逐句刷新 | 用户听+看 | 逐句播出、哨兵轮无声。(替代原 audio eval 场景,§8.0) |
+| ~~M7~~ | ~~R6 逐句分发人工验证~~ | — | **2026-08-02 删除**:audio eval 实跑证实 `tts_response` 事件计数可自动断言(§8.1 `dual_brain_sentence_split`),无需人工听。**面板逐句刷新**一项并入 M3 顺带目视 |
 | M8 | 观察哨兵符 `∅` 在对话面板闪现的观感(§6.6 已知限制) | 用户看 | 记录观感;难以接受则后续换哨兵形态,本期不改 |
 
 ### 8.4 行为基线
@@ -834,6 +836,7 @@ turns:
 | PoC-7 | R8 故障注入前提 | 网关对无效 model 抛 `InternalServerError`(不静默回退)→ ErrorFrame 链路成立 | **负向即本项本身**:无效/空 model 名两种输入均抛异常 |
 | PoC-6 | 开场白轮与静默路径(fresh 复验后补;**"输出 `无`"部分已被 PoC-6′ 取代**) | 慢脑收到 no-op user 消息 `(会话开始,用户尚未提问)` → 3.53s;寒暄 4.09s;简单事实问题「现在几点了?」3.77s ——**延迟数据仍有效,输出内容口径作废** | **负向**:慢脑 context 只有 system、无任何 user 消息 → 网关返回 **`400 INVALID_ARGUMENT`**(据此推翻 §5.3 初稿的"慢脑不加开场白消息") |
 | **PoC-6′** | **零输出服从性(2026-08-02 补测,取代 PoC-6 的输出内容口径)** | 慢脑 prompt 改为「无深析价值则不要输出任何内容」后,`gemini-3-pro` 与 `gemini-3.6-flash-low` × 4 个寒暄/简单问题(你好呀 / 现在几点了 / 嗯嗯好的 / 谢谢你)→ **8/8 返回空字符串 `len=0`** | 据此撤销约定 token `无`:它无句末标点,`SentenceAggregator` 永不 flush(实跑 `'无' → 0 字`、`'无- 要点一。' → 7 字`),会滞留缓冲污染下一轮首条要点;零输出无此问题 |
+| **PoC-8** | **audio eval 链路可用性(2026-08-02 实跑,推翻 §4-5 原判)** | 用 1 期现状 bot(Whisper/Kokoro)跑一次完整 audio 场景:Kokoro 合成用户语音 → bot VAD/STT/LLM/TTS → 转写 → 网关 factory judge,**全程无异常**,59.3s 完成。LLM 输出 `'你好!我是你的语音助手…'`,TTS 分 **4 句**播出并产生 **4 个 `tts_response` 事件** | **负向**:judge 判 fail —— Moonshine `small-streaming` 转中文得到 `'Chinese air chains are a chainsaw chainsaw…'` 乱码。根因非链路故障,而是 harness 构造转写服务时不透传 `language`(`evals/services.py:109-110`),Moonshine 按语言分模型故只能拿英文。**处置**:转写改用 whisper(多语自动检测),`whisper` extra 保留 |
 
 **PoC-3 真实输出基线**(§8.4 对照基线,节选):
 - 慢脑·深问题:`- 物理网络故障必发,分区容错(P)是刚需前提,CAP定理本质是C与A的二维抉择。`(共 4 条)
