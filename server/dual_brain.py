@@ -95,7 +95,7 @@ class _SlowMaterialFilter:
     (`slow_material_filter` below) so `dual_brain.slow_material_filter` is a
     ready-made `filter=...` value. This adds one more dimension beyond
     `_SentinelGate`: the *external* `LLMContext` reference itself, supplied
-    late via `bind_context()` rather than at construction — T3.5's pipeline
+    late via `bind_context()` rather than at construction — T5.2's pipeline
     assembly step doesn't have the slow-brain context built yet at the point
     the filter needs to be wired into `ProducerProcessor(filter=...)`.
 
@@ -179,7 +179,7 @@ class _SlowMaterialFilter:
 # Module-level singleton so `dual_brain.slow_material_filter` is directly
 # usable as `ProducerProcessor(filter=dual_brain.slow_material_filter, ...)`
 # — mirrors `sentinel.py`'s `sentinel_gate = _SentinelGate()` (module-level
-# instance for tests / simple wiring). T3.5's real pipeline-assembly step
+# instance for tests / simple wiring). T5.2's real pipeline-assembly step
 # calls `slow_material_filter.bind_context(...)` once the slow-brain
 # `LLMContext` exists; a session-scoped factory (mirroring `sentinel.py`'s
 # `build_sentinel_filter()`) is that task's concern, not this one's.
