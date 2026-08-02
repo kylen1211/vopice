@@ -35,7 +35,10 @@ test_sentinel.py 都踩过/绕过这个坑）。故这里同样改用
 取值机制，因此不受这个实现细节影响。
 """
 
+import contextlib
 import unittest
+
+import loguru
 
 try:
     import dual_brain
@@ -59,6 +62,25 @@ from pipecat.processors.producer_processor import ProducerProcessor
 from pipecat.tests.utils import SleepFrame, run_test
 
 import prompts
+
+
+@contextlib.contextmanager
+def _capture_dual_brain_logs():
+    """临时挂一个 loguru sink,只捕获本次 `with` 块内产生的日志文本(T3.5)。
+
+    `caplog`(pytest 内置)捕获不到 loguru 的输出——loguru 有自己独立的 sink
+    系统,不经过标准库 `logging` 的 handler 链。这里用 `loguru.logger.add(...)`
+    临时挂一个函数 sink,`msg.record["message"]` 取出格式化前的原始消息文本
+    (2026-08-02 实测核实:当前 venv `loguru==0.7.3`,该模式可用,见任务卡
+    "关键设计提醒 2")。`finally` 里 `logger.remove(sink_id)`,不影响其它测试
+    方法或默认 sink。
+    """
+    captured: list[str] = []
+    sink_id = loguru.logger.add(lambda msg: captured.append(msg.record["message"]), level="INFO")
+    try:
+        yield captured
+    finally:
+        loguru.logger.remove(sink_id)
 
 
 class TestDualBrain(unittest.IsolatedAsyncioTestCase):
@@ -362,6 +384,177 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
             1,
             sum(1 for f in down if isinstance(f, InterruptionFrame)),
             "快脑侧应恰好收到并透传 1 次打断帧",
+        )
+
+    async def test_barge_in_drops_inflight_material(self):
+        """R7 主力(design §5.2 主次两道闸、§8.1 R7 派生·主力,tasks.md T3.5)。
+
+        正向(打断)完整帧序,任务卡写死、不得自行调整:
+        旧轮 `LLMFullResponseStartFrame` → 旧要点 A(应注入)→ `InterruptionFrame`
+        → 旧要点 B(应丢弃,打 `stale-drop reason=aborted`)→ 新问题落进 context
+        (模拟 STT+聚合落地,§5.2 表③的"新 user 消息")→ 新轮
+        `LLMFullResponseStartFrame`(basis 应随之更新到新问题)。
+
+        不复用模块级单例 `dual_brain.slow_material_filter`——本文件已有 6 条
+        用例在共享它(见 `test_failed_slow_turn_emits_no_completion_marker`/
+        `test_interruption_reaches_both_branches`),本用例还需要在驱动过程中
+        修改 context 内容来触发 basis 校验分支，与共享单例的复位纪律耦合、
+        且会给同文件其它用例留下状态残留风险；改用每条用例自己的
+        `_SlowMaterialFilter()` 全新实例(私有类但模块内可直接实例化)+
+        自己的 `LLMContext()`,状态完全隔离。
+
+        `LLMContext(messages=[...])` 构造与 `add_message()`/`get_messages()`
+        接口都很简单(`llm_context.py:103-122,380-386`实读)，直接用真实
+        `LLMContext`，不再自造 stub。
+
+        "新问题落进 context"只用 `context.add_message(...)` 模拟(`_current_basis()`
+        只依赖 `get_messages()` 的内容，不关心是谁调用的 `add_message`)。
+        design §5.2 帧路由表只列了 4 种帧(`LLMFullResponseStartFrame`/
+        `TextFrame`/`LLMFullResponseEndFrame`/`InterruptionFrame`)，
+        `TranscriptionFrame` 不在表内。但 `TranscriptionFrame` 是 `TextFrame`
+        的子类(`frames.py:446`)——若真的把它送进 `filter.__call__`，
+        `isinstance(frame, TextFrame)` 会先命中，落进"要点材料"分支而不是
+        "其余一律 False"分支，这与任务卡的前提假设相反、会把一条不相关的
+        `TranscriptionFrame` 误判成慢脑要点、还会在 aborted 状态下多打一条
+        `stale-drop`。为了不引入这个语义混淆，这里选择跳过发送
+        `TranscriptionFrame`，只用 `context.add_message(...)` 表达"新问题已
+        落进 context"这一件事——这正是 `_current_basis()` 唯一关心的东西。
+        """
+        self._assert_dual_brain_module_ready()
+        assert dual_brain is not None  # pyright narrowing
+
+        context = LLMContext(messages=[{"role": "user", "content": "旧问题"}])
+        filt = dual_brain._SlowMaterialFilter()
+        filt.bind_context(context)
+
+        with _capture_dual_brain_logs() as captured:
+            await filt(LLMFullResponseStartFrame())
+
+            result_a = await filt(TextFrame(text="旧要点A。"))
+            self.assertTrue(result_a, "打断前，旧要点 A 应被正常注入")
+
+            interruption_result = await filt(InterruptionFrame())
+            self.assertFalse(interruption_result, "InterruptionFrame 本身恒 False")
+
+            result_b = await filt(TextFrame(text="旧要点B。"))
+            self.assertFalse(result_b, "打断后，在途的旧要点 B 应被丢弃(零注入)")
+
+        # 日志断言：当前 dual_brain.py 尚未实现打日志(3.6 号任务范围)，
+        # 这里预期是红——`captured` 此刻必然为空列表，`any(...)` 恒 False。
+        self.assertTrue(
+            any("abort" in m for m in captured),
+            "应打印 abort 日志行(当前预期红，等 T3.6 落地打日志后才会绿)",
+        )
+        self.assertTrue(
+            any("stale-drop" in m and "reason=aborted" in m for m in captured),
+            "旧要点 B 被丢弃时应打 stale-drop reason=aborted"
+            "(当前预期红，等 T3.6 落地打日志后才会绿)",
+        )
+
+        # 模拟"新问题落进 context"：STT + 聚合完成后，新的 user 消息追加进
+        # 慢脑 context——不送 TranscriptionFrame（理由见 docstring）。
+        context.add_message({"role": "user", "content": "新问题"})
+
+        # 新一轮开场：aborted/has_material 复位，basis 应随 context 更新为新问题。
+        await filt(LLMFullResponseStartFrame())
+        result_c = await filt(TextFrame(text="新要点C。"))
+        self.assertTrue(
+            result_c,
+            "新一轮复位后（aborted=False 且 basis 已随 context 更新为新问题），"
+            "新要点应能正常注入",
+        )
+
+        # 反向：同样的要点 A/B 序列，跳过 InterruptionFrame，证明谓词不是
+        # 被写死为恒假——未打断时 B 也应正常注入。用全新的 filter/context
+        # 实例，不与上面的正向驱动共享状态。
+        context_rev = LLMContext(messages=[{"role": "user", "content": "旧问题"}])
+        filt_rev = dual_brain._SlowMaterialFilter()
+        filt_rev.bind_context(context_rev)
+
+        await filt_rev(LLMFullResponseStartFrame())
+        result_a_rev = await filt_rev(TextFrame(text="旧要点A。"))
+        self.assertTrue(result_a_rev, "反向(未打断)：旧要点 A 应被正常注入")
+        result_b_rev = await filt_rev(TextFrame(text="旧要点B。"))
+        self.assertTrue(
+            result_b_rev,
+            "反向(未打断)：旧要点 B 同样应被正常注入——证明谓词不是恒假",
+        )
+
+    async def test_stale_material_dropped_before_inject(self):
+        """防御分支(design §5.2 basis 校验，§8.1 R7 派生·防御分支)。
+
+        手工构造"context 里 user 消息已变但未收到 `InterruptionFrame`"的帧序
+        ——design §5.2 明写真实管线不会产生这个序列(basis 变了必然意味着打断已
+        发生，打断已先清空队列)；这是一条纯防御性单测，锁住这道防线不被后续
+        改动误删,不代表生产会走到。
+        """
+        self._assert_dual_brain_module_ready()
+        assert dual_brain is not None  # pyright narrowing
+
+        context = LLMContext(messages=[{"role": "user", "content": "问题甲"}])
+        filt = dual_brain._SlowMaterialFilter()
+        filt.bind_context(context)
+
+        with _capture_dual_brain_logs() as captured:
+            await filt(LLMFullResponseStartFrame())  # basis = "问题甲"
+
+            # 就地修改 context：user 消息已变成"问题乙"，但没有经过
+            # InterruptionFrame——真实管线不会产生这个序列，这里手工构造。
+            context.add_message({"role": "user", "content": "问题乙"})
+
+            result = await filt(TextFrame(text="要点。"))
+
+        self.assertFalse(result, "basis 已不匹配(问题乙 != 问题甲)时应丢弃该要点")
+
+        # 日志断言：当前预期红(3.6 号任务落地打日志后才会绿)。
+        self.assertTrue(
+            any("stale-drop" in m and "reason=basis-mismatch" in m for m in captured),
+            "basis 不匹配时应打 stale-drop reason=basis-mismatch"
+            "(当前预期红，等 T3.6 落地打日志后才会绿)",
+        )
+
+    async def test_abort_blocks_inject_before_stt_lands(self):
+        """打断窗口(design §5.2 表③论证，§8.1 R7 派生·打断窗口)。
+
+        覆盖 basis 校验的时间盲区：`InterruptionFrame` 已到但新 user 消息
+        *尚未* 落进 context（STT + 聚合还没完成，context 仍显示旧问题，
+        basis 校验本身会通过）——此时仍须靠 `aborted` 单独拦下要点，
+        证明 `aborted` 不是靠 basis 顺带生效、而是独立的第一道闸。
+        """
+        self._assert_dual_brain_module_ready()
+        assert dual_brain is not None  # pyright narrowing
+
+        context = LLMContext(messages=[{"role": "user", "content": "问题甲"}])
+        filt = dual_brain._SlowMaterialFilter()
+        filt.bind_context(context)
+
+        with _capture_dual_brain_logs() as captured:
+            await filt(LLMFullResponseStartFrame())  # basis = "问题甲"
+
+            interruption_result = await filt(InterruptionFrame())
+            self.assertFalse(interruption_result, "InterruptionFrame 本身恒 False")
+
+            # context 故意不改动：新 user 消息还没落地，basis 校验本身仍会通过。
+            self.assertEqual(
+                "问题甲",
+                filt._current_basis(),
+                "STT 尚未落地时，context 仍显示旧问题——basis 校验本身应仍然通过，"
+                "这正是本用例要证明 aborted 独立拦截的前提",
+            )
+
+            result = await filt(TextFrame(text="要点。"))
+
+        self.assertFalse(
+            result,
+            "即便 basis 仍然匹配，aborted=True 也必须单独拦下该要点"
+            "(不是靠 basis 不匹配才被拦下)",
+        )
+
+        # 日志断言：当前预期红(3.6 号任务落地打日志后才会绿)。
+        self.assertTrue(
+            any("stale-drop" in m and "reason=aborted" in m for m in captured),
+            "打断窗口内被拦下的要点应打 stale-drop reason=aborted"
+            "(当前预期红，等 T3.6 落地打日志后才会绿)",
         )
 
 
