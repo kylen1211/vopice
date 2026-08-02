@@ -881,9 +881,14 @@ class TestAssemblePipeline:
             "make_pipeline_error_handler 尚未定义"
         )
 
+        assert dual_brain is not None  # pyright narrowing; hasattr check above already confirmed module
+
         slow_llm = FrameProcessor(name="fake-slow-llm")
         other_processor = FrameProcessor(name="fake-tts")
-        handler = bot_module.make_pipeline_error_handler(slow_llm)
+        # 独立新实例，不用模块级单例——与本文件其它用例的隔离纪律一致
+        # （见 test_barge_in_drops_inflight_material 的同型说明）。
+        material_filter = dual_brain._SlowMaterialFilter()
+        handler = bot_module.make_pipeline_error_handler(slow_llm, material_filter)
         worker = self._FakeWorker()
 
         error_frame = ErrorFrame(error="boom", processor=other_processor, fatal=False)
@@ -907,20 +912,36 @@ class TestAssemblePipeline:
             "make_pipeline_error_handler 尚未定义"
         )
 
+        assert dual_brain is not None  # pyright narrowing; hasattr check above already confirmed module
+
         slow_llm = FrameProcessor(name="fake-slow-llm")
-        handler = bot_module.make_pipeline_error_handler(slow_llm)
+        material_filter = dual_brain._SlowMaterialFilter()
+        handler = bot_module.make_pipeline_error_handler(slow_llm, material_filter)
         worker = self._FakeWorker()
 
         error_frame = ErrorFrame(error="boom", processor=slow_llm, fatal=False)
 
-        with _capture_dual_brain_logs() as captured:
-            asyncio.run(handler(worker, error_frame))
+        async def _drive():
+            # 先真实派发一轮(LLMFullResponseStartFrame 使 material_filter.turn
+            # 从 0 变为 1),模拟"这次失败的正是刚派发的这一轮"——验证
+            # slow-failed 行与 material_filter 自己的 dispatch/inject/no-material
+            # 行共享同一个 turn 值(组末评审 MEDIUM 修复:此前 handler 自建独立
+            # 计数器,与 dual_brain 的会话级 _turn 脱节)。
+            await material_filter(LLMFullResponseStartFrame())
+            with _capture_dual_brain_logs() as captured:
+                await handler(worker, error_frame)
+            return captured
 
-        assert any("slow-failed" in m for m in captured), "慢脑组件失败应打 slow-failed"
+        captured = asyncio.run(_drive())
+
+        assert any("slow-failed turn=1" in m for m in captured), (
+            "慢脑组件失败应打 slow-failed,且 turn 必须与 material_filter 自己的计数器一致(此处为 1)"
+        )
         assert len(worker.queued) == 1, "慢脑失败应恰好向面板 push 1 条消息"
         pushed = worker.queued[0]
         assert isinstance(pushed, RTVIServerMessageFrame), "push 的帧类型必须是 RTVIServerMessageFrame"
         assert pushed.data["type"] == "slow-brain-failed", "面板消息 data.type 必须是 slow-brain-failed"
+        assert pushed.data["turn"] == 1, "面板消息里的 turn 必须与日志行、material_filter.turn 三者一致"
 
 
 if __name__ == "__main__":

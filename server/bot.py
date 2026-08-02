@@ -110,7 +110,9 @@ class AssembledPipeline:
     rtvi_observer_params: RTVIObserverParams
 
 
-def make_pipeline_error_handler(slow_llm: OpenAILLMService):
+def make_pipeline_error_handler(
+    slow_llm: OpenAILLMService, slow_material_filter: dual_brain._SlowMaterialFilter
+):
     """Build a session-scoped `on_pipeline_error` handler (design §5.2/§6.4/§6.5).
 
     `ErrorFrame` is a shared upstream system frame used by every processor in
@@ -126,23 +128,20 @@ def make_pipeline_error_handler(slow_llm: OpenAILLMService):
     handler doesn't touch `context`/`dual_brain` state at all (design §5.2:
     "慢脑调用失败时,已注入的素材保留在快脑上下文,不做清理").
 
-    `turn` is a purely local, log-correlation-only counter (design §6.4's
-    `turn=<n>` clarification) — it never feeds into the injection template or
-    business logic, and is not read from/written to `sentinel.py`'s or
-    `dual_brain.py`'s own `_turn` counters (same non-coupling precedent).
+    `turn` is read from `slow_material_filter.turn` — the same
+    log-correlation counter that backs this session's dispatch/inject/
+    no-material/abort lines (design §6.4) — instead of an independent
+    counter, so `slow-failed` lines stay correlated with the rest of a
+    turn's log lines (组末评审 MEDIUM,2026-08-03: an earlier version kept
+    its own counter that only advanced on error and drifted out of sync).
     """
-    state = {"turn": 0}
 
     async def handle_pipeline_error(worker, frame: ErrorFrame) -> None:
         if frame.processor is slow_llm:
-            state["turn"] += 1
-            logger.info(f"[dual-brain] slow-failed turn={state['turn']} error={frame.error}")
+            turn = slow_material_filter.turn
+            logger.info(f"[dual-brain] slow-failed turn={turn} error={frame.error}")
             await worker.queue_frames(
-                [
-                    RTVIServerMessageFrame(
-                        data={"type": "slow-brain-failed", "turn": state["turn"]}
-                    )
-                ]
+                [RTVIServerMessageFrame(data={"type": "slow-brain-failed", "turn": turn})]
             )
         else:
             logger.info(f"[dual-brain] pipeline-error src={frame.processor} error={frame.error}")
@@ -266,7 +265,9 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
         rtvi_observer_params=rtvi_observer_params,
     )
 
-    worker.event_handler("on_pipeline_error")(make_pipeline_error_handler(slow_llm))
+    worker.event_handler("on_pipeline_error")(
+        make_pipeline_error_handler(slow_llm, slow_material_filter)
+    )
 
     return AssembledPipeline(
         pipeline=pipeline,

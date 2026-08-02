@@ -129,6 +129,16 @@ class _SlowMaterialFilter:
         """Bind (or rebind) the real slow-brain `LLMContext` (T3.5, pipeline assembly)."""
         self._context = context
 
+    @property
+    def turn(self) -> int:
+        """Read-only view of the log-correlation `_turn` counter (design §6.4).
+
+        Lets `bot.py`'s `on_pipeline_error` handler report `slow-failed`
+        under the same turn number as this instance's own dispatch/inject/
+        no-material/abort lines, instead of keeping an independent counter
+        that would drift out of sync with them (组末评审 MEDIUM,2026-08-03)."""
+        return self._turn
+
     def _current_basis(self) -> str:
         """Snapshot of the last `role == "user"` message's `content`, as `str`.
 
