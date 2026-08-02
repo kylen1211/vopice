@@ -555,8 +555,12 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 
 **事实三:`absent: true` 只按事件类型匹配,不能与 `text_contains`/`eval`/`calls` 同用**(`scenario.py:63-70`)。
 
-**判据选型结论:全部留在文本模式,不引入 audio 场景。** 理由(项目现状实证):本项目的 gate set 是 `smoke.yaml` + `r4_no_false_completion.yaml` + `r4_knowledge_qa.yaml` 三个**文本模式**场景(README:97-101);脚手架自带的 `starter_text.yaml`/`starter_audio.yaml` **本就不属于本项目 gate**(用官方 Ollama judge,项目不装 —— README:104-107),且 `starter_audio.eval.log` 现存输出是 `ImportError: No module named 'requests'` —— **audio 链路在本机从未跑通过**。在"本期不做质量、只验配合"的口径下,为几条断言去趟一条**未验证**、且每跑一次真实烧 ElevenLabs 额度的路,不划算。
-**证据强度诚实标注(fresh 复验 N6 更正)**:`starter_audio.eval.log` 的 `ImportError: No module named 'requests'` 栈顶在**全局 uv tool 环境**(`/home/ky/.local/share/uv/tools/pipecat-ai/...`),而项目 venv 内 `requests`/`kokoro_onnx`/`moonshine_voice` 三个包**都在**。所以准确表述是"**audio 链路在本项目从未被验证跑通过**"(未验证),**不是**"链路已证坏"(已证伪)。本期不开 audio 场景的理由因此只剩"未验证 + 烧额度 + 本期不做质量",不含"它坏了"。
+**判据选型结论(2026-08-02 实跑后订正):主体留在文本模式,R6-S1 单独走 audio 场景。**
+原稿结论是"全部留在文本模式,不引入 audio 场景",理由为 audio 链路"在本项目从未被验证跑通过" + 烧额度 + 本期不做质量。**实跑推翻了第一条**(§15 PoC-8):完整 audio 场景 59.3s 跑通,Kokoro 合成 → bot 真实 VAD/STT/LLM/TTS → 转写 → 网关 judge 全程无异常,且 TTS 分 4 句产生 **4 个 `tts_response` 事件**。故:
+- **R6-S1 改走 audio 场景**(`dual_brain_audio.yaml`),断言 `tts_response` 事件计数 = 句数 —— 这是**确定性计数,不经 judge**,不受转写质量影响;
+- **其余场景仍留文本模式**(快、免费、够用);
+- **转写服务必须用 `whisper`**:harness 构造转写时不透传 `language`(`evals/services.py:88-95,109-110` 实读),Moonshine 按语言分模型故只能拿英文模型,中文语音转写为乱码(实测 `'Chinese air chains are a chainsaw...'`);Whisper 模型多语、自动检测,是中文 audio eval 唯一可行路径。`whisper` extra 因此保留(§1.6);
+- **残留成本如实标注**:该场景让 bot 真调 ElevenLabs,每跑一次烧付费额度,故不纳入每次改动的快速回归,只在组末与门三各跑一次。
 
 据此,受影响的四条这样落:
 
@@ -565,7 +569,7 @@ M2 联测降级为**确认**(而非探路):看这两行是否如期出现在面�
 | R4-S2 简单问题静默 | (初稿改成 `text_contains: "∅"`,**已推翻**) | **改回 `response` `absent: true`** |
 | R3-S1 注入不引发播报 | `tts_response` 不出现 | 注入后一个短窗口内 `response` `absent: true`(`within_ms` 显式设小),证明注入本身没触发生成 |
 | R2-S1 无模板泄漏 | judge 判"不含 `∅`" | judge 只判**模板痕迹**(`[慢脑深析要点`/`针对上一个问题`/`已完成`);`∅` 是预期的哨兵,不算泄漏,从判据里剔除 |
-| R6-S1 逐句分发 | audio 模式 `tts_response` 计数 | **降级为 M 组人工联测**(M7)——PRD 本就把面板逐句列为人工抽查/已知限制,本期不为它单开 audio 链路 |
+| R6-S1 逐句分发 | audio 模式 `tts_response` 计数 | **维持 audio 模式 `tts_response` 计数**(2026-08-02 实跑证实可行,见上方结论);M7 人工项删除,面板逐句刷新并入 M3 顺带目视 |
 
 **事实一的适用边界(fresh 复验 N2 更正 —— 初稿"任何 absent 断言都会判败"是过度概括)**:
 事实一只在**哨兵轮**成立(慢脑产出了要点 → 完成标记触发快脑第二次生成 → 快脑输出 `∅` → 产生第二个 `response`)。
@@ -649,7 +653,7 @@ turns:
 | U3 | `test_dual_brain.py::test_pipeline_shape` | 管线装配后:Consumer 在快脑 user aggregator 之前;慢脑分支无输出件 |
 | U4 | `test_dual_brain.py::test_stt_tts_settings_take_effect` | 构造后 `stt._settings.language_hints` / `tts._settings.voice` 为期望值(**旧库 B19 就是这里静默失效**) |
 | U5 | `test_dual_brain.py::test_rtvi_ignores_slow_branch` | 传给 `PipelineWorker` 的 `rtvi_observer_params.ignored_sources` 恰含慢脑三件(`slow_llm`/句聚合/Producer)且**不含**快脑 LLM(§5.1.1;漏了就是慢脑原文上面板) |
-| U6 | `test_dual_brain.py::test_provider_whitelist` | 未知 `STT_PROVIDER`/`TTS_PROVIDER` 启动即拒(沿用 1 期白名单模式) |
+| U6 | `test_config.py::test_provider_whitelist`(2026-08-02 订正落点:第 1 组执行时 `test_dual_brain.py` 尚不存在) | 未知 `STT_PROVIDER`/`TTS_PROVIDER` 启动即拒(沿用 1 期白名单模式) |
 
 ### 8.3 人工联测清单(M 组 —— 一次性集中执行)
 
@@ -723,23 +727,23 @@ turns:
 
 | PRD 规则/场景 | 设计落点 | 任务 | 验收方式 | 判据性质 |
 |---|---|---|---|---|
-| R1 恒双发 / R1-S1 | §5.1 ParallelPipeline 双分支;§6.4 `dispatch` 日志 | T3.1 | `test_both_branches_receive_user_turn` 绿 + `evals/dual_brain_dispatch.yaml` 快脑应答通过;`grep '\[dual-brain\] dispatch turn=' bot.log` 命中 ≥1,且与同轮 inject 行的 turn 值一致 | 结构 + 旁路 |
-| R2 快脑唯一发言 / R2-S1 | §5.1 慢脑分支无输出件;**§5.1.1 RTVI 隔离**;§6.1 模板 | T3.2 | `test_slow_branch_has_no_output_processor` + `test_rtvi_ignores_slow_branch`(U5)绿;`evals/dual_brain_no_leak.yaml` judge 判无模板痕迹 | 结构 + 质量 |
-| R3 素材注入 / R3-S1 | §6.1 增量帧 `run_llm=False`;§5.1 Producer/Consumer 落位 | T3.3 | `test_material_lands_only_in_fast_context` 绿 + `evals/dual_brain_inject.yaml` 注入后短窗 `response` absent;`grep 'inject … done=false' bot.log` 命中 | 结构 + 旁路 |
-| R3 素材注入 / R3-S2 | §6.1 慢脑零输出 → 不产帧;§6.4 `no-material` | T3.3 | `evals/dual_brain_smalltalk.yaml` 第二个 `response` absent;`grep 'no-material' bot.log` 命中且零 `inject` 行 | 结构 + 旁路 |
-| R4 补充自判 / R4-S1 | §6.1 完成标记 `run_llm=True`(**前提 `has_material and not aborted`**);§6.6 哨兵 | T3.4 | `test_completion_marker_triggers_one_generation` 绿 + `evals/…::dual_brain_supplement` judge 判补充不复读首答 | 结构 + 质量 |
-| R4 补充自判 / R4-S2 | 同上(哨兵路径) | T3.4 | `evals/…::simple_question_silent` 第二个 `response` **`absent: true`**(⚠️ 原写 `text_contains: "∅"` 系 82402f4 起的残留,与 §8.0/§8.1 直接矛盾且**永远等不到事件、超时判败**,2026-08-02 订正)+ `test_incremental_inject_does_not_trigger` 绿 | 结构 |
-| R5 打断中止 / R5-S1 | §5.1 框架打断语义;§5.2 `aborted`;§6.4 `abort` 日志 | T3.5 | `test_interruption_reaches_both_branches` 绿 + `evals/dual_brain_interrupt.yaml` 该轮补充 absent;该轮 `abort … reason=interruption` 行命中;M4 真机观察 | 结构 + 旁路 |
-| R6 逐句分发 / R6-S1 | §5.1 TTS 在快脑分支;§6.6 哨兵不送 | T3.6 | `test_sentinel_round_emits_no_text` 绿(结构);逐句播出与面板刷新由 **M7** 人工验(§8.0:本期不开 audio eval 场景) | 结构 + 质量 |
-| R7 单深析在途 / R7-S1 | §5.2 两道闸(主力 `aborted`+框架打断语义 / 防御 `basis`);§6.1 模板不带编号 | T3.5 | `test_barge_in_drops_inflight_material`(主力)+ `test_abort_blocks_inject_before_stt_lands` + `test_stale_material_dropped_before_inject`(防御分支)三绿 + `evals/dual_brain_supersede.yaml` judge 判补充只对应第二问;**旁路只要求第一轮 `abort` 行命中**(`stale-drop` 生产不期望出现,不作判据) | 结构 + 质量 + 旁路 |
-| R8 慢脑失败降级 / R8-S1 | §6.4 分支归属 + `slow-failed`;§5.2 表②;§6.5 两条官方面板通道 | T3.7 | `test_slow_error_does_not_stop_fast_branch` + `test_non_slow_error_not_reported_as_slow_failed` + `test_failed_slow_turn_emits_no_completion_marker` 三绿;`evals/dual_brain_fault.yaml`(独立 bot 进程)无第二段;`test_slow_failure_pushes_server_message`(断言 push 了 `RTVIServerMessageFrame`)绿;面板可见性由 M2 确认 | 结构 |
-| R8 慢脑失败降级 / R8-S2 | 同上(非 fatal,管线不停) | T3.7 | `evals/…::dual_brain_fault_recovery`:故障轮之后一轮提问仍产生 `response` 事件且 `text_contains` 判据命中 | 结构 |
-| R9 回归保持 / R9-S1 | §9 配置/依赖变更;既有 gate set 不动 | T4.1 | README:97-101 的三个场景 + `pytest` + `check_frozen_repo.sh` 以本次运行时间戳全绿(`starter_*` 本就不在 gate,README:104-107) | 结构 |
-| PRD §7-4 STT/TTS 替换 | §6.2 配置;§6.3 provider 映射与装配契约 | T2.1 | `test_stt_tts_settings_take_effect`(U4)+ `test_provider_whitelist`(U6)绿;M1/M3/M6 人工联测 | 结构 + 质量 |
-| PRD §7-3 慢脑选型 | §6.2 `SLOW_LLM_MODEL`;§13.3 实测对比 | T2.2 | 配置项存在且默认值 = **`gemini-3-pro`**(`test_config` 断言;型号事实源唯一为 §6.2) | 结构 |
-| PRD §7-2 注入模板定稿 | §6.1 模板全文;§6.7 三段 prompt | T3.3 | `test_inject_template_shape` 绿(模板常量形状)+ R2-S1 judge 负向判据 | 结构 + 质量 |
-| PRD §7-5 双分支上下文结构 | §5.1 / §5.3 开场白路径 / §7 数据流 | T3.1 | `test_material_lands_only_in_fast_context` + `test_greeting_turn_emits_no_material` 绿 | 结构 |
-| PRD §7-1 PoC 清单四项 | §15 PoC 记录(四项已实测) | T1.1 | §15 四项结论已落盘并被对应 pytest 固化(PoC-1→R3 派生、S1→R4 派生、S2→R5 派生、S4→R6 派生) | 结构 |
+| R1 恒双发 / R1-S1 | §5.1 ParallelPipeline 双分支;§6.4 `dispatch` 日志 | 3.1 / 5.2 | `test_both_branches_receive_user_turn` 绿 + `evals/dual_brain_dispatch.yaml` 快脑应答通过;`grep '\[dual-brain\] dispatch turn=' bot.log` 命中 ≥1,且与同轮 inject 行的 turn 值一致 | 结构 + 旁路 |
+| R2 快脑唯一发言 / R2-S1 | §5.1 慢脑分支无输出件;**§5.1.1 RTVI 隔离**;§6.1 模板 | 3.3 / 5.2 | `test_slow_branch_has_no_output_processor` + `test_rtvi_ignores_slow_branch`(U5)绿;`evals/dual_brain_no_leak.yaml` judge 判无模板痕迹 | 结构 + 质量 |
+| R3 素材注入 / R3-S1 | §6.1 增量帧 `run_llm=False`;§5.1 Producer/Consumer 落位 | 3.1 / 3.4 | `test_material_lands_only_in_fast_context` 绿 + `evals/dual_brain_inject.yaml` 注入后短窗 `response` absent;`grep 'inject … done=false' bot.log` 命中 | 结构 + 旁路 |
+| R3 素材注入 / R3-S2 | §6.1 慢脑零输出 → 不产帧;§6.4 `no-material` | 3.1 / 3.4 | `evals/dual_brain_smalltalk.yaml` 第二个 `response` absent;`grep 'no-material' bot.log` 命中且零 `inject` 行 | 结构 + 旁路 |
+| R4 补充自判 / R4-S1 | §6.1 完成标记 `run_llm=True`(**前提 `has_material and not aborted`**);§6.6 哨兵 | 3.1 / 4.2 | `test_completion_marker_triggers_one_generation` 绿 + `evals/…::dual_brain_supplement` judge 判补充不复读首答 | 结构 + 质量 |
+| R4 补充自判 / R4-S2 | 同上(哨兵路径) | 3.1 / 4.2 | `evals/…::simple_question_silent` 第二个 `response` **`absent: true`**(⚠️ 原写 `text_contains: "∅"` 系 82402f4 起的残留,与 §8.0/§8.1 直接矛盾且**永远等不到事件、超时判败**,2026-08-02 订正)+ `test_incremental_inject_does_not_trigger` 绿 | 结构 |
+| R5 打断中止 / R5-S1 | §5.1 框架打断语义;§5.2 `aborted`;§6.4 `abort` 日志 | 3.5 | `test_interruption_reaches_both_branches` 绿 + `evals/dual_brain_interrupt.yaml` 该轮补充 absent;该轮 `abort … reason=interruption` 行命中;M4 真机观察 | 结构 + 旁路 |
+| R6 逐句分发 / R6-S1 | §5.1 TTS 在快脑分支;§6.6 哨兵不送;§8.0 audio 场景结论 | 4.1 / 7.7 | `evals/dual_brain_audio.yaml::dual_brain_sentence_split`(`tts_response` 计数=句数,确定性)+ `test_sentinel_round_emits_no_text` 绿(结构);逐句播出与面板刷新由 **M7** 人工验(§8.0:本期不开 audio eval 场景) | 结构 + 质量 |
+| R7 单深析在途 / R7-S1 | §5.2 两道闸(主力 `aborted`+框架打断语义 / 防御 `basis`);§6.1 模板不带编号 | 3.5 | `test_barge_in_drops_inflight_material`(主力)+ `test_abort_blocks_inject_before_stt_lands` + `test_stale_material_dropped_before_inject`(防御分支)三绿 + `evals/dual_brain_supersede.yaml` judge 判补充只对应第二问;**旁路只要求第一轮 `abort` 行命中**(`stale-drop` 生产不期望出现,不作判据) | 结构 + 质量 + 旁路 |
+| R8 慢脑失败降级 / R8-S1 | §6.4 分支归属 + `slow-failed`;§5.2 表②;§6.5 两条官方面板通道 | 6.1 / 6.2 / 7.6 | `test_slow_error_does_not_stop_fast_branch` + `test_non_slow_error_not_reported_as_slow_failed` + `test_failed_slow_turn_emits_no_completion_marker` 三绿;`evals/dual_brain_fault.yaml`(独立 bot 进程)无第二段;`test_slow_failure_pushes_server_message`(断言 push 了 `RTVIServerMessageFrame`)绿;面板可见性由 M2 确认 | 结构 |
+| R8 慢脑失败降级 / R8-S2 | 同上(非 fatal,管线不停) | 6.1 / 6.2 / 7.6 | `evals/…::dual_brain_fault_recovery`:故障轮之后一轮提问仍产生 `response` 事件且 `text_contains` 判据命中 | 结构 |
+| R9 回归保持 / R9-S1 | §9 配置/依赖变更;既有 gate set 不动 | 8.1 | README:97-101 的三个场景 + `pytest` + `check_frozen_repo.sh` 以本次运行时间戳全绿(`starter_*` 本就不在 gate,README:104-107) | 结构 |
+| PRD §7-4 STT/TTS 替换 | §6.2 配置;§6.3 provider 映射与装配契约 | 1.1 / 1.4 | `test_stt_tts_settings_take_effect`(U4)+ `test_provider_whitelist`(U6)绿;M1/M3/M6 人工联测 | 结构 + 质量 |
+| PRD §7-3 慢脑选型 | §6.2 `SLOW_LLM_MODEL`;§13.3 实测对比 | 1.1 / 1.5 | `SLOW_LLM_MODEL` 在必需项清单内(U1 断言);**`.env.example` 中该项推荐值 = `gemini-3-pro`**(1.5 产出物 grep 断言)。⚠️ 该项**必需故无代码默认值**,原写"断言默认值"与必需语义矛盾,2026-08-02 订正 | 结构 |
+| PRD §7-2 注入模板定稿 | §6.1 模板全文;§6.7 三段 prompt | 3.1 / 3.4 | `test_inject_template_shape` 绿(模板常量形状)+ R2-S1 judge 负向判据 | 结构 + 质量 |
+| PRD §7-5 双分支上下文结构 | §5.1 / §5.3 开场白路径 / §7 数据流 | 3.1 / 5.2 | `test_material_lands_only_in_fast_context` + `test_greeting_turn_emits_no_material` 绿 | 结构 |
+| PRD §7-1 PoC 清单四项 | §15 PoC 记录(四项已实测) | (门二已完成) | §15 四项结论已落盘并被对应 pytest 固化(PoC-1→R3 派生、S1→R4 派生、S2→R5 派生、S4→R6 派生) | 结构 |
 | PRD §7-6 NFR 本期不设 | 本期无 NFR 目标值 | 无任务 | 不适用:PRD 明示本期不设 NFR 目标值,无验收项(显式声明,非空缺) | 不适用 |
 
 ---
