@@ -1,0 +1,30 @@
+name: dual_brain_smalltalk
+
+# R3-S2 (design.md §8.1, tasks.md T7.3): small talk has no depth to analyze,
+# so the slow-brain prompt's "no analytical value -> emit nothing" branch
+# (prompts.py SLOW_BRAIN_PROMPT, validated 8/8 zero-output at PoC-6') means
+# `has_material` stays False for the whole turn — no injection frame, no
+# completion marker, and therefore the fast brain is never triggered a
+# second time. within_ms is generous relative to the ~4s latency PoC-6
+# measured for small talk against the slow model, but far below the deep-
+# question upper bound (no completion marker is ever coming here).
+#
+# Side evidence (optional, does not gate PASS): grep bot.log for this turn's
+# `[dual-brain] no-material turn=` line, and confirm zero
+# `[dual-brain] inject turn=` lines for the same turn number.
+#
+#   uv run bot.py -t eval
+#   uv run pipecat eval run evals/dual_brain_smalltalk.yaml -v
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "你好呀"
+    expect:
+      - event: response
+
+  - expect:
+      - event: response
+        absent: true
+        within_ms: 20000
