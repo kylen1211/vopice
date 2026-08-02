@@ -9,6 +9,7 @@ transitions (when each field resets/flips) live in `slow_material_filter`
 
 from dataclasses import dataclass
 
+from loguru import logger
 from pipecat.frames.frames import (
     Frame,
     InterruptionFrame,
@@ -115,6 +116,14 @@ class _SlowMaterialFilter:
     def __init__(self, context: LLMContext | None = None) -> None:
         self._context = context
         self._state = SlowBrainState(has_material=False, aborted=False, basis="")
+        # Log-only correlation counters (design §6.4): `_turn` increments once
+        # per `LLMFullResponseStartFrame` (a new slow-brain turn dispatched);
+        # `_seq` increments once per accepted material point *within* the
+        # current turn, reset to 0 on every dispatch. Neither carries business
+        # semantics — they exist solely so a human reading bot.log can tell
+        # which log lines belong to the same turn/point.
+        self._turn = 0
+        self._seq = 0
 
     def bind_context(self, context: LLMContext) -> None:
         """Bind (or rebind) the real slow-brain `LLMContext` (T3.5, pipeline assembly)."""
@@ -154,26 +163,53 @@ class _SlowMaterialFilter:
         the `not aborted` + `basis`-match check returns `True`.
         """
         if isinstance(frame, LLMFullResponseStartFrame):
+            self._turn += 1
+            self._seq = 0
             self._state.has_material = False
             self._state.aborted = False
             self._state.basis = self._current_basis()
+            logger.info(f"[dual-brain] dispatch turn={self._turn}")
             return False
 
         if isinstance(frame, TextFrame):
-            if self._state.aborted or self._current_basis() != self._state.basis:
+            # `aborted` is checked before the `basis` comparison (design
+            # §5.2 row ③: aborted is the primary defense, basis is the
+            # defense-in-depth backstop) — so a dropped point during the
+            # interruption window is always attributed to `reason=aborted`,
+            # never `reason=basis-mismatch`, even if both would fail.
+            if self._state.aborted:
+                logger.info(f"[dual-brain] stale-drop turn={self._turn} reason=aborted")
                 return False
+            if self._current_basis() != self._state.basis:
+                logger.info(f"[dual-brain] stale-drop turn={self._turn} reason=basis-mismatch")
+                return False
+            self._seq += 1
             self._state.has_material = True
+            logger.info(f"[dual-brain] inject turn={self._turn} seq={self._seq} done=false")
             return True
 
         if isinstance(frame, LLMFullResponseEndFrame):
-            return (
+            result = (
                 self._state.has_material
                 and not self._state.aborted
                 and self._current_basis() == self._state.basis
             )
+            if result:
+                logger.info(f"[dual-brain] inject turn={self._turn} seq={self._seq} done=true")
+            elif not self._state.has_material:
+                # Only the zero-material case gets `no-material` (design
+                # §6.4's only row for this frame). A turn that *did* produce
+                # material but fails here because of `aborted`/basis drift
+                # was already explained by an `abort` or `stale-drop` line
+                # at the point the point was dropped — logging `no-material`
+                # here too would misreport "nothing was produced" for a turn
+                # that, in fact, produced (and already logged) material.
+                logger.info(f"[dual-brain] no-material turn={self._turn}")
+            return result
 
         if isinstance(frame, InterruptionFrame):
             self._state.aborted = True
+            logger.info(f"[dual-brain] abort turn={self._turn} reason=interruption")
             return False
 
         return False
