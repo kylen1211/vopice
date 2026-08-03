@@ -78,11 +78,12 @@ surfaced to the user when that happens).
    reachable API and a paid key — not the local-CPU Whisper/Kokoro setup
    this project started with. Soniox is configured with
    `language_hints=[Language.ZH]` and ElevenLabs with `language=Language.ZH`
-   (see `bot.py`). Whether the multi-sentence playback overlap tracked in
+   (see `bot.py`). The multi-sentence playback overlap tracked in
    `docs/backlog.md` B2 (root-caused against the old Kokoro/local-CPU TTS)
-   still reproduces under ElevenLabs is **unverified** — pending the 第9组
-   M3 manual dogfood re-check; do not treat B2 as resolved or as still
-   applicable until that re-check lands.
+   was re-checked under ElevenLabs at 第9组 M3 (2026-08-03 manual dogfood):
+   **did not reproduce** — multi-sentence playback was normal, no
+   overlap/stuck state. See B2 for the caveat on why this doesn't retire
+   the entry outright.
 
 4. **Run the bot**:
 
