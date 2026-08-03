@@ -104,11 +104,7 @@ You have live sources for current truth — never substitute your memory. Use th
    uvx pipecat-ai-context-hub status                             # index health / freshness
    ```
    Stdout is the tool's JSON. **Exit 2 means the local index isn't built yet** — run `uvx pipecat-ai-context-hub@latest refresh` once (downloads the package + local models and indexes the sources; allow several minutes), then re-run the query. Afterwards, **set up future sessions** with your agent's MCP command — `claude mcp add pipecat-context-hub -- uvx pipecat-ai-context-hub serve` (Codex: same args, `codex mcp add`). A newly added MCP server loads at the *next* session start, never mid-session — so keep using the CLI for the current one.
-3. **Installed package source** — the pinned version is on disk; the code cannot be stale. Read it when the index is ambiguous:
-   ```bash
-   python -c "import pipecat, os; print(os.path.dirname(pipecat.__file__))"
-   ```
-4. **`llms.txt`** — machine-readable docs index at `https://docs.pipecat.ai/llms.txt` (full content: `llms-full.txt`). The last resort when nothing local works.
+3. **`llms.txt`** — machine-readable docs index at `https://docs.pipecat.ai/llms.txt` (full content: `llms-full.txt`). The last resort when nothing local works.
 
 (Naming: the *package* is `pipecat-ai-context-hub`; the command and MCP server are `pipecat-context-hub`. Both spellings of the command work once installed.)
 
