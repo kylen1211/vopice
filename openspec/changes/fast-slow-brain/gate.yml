@@ -1,0 +1,55 @@
+schema: 1
+change: fast-slow-brain
+gate: WAIVED
+status_reason: >-
+  结构类判据(RTM"结构"行、pytest、ruff、pyright、check_frozen_repo.sh)全绿,
+  10 组 50 任务全勾;三条质量维度已知限制(B2/B4/B5)按 proposal.md §6"答案质量
+  指标不做"预先排除范围,不阻断结构判据;M2/M8 两项人工观察本次会话未触发、
+  记 uncovered,用户已批准 WAIVED 放行(见 waiver 块)。
+updated: '2026-08-03T11:30:00+08:00'
+top_issues:
+  - id: 'REQ-001'
+    severity: low
+    finding: >-
+      B5(新发现,2026-08-03 第9组M6真机联测):慢脑补充触发时,若快脑自己的简答
+      未及时写入 context(本次复现时间富余仍触发,非"换快档"限制的时序场景),
+      快脑会把问题从头完整重答而非做"补充自判"(R4 契约前提失效)。R4-S1 的
+      "结构"判据(test_completion_marker_triggers_one_generation)仍绿,只影响
+      "质量"判据(judge 判补充不复读首答)。proposal.md §6 明确本期"答案质量
+      指标"不做,故不阻断结构 PASS。已记 docs/backlog.md B5。
+    suggested_action: '后续变更精确定位assistant消息写入竞争路径后再修复,不在本变更范围内处理'
+  - id: 'REQ-002'
+    severity: low
+    finding: >-
+      B4(第7组已记录):连续追问场景下慢脑偶发分析最早话题而非当前话题,触及
+      §5.2"位置即归属"假设,同属"答案质量指标"范畴,proposal.md §6 预先排除。
+    suggested_action: '同 B5,后续变更处理,本变更不处理'
+  - id: 'DOC-001'
+    severity: low
+    finding: >-
+      B2(TTS多句应答卡死/重叠,Kokoro场景根因已定位):第9组M3人工复验(ElevenLabs)
+      未复现,已回写backlog——不代表根因已修复,只是触发条件(本机CPU慢速合成)
+      当前不存在,若未来换回本机/慢速TTS服务仍可能重现。
+    suggested_action: '无需本变更处理,backlog条目已注明前提变化,后续切TTS服务时复查'
+evidence:
+  _assessed:
+    - 'openspec validate fast-slow-brain --strict → 通过'
+    - 'pytest(server/tests) 36 passed,0 failed(本次运行,2026-08-03)'
+    - 'ruff check . → All checks passed'
+    - 'pyright → 0 errors, 0 warnings, 0 informations'
+    - './scripts/check_frozen_repo.sh → 通过(voice-translate-v2 零违规改动)'
+    - 'tasks.md 50/50 复选框全勾,第0-9组均已完成(第0-8组各自组末双裁决PASS,记录于memory/fast-slow-brain-gate2-status.md;第9组本次会话人工联测完成)'
+    - 'design.md §11 RTM"结构"类判据行逐条核对:均有对应绿测试/eval,本次pytest全量重跑确认仍绿'
+    - '第9组M1/M3/M4/M5/M6 均已用户参与实测确认或主会话直接调网关验证(见tasks.md 9.1-9.4逐条记录)'
+    - 'proposal.md §6 YAGNI排除清单核对:B2/B4/B5均属"答案质量指标"范畴,预先声明不做,非范围脱节'
+  uncovered:
+    - {item: 'M2 慢脑失败面板提示可见性', reason: '本次真机联测慢脑全程未失败(bot.log零slow-failed命中)', trigger: '下次人工故障注入或生产环境自然触发慢脑失败时验证'}
+    - {item: 'M8 ∅面板闪现观感', reason: '本次会话零∅输出(素材有内容但被B5缺陷导致误判为需要重答而非判断"无需补充"),该UI观感场景未触发', trigger: 'B5修复后或自然遇到"有素材但快脑判定无需补充"场景时验证'}
+waiver: {active: true, reason: 'M2/M8均为人工观察项,本次会话未自然触发(慢脑未失败、快脑未出现判定"无需补充"的场景);用户裁决:不为专门验证这两条另行补测(如故障注入/构造零补充场景),留待后续自然触发时确认,不阻塞归档', approved_by: '用户(2026-08-03)'}
+history:
+  - {at: '2026-08-03T11:30:00+08:00', gate: 'CONCERNS', note: '门三首次裁决:结构判据全绿,uncovered非空(M2/M8),按用户要求简化流程(跳过Opus fresh-agent红队,依赖各组既有组末双裁决)'}
+  - {at: '2026-08-03T11:45:00+08:00', gate: 'WAIVED', note: '用户批准放行(M2/M8留待后续自然触发时验证),转WAIVED'}
+cost:
+  tokens_estimate: '~150k(本次门三会话)'
+  wall_time: '~1h(第9组人工联测+门三简化验收合计)'
+  most_expensive_step: '第9组M6真机联测复现与B5根因定位(逐行核对bot.log)'
