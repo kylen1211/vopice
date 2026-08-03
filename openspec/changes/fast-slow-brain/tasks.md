@@ -134,10 +134,10 @@
 ## 8. 回归验证 【会话边界: 否 | 建议执行方式: 主会话亲写(需全局视角判断回归范围) | 模型档: 标准 | 完成信号: 1 期三类基线全绿并附**本次运行**时间戳;`scripts/check_frozen_repo.sh` 通过;pytest + ruff + pyright 全绿】
 > 入口 manifest: 只读 design.md §8.4 行为基线 + §9 兼容迁移与回滚 + 仓库根 `README.md:97-101`(gate set 三条命令)+ `:104-118`(starter 不在 gate 的说明 + factory judge 运行前置) + 全局约束头。
 
-- [ ] 8.1 重跑 1 期既有 eval 场景(`smoke` / `r4_no_false_completion` / `r4_knowledge_qa`),全绿;**基线范围以 README:97-101 的 gate set 为准**,`starter_text`/`starter_audio` 本就不在 gate 内(需官方 Ollama judge,本项目不装),不因本变更纳入 [R9/§8.4]
-- [ ] 8.2 全量 `pytest` + `ruff check .` + `pyright`,粘贴输出与时间戳 [R9]
-- [ ] 8.3 跑 `scripts/check_frozen_repo.sh` 确认旧库冻结未被触碰 [R9]
-- [ ] 8.4 **文档消费点收口(§9 点名、原稿漏列)**:①更新仓库根 `README.md:33,35,68-73` 的服务说明表(Whisper/Kokoro → Soniox/ElevenLabs)——门三 G1 回执会查"README 反映现状";②删除 `server/prompts.py:32-33` 那条已过时的注释("WhisperSTTService 硬锁 ZH",design §9 明写留着会成为误导后人的假事实);③`docs/backlog.md` 的 B2 条目按 M3 联测结论回写 [§9]
+- [x] 8.1 重跑 1 期既有 eval 场景(`smoke` / `r4_no_false_completion` / `r4_knowledge_qa`),全绿;**基线范围以 README:97-101 的 gate set 为准**,`starter_text`/`starter_audio` 本就不在 gate 内(需官方 Ollama judge,本项目不装),不因本变更纳入 [R9/§8.4] —— **2026-08-03 08:19:07–08:20:40 全绿**(smoke_basic_qa 1/1 8.0s;r4_refuse_action_request judge=yes 9.3s;r4_knowledge_not_realtime judge=yes 10.1s;bot 后台日志无 traceback),日志见 `server/eval-runs/*.eval.log`
+- [x] 8.2 全量 `pytest` + `ruff check .` + `pyright`,粘贴输出与时间戳 [R9] —— **2026-08-03 08:19:08–08:19:26 三项全绿**:pytest 36 passed(21 条框架自身 DeprecationWarning,非本次改动引入);ruff `All checks passed!`;pyright `0 errors, 0 warnings, 0 informations`
+- [x] 8.3 跑 `scripts/check_frozen_repo.sh` 确认旧库冻结未被触碰 [R9] —— 首次运行(2026-08-03 08:19:14)误报 FAIL,主会话独立核查证实系脚本 `BASELINE_SHA` 过期导致假阳性(见 design.md §1.1 脚注),经用户批准订正基线后于 **2026-08-03 08:30:32 通过**(commit `d2939d7`)
+- [ ] 8.4 **文档消费点收口(§9 点名、原稿漏列)**:①更新仓库根 `README.md:33,35,68-73` 的服务说明表(Whisper/Kokoro → Soniox/ElevenLabs)——门三 G1 回执会查"README 反映现状";②删除 `server/prompts.py:32-33` 那条已过时的注释("WhisperSTTService 硬锁 ZH",design §9 明写留着会成为误导后人的假事实);③`docs/backlog.md` 的 B2 条目按 M3 联测结论回写 [§9] —— **①②已完成**(commit `c1de027`,2026-08-03;B2 段落改写为"待 M3 复验",未下结论);**③待第 9 组 M3 人工联测结论后回写,本条暂不勾选**。附带发现 README.md:19"5 个必填环境变量"表述亦过期(实际 8 个,缺 `SLOW_LLM_MODEL` 一行),超出①②点名范围未处理,已记入台账
 
 ---
 
