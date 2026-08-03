@@ -2,7 +2,14 @@
 # R6 冻结校验（design.md §8.2 R6-S1）。
 #
 # voice-translate-v2 除 openspec/changes/pipecat-native-p1/** 外必须零改动。
-# 基线 = 门二 design.md 批准时的 HEAD，写死在此处。覆盖三路合并：
+# 基线 = voice-translate-v2 正式宣布封存（转只读取材源）时的 HEAD，写死在此处。
+#
+# 基线订正记录（2026-08-03，fast-slow-brain 第 8 组回归验证发现并经用户批准修复）：
+# 原基线 e5a3b4a 是 P1 自己"门二 design.md 批准进实现期"的时间点，早于封存声明——
+# 之间还夹了 P1 归档（commit 9e5e8dd）与封存声明（commit 321a553）两笔正常收尾提交，
+# 导致这两笔合规操作被误判为"违规改动"（假阳性）。已订正为封存声明提交 321a553；
+# 订正当时人工核实 HEAD 与 321a553 完全一致（自封存起零提交/零未提交/零 stash）。
+# 覆盖三路合并：
 #   1) git log --all --not baseline --name-only —— 已提交的改动，覆盖**全部
 #      本地分支**（不止当前分支：red-team 20260801 实测只查当前分支会漏判
 #      "改动提交在另一分支再切回来"这条路径，MNT-001）
@@ -17,7 +24,7 @@
 set -euo pipefail
 
 REPO="${VOICE_TRANSLATE_V2_REPO:-$HOME/git/voice-translate-v2}"
-BASELINE_SHA="e5a3b4a"
+BASELINE_SHA="321a553"
 ALLOWED_PREFIX="openspec/changes/pipecat-native-p1/"
 # 会话前既有未跟踪项，非本变更产生（design.md §8.2 R6-S1 修正②）。
 WHITELIST=(".codegraph/" ".repomixignore" "va.svg")

@@ -23,7 +23,9 @@
 | `server/evals/` | 新增 5 个场景 | R1/R3/R4/R5/R7/R8 的行为验收 |
 | `server/pyproject.toml` | 依赖增删 | `pipecat-ai[...]` extras:去 `kokoro`/`whisper`,加 `soniox`/`elevenlabs` |
 | `client/` | **零改** | R8 面板提示走既有 RTVI error 通道 + `EventsPanel`(§6.5,待人工联测确认) |
-| `scripts/check_frozen_repo.sh` | 零改 | R9 沿用 |
+| `scripts/check_frozen_repo.sh` | 零改(逻辑)+ **基线常量订正**(2026-08-02 门二时未预见,2026-08-03 用户口头批准,详见下方脚注) | R9 沿用 |
+
+> **`check_frozen_repo.sh` 基线常量订正(2026-08-03,第 8 组 8.3 回归验证发现)**:脚本内 `BASELINE_SHA` 门二当时写死为 `e5a3b4a`(voice-translate-v2 自己"门二 design.md 批准进实现期"的时间点),但该仓库之后又发生 P1 归档(`9e5e8dd`)与封存声明(`321a553`)两笔正常收尾提交才真正进入冻结状态,导致 8.3 用旧基线跑出假阳性 FAIL(误判这两笔合规收尾操作为"违规改动")。主会话独立只读核查确认:自封存声明提交 `321a553` 起,voice-translate-v2 的 HEAD/未提交改动/stash 三路均为零变化(与本次假阳性的两笔提交完全解释了全部差异)。这触及"零改"承诺,已征得用户明确口头批准("可以改")后,把 `BASELINE_SHA` 订正为 `321a553`(封存声明提交,真正的冻结起点),脚本逻辑本身零改动——**订正后无需再次订正**:封存后 voice-translate-v2 不应再有任何提交,基线钉死在该点即为永久正确。该问题已记入全局台账(`voice-agent-fast-slow-brain-2026-08-03`),作为设计纪律的通用教训:给脚本下"零改"承诺时应区分"逻辑"与"内置的时效性基线数据"。
 
 ### 1.2 可复用(现有直接用或小改后用)
 
