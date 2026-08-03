@@ -28,11 +28,6 @@ CAPABILITY_BOUNDARY_SECTION = (
     "the information came from a real-time lookup you just performed."
 )
 
-# 语言段：回复用中文（门三 20260801 REQ-002 订正——原版本承诺"跟随用户语言，
-# 英文则回英文"，但 bot.py 的 WhisperSTTService 语音通路被硬锁 language=
-# Language.ZH（faster-whisper 无 auto-detect），英文语音永远会被强制按中文
-# 解码，英文分支在语音通路上不可能触发；承诺一个实现不到的能力会误导用户，
-# 故改为如实反映当前能力：始终用中文回复）。
 LANGUAGE_SECTION = "Always reply in Chinese (Mandarin), regardless of the language of the input text."
 
 # 慢脑系统提示（T2.2, design §6.7①）：用于 LLM 生成深度分析要点语义素材。

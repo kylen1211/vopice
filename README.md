@@ -30,9 +30,9 @@ surfaced to the user when that happens).
 - **Bot Type**: Web
 - **Transport(s)**: SmallWebRTC
 - **Pipeline**: Cascade
-  - **STT**: Whisper (Local)
+  - **STT**: Soniox (Cloud, API key required)
   - **LLM**: OpenAI
-  - **TTS**: Kokoro
+  - **TTS**: ElevenLabs (Cloud, API key required)
 
 ## Setup
 
@@ -65,16 +65,20 @@ surfaced to the user when that happens).
    | `LLM_BASE_URL` | Local OpenAI-compatible gateway URL (1 期: `:8045`) |
    | `LLM_API_KEY` | Gateway key |
    | `LLM_MODEL` | Model name the gateway routes to |
-   | `OPENAI_MODEL` | Whisper (STT) model size, e.g. `small` — local, no API key despite the var name (faster-whisper convention) |
-   | `KOKORO_VOICE_ID` | Kokoro (TTS) voice, e.g. `af_heart` — local, no API key |
+   | `SONIOX_API_KEY` | Soniox (STT) API key — cloud service, requires a paid account |
+   | `ELEVENLABS_API_KEY` | ElevenLabs (TTS) API key — cloud service, requires a paid account |
+   | `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for TTS output |
+   | `ELEVENLABS_MODEL` | ElevenLabs TTS model name, e.g. `eleven_flash_v2_5` |
 
-   Whisper/Kokoro run entirely on local CPU; only the LLM needs the gateway.
-   Chinese is a known-degraded path: STT is forced to `Language.ZH`, but
-   Kokoro's Chinese pronunciation is accented (upstream `pipecat-ai` 1.6.0
-   gap — see `bot.py` comments) and, per 20260801 dogfood, multi-sentence
-   replies can overlap in playback. Both are tracked as known limitations,
-   not fixed here (see the change's backlog, §10 K3 for the switch-tier path
-   if this ever needs a paid TTS).
+   STT (Soniox) and TTS (ElevenLabs) are both cloud services that need a
+   reachable API and a paid key — not the local-CPU Whisper/Kokoro setup
+   this project started with. Soniox is configured with
+   `language_hints=[Language.ZH]` and ElevenLabs with `language=Language.ZH`
+   (see `bot.py`). Whether the multi-sentence playback overlap tracked in
+   `docs/backlog.md` B2 (root-caused against the old Kokoro/local-CPU TTS)
+   still reproduces under ElevenLabs is **unverified** — pending the 第9组
+   M3 manual dogfood re-check; do not treat B2 as resolved or as still
+   applicable until that re-check lands.
 
 4. **Run the bot**:
 
