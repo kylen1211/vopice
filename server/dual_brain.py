@@ -16,11 +16,13 @@ from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
+    LLMTextFrame,
     TextFrame,
 )
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
-from prompts import INJECT_DONE_TEMPLATE, INJECT_POINT_TEMPLATE
+from prompts import INJECT_DONE_TEMPLATE, INJECT_DONE_WITH_REMINDER_TEMPLATE, INJECT_POINT_TEMPLATE
 
 
 @dataclass
@@ -250,24 +252,81 @@ def build_slow_material_filter() -> _SlowMaterialFilter:
     return _SlowMaterialFilter()
 
 
-async def slow_material_transformer(frame: Frame) -> Frame:
-    """Producer `transformer` for the slow-brain branch (T3.4, design §6.1).
+class _FastAnswerTap(FrameProcessor):
+    """Passthrough tap that shadows the fast brain's own text output (B5 修法).
+
+    B5 根因(`docs/backlog.md`)：快脑自己那句回答要真正写进 `fast_context`，
+    依赖 `LLMFullResponseEndFrame` 被 TTS 内部按音频播放顺序释放的队列放行
+    ——这个延迟跟回答长度成正比。慢脑"素材已齐"的注入若在这个窗口内触发，
+    快脑因看不到自己已经答过，会把问题从头重答一遍。
+
+    这个类插在 `fast_llm` 和 `sentinel_filter`/TTS 之间（`bot.py::
+    assemble_pipeline`），直接旁听 `fast_llm` 的原始 `LLMTextFrame` 输出——
+    不经过 TTS 那条按播放顺序释放的队列，所以不受播放时长影响。全程只做
+    记录，不吞帧、不改帧、不加帧，原样透传下游：不改变任何既有触发时机/
+    契约，只新增一个只读旁路组件。
+
+    `last_answer` 在每一轮 `LLMFullResponseEndFrame` 到达时更新为该轮完整
+    拼接文本；新一轮 `LLMFullResponseStartFrame` 只清空累积缓冲区，不清空
+    `last_answer`——保证任意时刻读到的都是"最近一次已完整落地的回答"，不会
+    在下一轮生成过程中被清空成空字符串或半截内容。
+    """
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._buffer: list[str] = []
+        self.last_answer: str = ""
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+
+        if isinstance(frame, LLMFullResponseStartFrame):
+            self._buffer = []
+        elif isinstance(frame, LLMTextFrame):
+            self._buffer.append(frame.text)
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            self.last_answer = "".join(self._buffer)
+
+        await self.push_frame(frame, direction)
+
+
+def build_fast_answer_tap() -> _FastAnswerTap:
+    """Construct a fresh, session-scoped `_FastAnswerTap` (B5 修法, pipeline assembly).
+
+    Same session-isolation rationale as `build_sentinel_filter()`
+    (`sentinel.py`) / `build_slow_material_filter()` above — every call
+    returns a brand-new instance, so concurrent sessions never share
+    `last_answer` state.
+    """
+    return _FastAnswerTap()
+
+
+class _SlowMaterialTransformer:
+    """Stateful Producer `transformer` for the slow-brain branch (T3.4, design §6.1; B5 修法新增绑定).
 
     `ProducerProcessor._produce()` calls `transformer` with a single `Frame`
     and awaits a single `Frame` back (`producer_processor.py`: `transformer:
     Callable[[Frame], Awaitable[Frame]]`, invoked once per consumer as
     `new_frame = await self._transformer(frame)`) — no batching, no list
-    shape. This function only ever sees frames `slow_material_filter` has
-    already let through (`True`), which design §5.2's routing table limits
-    to two cases:
+    shape. A class instance with `__call__` satisfies this same callable
+    shape as the original plain function did (same trick as
+    `_SlowMaterialFilter`/`slow_material_filter` above).
+
+    This only ever sees frames `slow_material_filter` has already let
+    through (`True`), which design §5.2's routing table limits to two cases:
 
     - `TextFrame` (an incremental material point): wrap it as the
       "in-progress" injection using `INJECT_POINT_TEMPLATE`, `run_llm=False`
       — it must not trigger a fast-brain generation by itself (design §6.1).
     - `LLMFullResponseEndFrame` (the turn's completion marker, only produced
-      when `has_material and not aborted and basis` still matches): the
-      fixed, already-complete `INJECT_DONE_TEMPLATE` text, `run_llm=True` —
-      this is the one that lets the fast brain fold the material in.
+      when `has_material and not aborted and basis` still matches): `run_llm=True`
+      — this is the one that lets the fast brain fold the material in. The
+      text itself is `INJECT_DONE_TEMPLATE` when no `_FastAnswerTap` is bound
+      or its `last_answer` is empty (identical to the pre-B5 behavior, so
+      T3.1's locked assertions keep passing unchanged); when a tap is bound
+      *and* has content, it switches to `INJECT_DONE_WITH_REMINDER_TEMPLATE`
+      so the fast brain can see what it already said before deciding whether
+      to add more (B5 修法).
 
     No other frame type can reach here under the current filter, so there is
     no third branch to write; a silent fallback would mask a real filter/
@@ -275,20 +334,50 @@ async def slow_material_transformer(frame: Frame) -> Frame:
     frame type raises rather than being coerced into one of the two known
     shapes.
     """
-    if isinstance(frame, TextFrame):
-        content = INJECT_POINT_TEMPLATE.format(point=frame.text.strip())
-        run_llm = False
-    elif isinstance(frame, LLMFullResponseEndFrame):
-        content = INJECT_DONE_TEMPLATE
-        run_llm = True
-    else:
-        raise TypeError(
-            f"slow_material_transformer received an unexpected frame type: "
-            f"{type(frame).__name__} (filter should only pass TextFrame or "
-            "LLMFullResponseEndFrame)"
+
+    def __init__(self, tap: _FastAnswerTap | None = None) -> None:
+        self._tap = tap
+
+    def bind_tap(self, tap: _FastAnswerTap) -> None:
+        """Bind (or rebind) a `_FastAnswerTap` instance (B5 修法, pipeline assembly)."""
+        self._tap = tap
+
+    async def __call__(self, frame: Frame) -> Frame:
+        if isinstance(frame, TextFrame):
+            content = INJECT_POINT_TEMPLATE.format(point=frame.text.strip())
+            run_llm = False
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            if self._tap is not None and self._tap.last_answer:
+                content = INJECT_DONE_WITH_REMINDER_TEMPLATE.format(
+                    answer=self._tap.last_answer
+                )
+            else:
+                content = INJECT_DONE_TEMPLATE
+            run_llm = True
+        else:
+            raise TypeError(
+                f"slow_material_transformer received an unexpected frame type: "
+                f"{type(frame).__name__} (filter should only pass TextFrame or "
+                "LLMFullResponseEndFrame)"
+            )
+
+        return LLMMessagesAppendFrame(
+            messages=[{"role": "user", "content": content}],
+            run_llm=run_llm,
         )
 
-    return LLMMessagesAppendFrame(
-        messages=[{"role": "user", "content": content}],
-        run_llm=run_llm,
-    )
+
+# Test-only singleton — same rationale as `slow_material_filter` above.
+# Unbound (`tap=None`), so its behavior is byte-for-byte identical to the
+# pre-B5 plain-function version: existing T3.1 tests keep passing unchanged.
+slow_material_transformer = _SlowMaterialTransformer()
+
+
+def build_slow_material_transformer(
+    tap: _FastAnswerTap | None = None,
+) -> _SlowMaterialTransformer:
+    """Construct a fresh, session-scoped `_SlowMaterialTransformer` (B5 修法, pipeline assembly).
+
+    Same session-isolation rationale as `build_slow_material_filter()` above.
+    """
+    return _SlowMaterialTransformer(tap=tap)

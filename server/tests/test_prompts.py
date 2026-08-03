@@ -39,16 +39,25 @@ def test_dual_brain_section_no_old_numbering():
 
 
 def test_system_prompt_assembly_order():
-    """SYSTEM_PROMPT 拼装顺序含四段(OFFICIAL/BOUNDARY/LANGUAGE/DUAL_BRAIN)按序。"""
+    """SYSTEM_PROMPT 拼装顺序含五段(OFFICIAL/BOUNDARY/LANGUAGE/CONCISENESS/DUAL_BRAIN)按序。"""
     assert hasattr(prompts, "DUAL_BRAIN_SECTION"), "DUAL_BRAIN_SECTION 尚未定义"
+    assert hasattr(prompts, "CONCISENESS_SECTION"), "CONCISENESS_SECTION 尚未定义"
 
     prompt = prompts.SYSTEM_PROMPT
     official_pos = prompt.index(prompts.OFFICIAL_SECTION)
     boundary_pos = prompt.index(prompts.CAPABILITY_BOUNDARY_SECTION)
     language_pos = prompt.index(prompts.LANGUAGE_SECTION)
+    conciseness_pos = prompt.index(prompts.CONCISENESS_SECTION)
     dual_pos = prompt.index(prompts.DUAL_BRAIN_SECTION)
 
-    assert official_pos < boundary_pos < language_pos < dual_pos, (
+    assert official_pos < boundary_pos < language_pos < conciseness_pos < dual_pos, (
         f"顺序错误: official({official_pos}) < boundary({boundary_pos}) "
-        f"< language({language_pos}) < dual({dual_pos})"
+        f"< language({language_pos}) < conciseness({conciseness_pos}) < dual({dual_pos})"
     )
+
+
+def test_conciseness_section_instructs_brevity():
+    """CONCISENESS_SECTION 明确要求简洁、拒绝啰嗦(B5 backlog 提到的配合缓解手段：
+    缩短快脑回答的音频时长，从而缩小慢脑补充触发时的竞争窗口)。"""
+    assert hasattr(prompts, "CONCISENESS_SECTION"), "CONCISENESS_SECTION 尚未定义"
+    assert "简洁" in prompts.CONCISENESS_SECTION

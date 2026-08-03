@@ -54,6 +54,7 @@ from pipecat.frames.frames import (
     LLMFullResponseEndFrame,
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
+    LLMTextFrame,
     SpeechControlParamsFrame,
     StartFrame,
     SystemFrame,
@@ -725,6 +726,163 @@ class TestDualBrain(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(
                 frame.fatal, "PoC-2 S3 固化：非 fatal 的慢脑错误不得导致管线终止"
             )
+
+
+class TestFastAnswerTap(unittest.IsolatedAsyncioTestCase):
+    """B5 修法(旁听录音机):不经 TTS 排队,直接捕获快脑原始文本供慢脑注入提醒用。
+
+    B5 根因(backlog.md)：快脑自己那句回答要真正写进 `fast_context`，要等
+    `LLMFullResponseEndFrame` 被 TTS 那条按播放顺序释放的队列放行——播放耗时
+    与回答长度成正比。慢脑"素材已齐"的注入若在这个窗口内触发，快脑看不到
+    自己已经答过，会把问题从头重答一遍。`_FastAnswerTap` 插在 `fast_llm` 和
+    `sentinel_filter`/TTS 之间，不经过那条队列，全程只做旁路记录 + 原样透传，
+    不改变任何帧的流向或时机。
+    """
+
+    async def test_tap_captures_completed_answer_and_passes_frames_through(self):
+        self.assertTrue(hasattr(dual_brain, "_FastAnswerTap"), "_FastAnswerTap 尚未定义")
+        assert dual_brain is not None  # pyright narrowing
+
+        tap = dual_brain._FastAnswerTap()
+        pipeline = Pipeline([tap])
+
+        frames_to_send = [
+            LLMFullResponseStartFrame(),
+            LLMTextFrame(text="今天"),
+            LLMTextFrame(text="天气不错。"),
+            LLMFullResponseEndFrame(),
+        ]
+        down, _ = await run_test(pipeline, frames_to_send=frames_to_send)
+
+        self.assertEqual(
+            "今天天气不错。", tap.last_answer, "应把同一轮的所有 LLMTextFrame 拼接成完整回答"
+        )
+
+        # 透传验证：旁听不得吞帧或加帧，条数必须与发送时完全一致。
+        self.assertEqual(1, sum(1 for f in down if isinstance(f, LLMFullResponseStartFrame)))
+        self.assertEqual(2, sum(1 for f in down if isinstance(f, LLMTextFrame)))
+        self.assertEqual(1, sum(1 for f in down if isinstance(f, LLMFullResponseEndFrame)))
+
+    async def test_tap_keeps_last_answer_until_new_turn_completes(self):
+        """新一轮开始但尚未 End 时，last_answer 必须仍是上一轮的完整内容——
+        不能被清空成空字符串，也不能被半截生成中的文本覆盖。这正是慢脑的
+        注入消息读取这个值时唯一关心的时机点。"""
+        self.assertTrue(hasattr(dual_brain, "_FastAnswerTap"), "_FastAnswerTap 尚未定义")
+        assert dual_brain is not None  # pyright narrowing
+
+        tap = dual_brain._FastAnswerTap()
+        pipeline = Pipeline([tap])
+
+        frames_to_send = [
+            LLMFullResponseStartFrame(),
+            LLMTextFrame(text="第一轮答案。"),
+            LLMFullResponseEndFrame(),
+            LLMFullResponseStartFrame(),
+            LLMTextFrame(text="第二轮进行中"),
+        ]
+        await run_test(pipeline, frames_to_send=frames_to_send)
+
+        self.assertEqual(
+            "第一轮答案。",
+            tap.last_answer,
+            "新一轮尚未 End 时，last_answer 不应被清空或被半截内容覆盖",
+        )
+
+    async def test_build_fast_answer_tap_returns_independent_instances(self):
+        """会话隔离(同型比照 build_sentinel_filter/build_slow_material_filter)。"""
+        self.assertTrue(
+            hasattr(dual_brain, "build_fast_answer_tap"), "build_fast_answer_tap 尚未定义"
+        )
+        assert dual_brain is not None  # pyright narrowing
+
+        tap_a = dual_brain.build_fast_answer_tap()
+        tap_b = dual_brain.build_fast_answer_tap()
+        self.assertIsNot(tap_a, tap_b, "每次调用必须返回互不相同的新实例")
+
+        pipeline = Pipeline([tap_a])
+        await run_test(
+            pipeline,
+            frames_to_send=[
+                LLMFullResponseStartFrame(),
+                LLMTextFrame(text="脏状态。"),
+                LLMFullResponseEndFrame(),
+            ],
+        )
+        self.assertEqual("脏状态。", tap_a.last_answer)
+        self.assertEqual("", tap_b.last_answer, "两个实例状态必须完全独立")
+
+
+class TestSlowMaterialTransformerWithTap(unittest.IsolatedAsyncioTestCase):
+    """B5 修法：完成帧文案在绑定 tap 且有内容时应带上"快脑刚才说过什么"的提醒。"""
+
+    async def test_transformer_without_tap_matches_existing_done_template(self):
+        """未绑定 tap（模块级单例现状）时，完成帧文案必须与之前完全一致——
+        向后兼容，不破坏 T3.1 已锁定的断言。"""
+        assert dual_brain is not None  # pyright narrowing
+
+        frame = await dual_brain.slow_material_transformer(LLMFullResponseEndFrame())
+        self.assertIsInstance(frame, LLMMessagesAppendFrame)
+        assert isinstance(frame, LLMMessagesAppendFrame)
+        self.assertEqual(
+            prompts.INJECT_DONE_TEMPLATE,
+            _message_field(frame.messages[0], "content"),
+            "未绑定 tap 时不得改变现有完成帧文案",
+        )
+
+    async def test_transformer_with_tap_includes_reminder_of_fast_answer(self):
+        self.assertTrue(
+            hasattr(dual_brain, "build_slow_material_transformer"),
+            "build_slow_material_transformer 尚未定义",
+        )
+        assert dual_brain is not None  # pyright narrowing
+
+        tap = dual_brain._FastAnswerTap()
+        tap.last_answer = "已经答过的内容示例。"
+        transformer = dual_brain.build_slow_material_transformer(tap)
+
+        frame = await transformer(LLMFullResponseEndFrame())
+        self.assertIsInstance(frame, LLMMessagesAppendFrame)
+        assert isinstance(frame, LLMMessagesAppendFrame)
+        content = _message_field(frame.messages[0], "content")
+        assert isinstance(content, str)  # pyright narrowing
+        self.assertIn(
+            "已经答过的内容示例。",
+            content,
+            "绑定 tap 且有内容时，完成帧文案应带上快脑刚才说过的内容",
+        )
+        self.assertIs(True, frame.run_llm, "完成帧仍必须 run_llm=True，不改变触发时机")
+
+    async def test_transformer_with_empty_tap_matches_existing_done_template(self):
+        """tap 绑定但本轮快脑还没答完（last_answer 为空）时，退回现状文案。"""
+        assert dual_brain is not None  # pyright narrowing
+
+        tap = dual_brain._FastAnswerTap()
+        transformer = dual_brain.build_slow_material_transformer(tap)
+
+        frame = await transformer(LLMFullResponseEndFrame())
+        assert isinstance(frame, LLMMessagesAppendFrame)
+        self.assertEqual(
+            prompts.INJECT_DONE_TEMPLATE,
+            _message_field(frame.messages[0], "content"),
+            "tap 内容为空时应退回现状文案，不产出空提醒",
+        )
+
+    async def test_transformer_still_handles_text_frame_increment_unaffected(self):
+        """回归防护：绑定 tap 不改变增量要点帧(TextFrame→INJECT_POINT_TEMPLATE)的既有行为。"""
+        assert dual_brain is not None  # pyright narrowing
+
+        tap = dual_brain._FastAnswerTap()
+        tap.last_answer = "无关内容"
+        transformer = dual_brain.build_slow_material_transformer(tap)
+
+        point = "一个慢脑要点。"
+        frame = await transformer(TextFrame(text=point))
+        assert isinstance(frame, LLMMessagesAppendFrame)
+        self.assertEqual(
+            prompts.INJECT_POINT_TEMPLATE.format(point=point),
+            _message_field(frame.messages[0], "content"),
+        )
+        self.assertIs(False, frame.run_llm)
 
 
 class TestAssemblePipeline:

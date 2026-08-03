@@ -30,6 +30,14 @@ CAPABILITY_BOUNDARY_SECTION = (
 
 LANGUAGE_SECTION = "Always reply in Chinese (Mandarin), regardless of the language of the input text."
 
+# 简洁段(用户 2026-08-03 要求)：快脑回答尽量简洁，直接给核心内容，不铺垫、
+# 不啰嗦。副作用是缓解 B5(docs/backlog.md)——回答越短，TTS 播报耗时越短，
+# 慢脑补充触发时"快脑自己那句话还没写进 context"这个窗口也就越小；这只是
+# 概率性缓解、不是根治(根治靠 _FastAnswerTap 旁听录音机)，两者配合使用。
+CONCISENESS_SECTION = (
+    "回答保持简洁,直接说核心内容,不要做不必要的背景铺垫、反复强调或客套寒暄。"
+)
+
 # 慢脑系统提示（T2.2, design §6.7①）：用于 LLM 生成深度分析要点语义素材。
 # 这是独立的 system prompt，不进入快脑 SYSTEM_PROMPT 拼装。
 # 关键约束解释：
@@ -64,4 +72,19 @@ INJECT_POINT_TEMPLATE = "[慢脑深析要点|针对上一个问题|进行中] {p
 
 INJECT_DONE_TEMPLATE = "[慢脑深析要点|针对上一个问题|已完成] 以上素材已齐。由你决定是否、以及如何融入对话。"
 
-SYSTEM_PROMPT = f"{OFFICIAL_SECTION}\n\n{CAPABILITY_BOUNDARY_SECTION}\n\n{LANGUAGE_SECTION}\n\n{DUAL_BRAIN_SECTION}"
+# B5 修法(backlog.md)：快脑自己刚才那句回答写进 fast_context 要等 TTS 播完才
+# 算数，这个窗口内如果素材已齐触发重新生成，快脑会看不到自己已经答过、把
+# 问题从头重答一遍。`_FastAnswerTap`（dual_brain.py）不经 TTS 排队、直接
+# 旁听快脑原始输出，有内容时用这个模板代替 INJECT_DONE_TEMPLATE，把"你刚才
+# 已经这样回答过"的提醒一并带上，交给快脑自己判断要不要在此基础上补充，
+# 而不是整个问题重答。`{answer}` 由调用方 `.format()` 传入 tap 捕获的内容。
+INJECT_DONE_WITH_REMINDER_TEMPLATE = (
+    "[慢脑深析要点|针对上一个问题|已完成] 以上素材已齐。"
+    "提醒:你刚才已经这样回答过:「{answer}」。"
+    "由你决定是否、以及如何在这个基础上补充,不要把已经说过的内容再完整重复一遍。"
+)
+
+SYSTEM_PROMPT = (
+    f"{OFFICIAL_SECTION}\n\n{CAPABILITY_BOUNDARY_SECTION}\n\n{LANGUAGE_SECTION}\n\n"
+    f"{CONCISENESS_SECTION}\n\n{DUAL_BRAIN_SECTION}"
+)
