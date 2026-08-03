@@ -162,3 +162,72 @@ def test_provider_whitelist(monkeypatch):
 
     with pytest.raises(ConfigError):
         load_config()
+
+
+# 2026-08-03 补：deepgram/cartesia 备用厂商的必需项应"按所选 provider 条件必需"
+# ——只在 STT_PROVIDER=deepgram / TTS_PROVIDER=cartesia 时才要求对应 key，默认
+# 组合（soniox+elevenlabs）不受影响，也不应误报未选中厂商的 key 缺失。
+
+
+def test_deepgram_api_key_required_only_when_selected(monkeypatch):
+    """STT_PROVIDER=deepgram 时 DEEPGRAM_API_KEY 缺失应报错列出该项，且不应把
+    未选中的 SONIOX_API_KEY 也当缺失项报出（它此时不该被校验）。"""
+    _set_new_required_env(monkeypatch)
+    monkeypatch.setenv("STT_PROVIDER", "deepgram")
+    monkeypatch.delenv("DEEPGRAM_API_KEY", raising=False)
+    monkeypatch.delenv("SONIOX_API_KEY", raising=False)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config()
+
+    message = str(exc_info.value)
+    assert "DEEPGRAM_API_KEY" in message
+    assert "SONIOX_API_KEY" not in message
+
+
+def test_cartesia_keys_required_only_when_selected(monkeypatch):
+    """TTS_PROVIDER=cartesia 时 CARTESIA_API_KEY/CARTESIA_VOICE_ID 缺失应报错
+    列出两项，且不应把未选中的 ELEVENLABS_* 三项也当缺失项报出。"""
+    _set_new_required_env(monkeypatch)
+    monkeypatch.setenv("TTS_PROVIDER", "cartesia")
+    monkeypatch.delenv("CARTESIA_API_KEY", raising=False)
+    monkeypatch.delenv("CARTESIA_VOICE_ID", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+    monkeypatch.delenv("ELEVENLABS_MODEL", raising=False)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load_config()
+
+    message = str(exc_info.value)
+    assert "CARTESIA_API_KEY" in message
+    assert "CARTESIA_VOICE_ID" in message
+    assert "ELEVENLABS_API_KEY" not in message
+    assert "ELEVENLABS_VOICE_ID" not in message
+    assert "ELEVENLABS_MODEL" not in message
+
+
+def test_deepgram_and_cartesia_selected_together_succeeds(monkeypatch):
+    """两个备用厂商同时选中、key 配齐时应正常构造 Config，字段落在与默认厂商
+    相同的通用字段名上（stt_api_key/tts_api_key/tts_voice），且不需要默认厂商
+    （soniox/elevenlabs）的 key；tts_model 是 elevenlabs 专属，cartesia 路径下
+    应为 None（bot.py 的 cartesia 构造器不使用它，吃厂商默认模型）。"""
+    _set_new_required_env(monkeypatch)
+    monkeypatch.delenv("SONIOX_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_API_KEY", raising=False)
+    monkeypatch.delenv("ELEVENLABS_VOICE_ID", raising=False)
+    monkeypatch.delenv("ELEVENLABS_MODEL", raising=False)
+    monkeypatch.setenv("STT_PROVIDER", "deepgram")
+    monkeypatch.setenv("DEEPGRAM_API_KEY", "deepgram-test-key")
+    monkeypatch.setenv("TTS_PROVIDER", "cartesia")
+    monkeypatch.setenv("CARTESIA_API_KEY", "cartesia-test-key")
+    monkeypatch.setenv("CARTESIA_VOICE_ID", "cartesia-test-voice")
+
+    cfg = load_config()
+
+    assert cfg.stt_provider == "deepgram"
+    assert cfg.stt_api_key == "deepgram-test-key"
+    assert cfg.tts_provider == "cartesia"
+    assert cfg.tts_api_key == "cartesia-test-key"
+    assert cfg.tts_voice == "cartesia-test-voice"
+    assert cfg.tts_model is None

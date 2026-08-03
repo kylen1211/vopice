@@ -24,7 +24,6 @@ Run the bot using::
     uv run bot.py
 """
 
-import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
@@ -86,15 +85,16 @@ def _build_soniox_stt(c: Config):
 
 
 def _build_deepgram_stt(c: Config):
-    # Deepgram key 走独立 DEEPGRAM_API_KEY,不占用/覆盖 SONIOX_API_KEY(config.py
-    # 按 §6.3 决议保持不动,故不经 Config 字段)。不传 model —— c.stt_model 是
-    # Soniox 档位名(stt-rt-v5),混用会错;留空吃 Deepgram 默认 nova-3-general,
-    # 该模型自 2026-03-31 起支持中文(zh/zh-CN),经 Deepgram 官方文档核实(§6.3
-    # 原判"中文弱于 Soniox"针对的是旧版 nova-3,已过期)。
+    # Deepgram key 走独立 DEEPGRAM_API_KEY,经 config.py 按 STT_PROVIDER=deepgram
+    # 条件必需校验后落到 c.stt_api_key(与 soniox 用同一字段名,值随所选厂商而
+    # 变)。不传 model —— c.stt_model 是 Soniox 档位名(stt-rt-v5),混用会错;
+    # 留空吃 Deepgram 默认 nova-3-general,该模型自 2026-03-31 起支持中文
+    # (zh/zh-CN),经 Deepgram 官方文档核实(§6.3 原判"中文弱于 Soniox"针对的是
+    # 旧版 nova-3,已过期)。
     from pipecat.services.deepgram.stt import DeepgramSTTService
 
     return DeepgramSTTService(
-        api_key=os.environ["DEEPGRAM_API_KEY"],
+        api_key=c.stt_api_key,
         settings=DeepgramSTTService.Settings(language=Language.ZH, smart_format=True),
     )
 
@@ -113,16 +113,16 @@ def _build_elevenlabs_tts(c: Config):
 
 
 def _build_cartesia_tts(c: Config):
-    # 试用(2026-08-03),同 deepgram STT 惰性 import 的理由。Cartesia key 走独立
-    # CARTESIA_API_KEY,不占用 ELEVENLABS_API_KEY;不传 model,吃 Cartesia 默认
-    # sonic-3.5——经官方文档核实,该模型 42 种语言里含中文(zh),够用。
+    # 试用(2026-08-03),同 deepgram STT 惰性 import 的理由。Cartesia key/voice
+    # 走独立 CARTESIA_API_KEY/CARTESIA_VOICE_ID,经 config.py 按
+    # TTS_PROVIDER=cartesia 条件必需校验后落到 c.tts_api_key/c.tts_voice(与
+    # elevenlabs 用同一组字段名)。不传 model,吃 Cartesia 默认 sonic-3.5——经
+    # 官方文档核实,该模型 42 种语言里含中文(zh),够用。
     from pipecat.services.cartesia.tts import CartesiaTTSService
 
     return CartesiaTTSService(
-        api_key=os.environ["CARTESIA_API_KEY"],
-        settings=CartesiaTTSService.Settings(
-            voice=os.environ["CARTESIA_VOICE_ID"], language=Language.ZH
-        ),
+        api_key=c.tts_api_key,
+        settings=CartesiaTTSService.Settings(voice=c.tts_voice, language=Language.ZH),
     )
 
 

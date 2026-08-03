@@ -60,3 +60,34 @@ def test_tts_builder_sets_voice_from_config(bot_module):
     tts = bot_module.TTS_BUILDERS["elevenlabs"](config)
 
     assert tts._settings.voice == "my-expected-voice-id"
+
+
+# 2026-08-03 补：deepgram/cartesia 备用厂商构造器此前零测试覆盖（先红证据纪律
+# 缺口，见全局台账 voice-agent-fix-tts-zh-and-llm-repeat-20260803）。断言风格
+# 同上——只查 `_settings` 上的关键字段，不断言 api_key（沿用既有 soniox/
+# elevenlabs 用例的做法）。同时验证走的是 Config 通用字段（stt_api_key/
+# tts_api_key/tts_voice），而不是裸 os.environ 读取。
+
+
+def test_deepgram_stt_builder_sets_language_and_smart_format(bot_module):
+    """U4 同构：DeepgramSTTService 构造后 _settings.language/_settings.smart_format
+    确实等于 bot.py 里写死的期望值（zh + smart_format=True）。"""
+    from pipecat.transcriptions.language import Language
+
+    config = _make_config(stt_api_key="deepgram-test-key")
+    stt = bot_module.STT_BUILDERS["deepgram"](config)
+
+    assert stt._settings.language == Language.ZH
+    assert stt._settings.smart_format is True
+
+
+def test_cartesia_tts_builder_sets_voice_and_language_from_config(bot_module):
+    """U4 同构：CartesiaTTSService 构造后 _settings.voice 等于配置传入的
+    tts_voice（走 Config 通用字段，不是裸 os.environ["CARTESIA_VOICE_ID"]）。"""
+    from pipecat.transcriptions.language import Language
+
+    config = _make_config(tts_api_key="cartesia-test-key", tts_voice="cartesia-voice-id")
+    tts = bot_module.TTS_BUILDERS["cartesia"](config)
+
+    assert tts._settings.voice == "cartesia-voice-id"
+    assert tts._settings.language == Language.ZH

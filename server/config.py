@@ -15,16 +15,34 @@ _PHASE2_SCENARIOS = {"interview", "translate", "companion", "butler"}
 
 # fast-slow-brain design §6.2：必需项从 1 期 5 项换成新 8 项——
 # OPENAI_MODEL/KOKORO_VOICE_ID 删除（同步删 .env.example 与 test_config.py 断言），
-# 新增慢脑 LLM + Soniox STT + ElevenLabs TTS 共 5 项。
-_REQUIRED_ENV_TO_FIELD = {
+# 新增慢脑 LLM + Soniox STT + ElevenLabs TTS 共 5 项。这 4 项与所选 provider 无关，
+# 任何组合都必需。
+_BASE_REQUIRED_ENV_TO_FIELD = {
     "LLM_BASE_URL": "llm_base_url",
     "LLM_API_KEY": "llm_api_key",
     "LLM_MODEL": "llm_model",
     "SLOW_LLM_MODEL": "slow_llm_model",
-    "SONIOX_API_KEY": "stt_api_key",
-    "ELEVENLABS_API_KEY": "tts_api_key",
-    "ELEVENLABS_VOICE_ID": "tts_voice",
-    "ELEVENLABS_MODEL": "tts_model",
+}
+
+# 2026-08-03 决议：STT/TTS 各保留两家可选厂商，用 STT_PROVIDER/TTS_PROVIDER 选。
+# 每家厂商的必需 key 只在其被选中时才校验——未选中的厂商不强制配置，默认组合
+# （soniox+elevenlabs）用户不必被迫也去配一份用不到的备用厂商 key。所有分支落
+# 到同一组通用字段名（stt_api_key/tts_api_key/tts_voice[/tts_model]），bot.py
+# 的构造器因此不关心实际选中的是哪家，只读 Config 字段。
+_STT_PROVIDER_REQUIRED_ENV = {
+    "soniox": {"SONIOX_API_KEY": "stt_api_key"},
+    "deepgram": {"DEEPGRAM_API_KEY": "stt_api_key"},
+}
+_TTS_PROVIDER_REQUIRED_ENV = {
+    "elevenlabs": {
+        "ELEVENLABS_API_KEY": "tts_api_key",
+        "ELEVENLABS_VOICE_ID": "tts_voice",
+        "ELEVENLABS_MODEL": "tts_model",
+    },
+    "cartesia": {
+        "CARTESIA_API_KEY": "tts_api_key",
+        "CARTESIA_VOICE_ID": "tts_voice",
+    },
 }
 
 # design §6.2：SONIOX_MODEL 非必需，默认沿用旧库在用型号（§13.1）。
@@ -55,7 +73,9 @@ class Config:
     stt_api_key: str
     tts_api_key: str
     tts_voice: str
-    tts_model: str
+    # elevenlabs 专属（cartesia 不需要显式 model，吃厂商默认档位）——None 表示
+    # 当前选中的 TTS provider 不使用固定模型名。
+    tts_model: str | None = None
     stt_model: str = _DEFAULT_STT_MODEL
     stt_provider: str = _DEFAULT_STT_PROVIDER
     tts_provider: str = _DEFAULT_TTS_PROVIDER
@@ -102,9 +122,24 @@ def load_config() -> Config:
             f"SCENARIO={scenario!r} 不是有效值（1 期仅支持 {_ALLOWED_SCENARIO!r}）"
         )
 
+    # provider 先选定，才能知道这一次到底该校验哪家的必需 key（§6.3 决议：
+    # 未选中的备用厂商不强制配置）。
+    stt_provider = _validate_provider(
+        "STT_PROVIDER", _DEFAULT_STT_PROVIDER, _STT_PROVIDER_WHITELIST
+    )
+    tts_provider = _validate_provider(
+        "TTS_PROVIDER", _DEFAULT_TTS_PROVIDER, _TTS_PROVIDER_WHITELIST
+    )
+
+    required_env_to_field = {
+        **_BASE_REQUIRED_ENV_TO_FIELD,
+        **_STT_PROVIDER_REQUIRED_ENV[stt_provider],
+        **_TTS_PROVIDER_REQUIRED_ENV[tts_provider],
+    }
+
     values: dict[str, str] = {}
     missing: list[str] = []
-    for env_name, field_name in _REQUIRED_ENV_TO_FIELD.items():
+    for env_name, field_name in required_env_to_field.items():
         raw = os.getenv(env_name)
         if _is_missing(raw):
             missing.append(env_name)
@@ -120,13 +155,6 @@ def load_config() -> Config:
     stt_model_raw = os.getenv("SONIOX_MODEL")
     stt_model = _DEFAULT_STT_MODEL if _is_missing(stt_model_raw) else stt_model_raw
     assert stt_model is not None
-
-    stt_provider = _validate_provider(
-        "STT_PROVIDER", _DEFAULT_STT_PROVIDER, _STT_PROVIDER_WHITELIST
-    )
-    tts_provider = _validate_provider(
-        "TTS_PROVIDER", _DEFAULT_TTS_PROVIDER, _TTS_PROVIDER_WHITELIST
-    )
 
     return Config(
         scenario=scenario,
