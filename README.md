@@ -16,26 +16,20 @@ cd client && npm run dev         # 2. front end, http://localhost:5173
 cd server && uv run pytest       # 3. unit tests (self-authored modules only)
 ```
 
-STT (Soniox) and TTS (ElevenLabs) are cloud services requiring paid API keys —
-this is no longer the local-CPU/zero-paid-keys setup the project started with.
-
-Requires the 8 required env vars (§"Configure environment variables" below)
-to be set to real, non-placeholder values — the server refuses to start if
-any of them is missing (fails fast, lists what's missing). This checks
-*presence*, not *reachability*: if the values are present but the gateway
-itself isn't actually running, the server still starts — the first LLM call
-will just fail (non-fatal, logged; see the known-gaps note in §13 of
-`openspec/changes/pipecat-native-p1/design.md` for what's and isn't
-surfaced to the user when that happens).
+Requires the env vars in `.env.example` to be set to real, non-placeholder
+values — the server refuses to start if any required one is missing (fails
+fast, lists what's missing). This checks *presence*, not *reachability*: if
+the values are present but the gateway itself isn't actually running, the
+server still starts — the first LLM call will just fail (non-fatal, logged;
+see the known-gaps note in §13 of `openspec/changes/pipecat-native-p1/design.md`
+for what's and isn't surfaced to the user when that happens).
 
 ## Configuration
 
 - **Bot Type**: Web
 - **Transport(s)**: SmallWebRTC
 - **Pipeline**: Cascade
-  - **STT**: Soniox (Cloud, API key required)
   - **LLM**: OpenAI
-  - **TTS**: ElevenLabs (Cloud, API key required)
 
 ## Setup
 
@@ -69,16 +63,12 @@ surfaced to the user when that happens).
    | `LLM_API_KEY` | Gateway key |
    | `LLM_MODEL` | 快脑 model name the gateway routes to |
    | `SLOW_LLM_MODEL` | 慢脑 model name the gateway routes to — deliberately a slower/deeper model than `LLM_MODEL` (see `openspec/changes/fast-slow-brain/design.md` §6.2) |
-   | `SONIOX_API_KEY` | Soniox (STT) API key — cloud service, requires a paid account |
-   | `ELEVENLABS_API_KEY` | ElevenLabs (TTS) API key — cloud service, requires a paid account |
-   | `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for TTS output |
-   | `ELEVENLABS_MODEL` | ElevenLabs TTS model name, e.g. `eleven_flash_v2_5` |
 
-   STT (Soniox) and TTS (ElevenLabs) are both cloud services that need a
-   reachable API and a paid key — not the local-CPU Whisper/Kokoro setup
-   this project started with. Soniox is configured with
-   `language_hints=[Language.ZH]` and ElevenLabs with `language=Language.ZH`
-   (see `bot.py`). The multi-sentence playback overlap tracked in
+   See `.env.example` for the rest of the required variables.
+
+   This is a cloud-provider setup requiring reachable APIs and paid keys,
+   not the local-CPU Whisper/Kokoro setup this project started with. The
+   multi-sentence playback overlap tracked in
    `docs/backlog.md` B2 (root-caused against the old Kokoro/local-CPU TTS)
    was re-checked under ElevenLabs at 第9组 M3 (2026-08-03 manual dogfood):
    **did not reproduce** — multi-sentence playback was normal, no
