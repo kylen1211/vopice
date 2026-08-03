@@ -34,8 +34,8 @@ _DEFAULT_STT_MODEL = "stt-rt-v5"
 # （同构 1 期 SCENARIO 白名单模式，config.py 原 58-69 行）。
 _DEFAULT_STT_PROVIDER = "soniox"
 _DEFAULT_TTS_PROVIDER = "elevenlabs"
-_STT_PROVIDER_WHITELIST = {"soniox"}
-_TTS_PROVIDER_WHITELIST = {"elevenlabs"}
+_STT_PROVIDER_WHITELIST = {"soniox", "deepgram"}
+_TTS_PROVIDER_WHITELIST = {"elevenlabs", "cartesia"}
 
 
 class ConfigError(ValueError):

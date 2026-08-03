@@ -24,6 +24,7 @@ Run the bot using::
     uv run bot.py
 """
 
+import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
@@ -49,7 +50,6 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.soniox.stt import SonioxSTTService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.turns.user_turn_processor import UserTurnProcessor
@@ -70,21 +70,65 @@ cfg = load_config()
 # 换厂商 = ①这里加一行 ②pyproject 加对应 extras ③改 .env,config.py/tests/管线全不动。
 # 构造代码照抄官方事实源:pipecat/cli/registry/service_metadata.py 的 SERVICE_CONFIGS["<name>_stt"]
 # (27 家 STT / 32 家 TTS 全在里面,含 import 路径与 extras 包名)。
-# 只注册在用的一家:未验证的厂商预注册进来既没 key 也没测过,且 deepgram/azure 这类缺 extras
-# 时顶部 import 会启动即崩(§6.3 实测)。要哪家再按上面三步引入。
-STT_BUILDERS = {
-    "soniox": lambda c: SonioxSTTService(
+#
+# 2026-08-03 决议(推翻 §6.3 原"只注册一家"拍板,用户已知情确认):本期同时保留
+# soniox/deepgram 两家,启动前用 STT_PROVIDER 选,免得以后每次切换都要重连代码。
+# 为此把 import 从模块顶部挪进各自构造函数体内做惰性 import——避免"顶部 import
+# 无条件全跑,某家 SDK 装不上就拖累另一家也启动不了"的耦合(§6.3 原实测的风险点，
+# 惰性 import 后不再成立)。
+def _build_soniox_stt(c: Config):
+    from pipecat.services.soniox.stt import SonioxSTTService
+
+    return SonioxSTTService(
         api_key=c.stt_api_key,
         settings=SonioxSTTService.Settings(model=c.stt_model, language_hints=[Language.ZH]),
-    ),
+    )
+
+
+def _build_deepgram_stt(c: Config):
+    # Deepgram key 走独立 DEEPGRAM_API_KEY,不占用/覆盖 SONIOX_API_KEY(config.py
+    # 按 §6.3 决议保持不动,故不经 Config 字段)。不传 model —— c.stt_model 是
+    # Soniox 档位名(stt-rt-v5),混用会错;留空吃 Deepgram 默认 nova-3-general,
+    # 该模型自 2026-03-31 起支持中文(zh/zh-CN),经 Deepgram 官方文档核实(§6.3
+    # 原判"中文弱于 Soniox"针对的是旧版 nova-3,已过期)。
+    from pipecat.services.deepgram.stt import DeepgramSTTService
+
+    return DeepgramSTTService(
+        api_key=os.environ["DEEPGRAM_API_KEY"],
+        settings=DeepgramSTTService.Settings(language=Language.ZH, smart_format=True),
+    )
+
+
+STT_BUILDERS = {
+    "soniox": _build_soniox_stt,
+    "deepgram": _build_deepgram_stt,
 }
-TTS_BUILDERS = {
-    "elevenlabs": lambda c: ElevenLabsTTSService(
+def _build_elevenlabs_tts(c: Config):
+    return ElevenLabsTTSService(
         api_key=c.tts_api_key,
         settings=ElevenLabsTTSService.Settings(
             voice=c.tts_voice, model=c.tts_model, language=Language.ZH
         ),
-    ),
+    )
+
+
+def _build_cartesia_tts(c: Config):
+    # 试用(2026-08-03),同 deepgram STT 惰性 import 的理由。Cartesia key 走独立
+    # CARTESIA_API_KEY,不占用 ELEVENLABS_API_KEY;不传 model,吃 Cartesia 默认
+    # sonic-3.5——经官方文档核实,该模型 42 种语言里含中文(zh),够用。
+    from pipecat.services.cartesia.tts import CartesiaTTSService
+
+    return CartesiaTTSService(
+        api_key=os.environ["CARTESIA_API_KEY"],
+        settings=CartesiaTTSService.Settings(
+            voice=os.environ["CARTESIA_VOICE_ID"], language=Language.ZH
+        ),
+    )
+
+
+TTS_BUILDERS = {
+    "elevenlabs": _build_elevenlabs_tts,
+    "cartesia": _build_cartesia_tts,
 }
 
 
