@@ -8,7 +8,7 @@ Built almost entirely from the official `pipecat init` scaffold; the only
 custom pieces are `server/config.py`, `server/prompts.py`,
 `server/judge_factory.py`, and `scripts/check_frozen_repo.sh`.
 
-## Quick start (three commands, three terminals, all local/CPU, zero paid keys)
+## Quick start (three commands, three terminals)
 
 ```bash
 cd server && uv run bot.py       # 1. server (STT/LLM/TTS pipeline)
@@ -16,7 +16,10 @@ cd client && npm run dev         # 2. front end, http://localhost:5173
 cd server && uv run pytest       # 3. unit tests (self-authored modules only)
 ```
 
-Requires the 5 required env vars (§"Configure environment variables" below)
+STT (Soniox) and TTS (ElevenLabs) are cloud services requiring paid API keys —
+this is no longer the local-CPU/zero-paid-keys setup the project started with.
+
+Requires the 8 required env vars (§"Configure environment variables" below)
 to be set to real, non-placeholder values — the server refuses to start if
 any of them is missing (fails fast, lists what's missing). This checks
 *presence*, not *reachability*: if the values are present but the gateway
@@ -64,7 +67,8 @@ surfaced to the user when that happens).
    |---|---|
    | `LLM_BASE_URL` | Local OpenAI-compatible gateway URL (1 期: `:8045`) |
    | `LLM_API_KEY` | Gateway key |
-   | `LLM_MODEL` | Model name the gateway routes to |
+   | `LLM_MODEL` | 快脑 model name the gateway routes to |
+   | `SLOW_LLM_MODEL` | 慢脑 model name the gateway routes to — deliberately a slower/deeper model than `LLM_MODEL` (see `openspec/changes/fast-slow-brain/design.md` §6.2) |
    | `SONIOX_API_KEY` | Soniox (STT) API key — cloud service, requires a paid account |
    | `ELEVENLABS_API_KEY` | ElevenLabs (TTS) API key — cloud service, requires a paid account |
    | `ELEVENLABS_VOICE_ID` | ElevenLabs voice ID to use for TTS output |
