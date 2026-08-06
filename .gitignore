@@ -229,3 +229,7 @@ client/.turbo/
 client/.vercel
 client/.env*.local
 client/*.tsbuildinfo
+
+# Local tools & eval run outputs
+.codegraph/
+server/eval-runs/
