@@ -233,3 +233,8 @@ client/*.tsbuildinfo
 # Local tools & eval run outputs
 .codegraph/
 server/eval-runs/
+.ua/
+check.py
+dump.py
+fix_graph.py
+update_notes.py
