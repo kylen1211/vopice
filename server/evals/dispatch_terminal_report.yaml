@@ -1,0 +1,60 @@
+name: dispatch_terminal_report
+
+# C-09 步骤 2 (contract/cases.md §1, FR-3 判据1: 结论消息回流播报确实产生,
+# 且只经既有快脑通道). Drives a real dispatch (no TASK_DISPATCH_CLI stub —
+# unlike dispatch_nonblocking.yaml, this scenario needs the real
+# `openclaw agent` run to actually finish and produce a genuine
+# `stopReason=="stop"` MCP event, which is what feeds the injection queue
+# `_DispatchMaterialInjector` drains (§0.9)) — this file has no
+# precondition beyond C-00 (real OpenClaw daemon up, no env override).
+#
+# Task wording (important correction carried over from the T-4 real-machine
+# finding, D-015): `DispatchRegistry` is only written *after* the exec
+# worker's `tasks show` poll first confirms the record is visible, while the
+# MCP events_wait loop starts listening earlier — for a task phrased so
+# tersely it finishes within that same couple of seconds (e.g. "reply ok"),
+# the terminal event can race ahead of the registry write and get silently
+# dropped (known timing gap, tracked as debt D-015, not fixed by this task).
+# The task below asks for a short written explanation (~200 Chinese
+# characters) — long enough, empirically (~6-10s wall time for this
+# project's local gateway), to clear that window; see backend-notes.md for
+# the measured margin.
+#
+# Run it (two terminals, both in server/):
+#
+#   NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
+#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     pipecat eval run evals/dispatch_terminal_report.yaml -v --logs-dir eval-runs
+#
+# 判据: exit code 0, plus (external to this file) confirm in
+# /tmp/pipecat-dispatch.txt that turn 2's response only followed a
+# `[openclaw-exec] terminal-report ...` log line (§0.9 播报措辞不做语义比对,
+# 只要求"内容与该任务相关" — this file doesn't assert semantic content for
+# that reason, matching contract's own "播报措辞不做语义比对" callout).
+# Also carries C-09 步骤4's negative half structurally (not this file's job:
+# the pytest side of C-09 asserts `tasks show` call count == 0 on this same
+# return-flow path — see server/tests/, T-6).
+
+turns:
+  # Absorb the on_client_ready greeting turn before sending the real
+  # question (see smoke.yaml — sending user text as turn 0 risks an
+  # interruption that corrupts context, reproduced 20260801).
+  - expect:
+      - event: response
+
+  - user: "帮我在后台写一份大约200字的说明，介绍一下光合作用的基本原理，写完不用现在念给我听。"
+    expect:
+      - event: function_call
+        calls:
+          - name: dispatch_task
+      - event: response
+
+  # No `user:` here — this turn just waits for the exec worker's real
+  # OpenClaw run to finish and its terminal message to come back through
+  # the injection queue (§0.9), triggering a second, unprompted fast-brain
+  # response. within_ms is generous relative to the measured ~6-10s
+  # dispatch-to-terminal-event round trip (see header) plus LLM turn
+  # latency — see backend-notes.md for the actual measured run time.
+  - expect:
+      - event: response
+        within_ms: 90000

@@ -1,0 +1,55 @@
+name: dispatch_cli_failure
+
+# C-04 (contract/cases.md §1, FR-1 描述末段: 派发调用本身失败时经工具报错路径
+# 回流). Precondition (external to this file, C-04 原文): set `OPENCLAW_AGENT_ID`
+# (server/.env, read by config.py) to an agent id that doesn't exist before
+# booting the bot — a bad `--agent` makes contract §0.7 CMD_AGENT exit 1
+# fast, which is what this scenario needs to observe.
+#
+# Run it (two terminals, both in server/):
+#
+#   OPENCLAW_AGENT_ID=no-such-agent-xyz NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
+#     (note: bot.py calls load_dotenv(override=True), so .env wins over a
+#     plain shell export — edit server/.env's OPENCLAW_AGENT_ID line itself,
+#     don't rely on an exported override)
+#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     pipecat eval run evals/dispatch_cli_failure.yaml -v --logs-dir eval-runs
+#
+# Judgment: exit code 0 (this file's own gate) plus, external to this file,
+# grep /tmp/pipecat-dispatch.txt for the exec worker's `JobStatus.ERROR` /
+# `cli-dispatch-failed` log line with the CLI's stderr first line attached
+# (contract C-04 期望①). This file only carries 期望②/判定 — the fast
+# brain still answers, and the judge below is contract C-04's criterion
+# verbatim (措辞本身不做比对, PRD C1 口径, same style as
+# r4_no_false_completion.yaml).
+#
+# KNOWN CURRENT FAILURE (measured, reproducible — see backend-notes.md
+# RISKS): 期望① passes (exec worker does log `JobStatus.ERROR` with the
+# CLI stderr). The judge below currently fails: `TaskDispatchWorker.reply()`
+# (§0.3 步骤①②) fires the exec job with `self.create_task(...)` and
+# responds to the fast brain *without waiting on it* (by design — that's
+# what keeps FR-1 判据1 true), so `dispatch_task`'s own result_callback
+# already returned `{"accepted": true, ...}` (measured: ~4.7s before the
+# exec worker's `JobStatus.ERROR` is even logged) — the fast brain has no
+# route to learn the CLI-layer failure within the turn dispatch_task
+# actually answers on. Not fixable from this file (server/evals/ carries
+# no Python, and task_dispatch.py is T-4's exclusive path, not this
+# card's) — flagged to design for review (either C-04 needs a different
+# implementation route, or its acceptance route needs revising).
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  # Absorb the on_client_ready greeting turn before sending the real
+  # question (see smoke.yaml — sending user text as turn 0 risks an
+  # interruption that corrupts context, reproduced 20260801).
+  - expect:
+      - event: response
+
+  - user: "帮我在后台整理一份大约200字的市场分析要点说明。"
+    expect:
+      - event: response
+        eval: "回复表达了这件事没能派出去/出了问题,没有声称已经完成或已经处理好"

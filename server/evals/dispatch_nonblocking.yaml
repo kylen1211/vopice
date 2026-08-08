@@ -1,0 +1,76 @@
+name: dispatch_nonblocking
+
+# C-01 (contract/cases.md §1, FR-1 判据1) + C-11 (FR-3 判据4, reuses this same
+# file's second question turn — design.md L3 "新增场景" list only names five
+# files, not six, because C-11 is driven by re-running this scenario's tail
+# while the MCP bridge sits idle in events_wait, not by a separate file).
+#
+# C-01: turn 2 says something that makes the fast brain call `dispatch_task`
+# (contract §0.2 T1); turn 3 asks an unrelated question right after. The
+# claim under test is that turn 3's `response` shows up while the dispatch's
+# underlying `openclaw agent` call is still in flight — proven by a stub CLI
+# that just sleeps, so there is no way turn 3 could be waiting on it.
+#
+# Precondition (both C-01 and C-11): boot the bot with `TASK_DISPATCH_CLI`
+# pointed at a stub script that only replaces argv[0] of contract §0.7
+# CMD_AGENT (§0.10) — every other CMD_AGENT argument, and CMD_TASKS_SHOW /
+# CMD_MCP_SERVE, stay untouched. The stub is not checked into the repo; its
+# full contents (reproduce it verbatim at the path below before running):
+#
+#   /tmp/dispatch_cli_stub.sh
+#   ---------------------------------------------------------------
+#   #!/usr/bin/env bash
+#   sleep 600
+#   exit 0
+#   ---------------------------------------------------------------
+#   chmod +x /tmp/dispatch_cli_stub.sh
+#
+# Run it (two terminals, both in server/):
+#
+#   TASK_DISPATCH_CLI=/tmp/dispatch_cli_stub.sh NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
+#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     pipecat eval run evals/dispatch_nonblocking.yaml -v --logs-dir eval-runs
+#
+# C-01 judgment (external to this file, read after the run): `eval run`
+# exit code 0, plus grep /tmp/pipecat-dispatch.txt for the dispatch-tool
+# log line (`[task-dispatch]`/`[openclaw-exec] dispatched`) and confirm its
+# timestamp is earlier than turn 3's `response` — the stub is still 600s
+# into its sleep when that happens.
+#
+# C-11 precondition (contract C-11): drive just this file's turn 3 while the
+# exec worker's MCP bridge (§0.8) is sitting in `events_wait` with nothing to
+# report (true here too — the stub CLI never touches real OpenClaw, so no
+# terminal event for this session's dispatched task will ever arrive).
+# Judgment: same exit-code-0 check, plus (correction vs. contract's own
+# wording — measured, `_run_events_loop` in task_dispatch.py logs no
+# per-iteration "still waiting" line, only a one-time `mcp-bridge-up` line
+# before the loop starts blocking on `events_wait`) `/tmp/pipecat-dispatch.txt`
+# shows that one-time `[openclaw-exec] mcp-bridge-up` line with no
+# `mcp-bridge-down` anywhere after it through turn 3's response — the
+# absence of a crash/down line across that whole window is the actual
+# observable evidence that the long poll is still parked in its own
+# asyncio task, not blocking the pipeline.
+#
+# No judge block: FR-1 判据1/FR-3 判据4 are purely mechanical (event
+# presence + exit code + log timestamp ordering, checked outside this file),
+# not a semantic judgment — same structural-only style as
+# dual_brain_dispatch.yaml.
+
+turns:
+  # Absorb the on_client_ready greeting turn before sending the real
+  # question (see smoke.yaml — sending user text as turn 0 risks an
+  # interruption that corrupts context, reproduced 20260801).
+  - expect:
+      - event: response
+
+  - user: "帮我在后台写一份大约200字的说明，介绍一下光合作用的基本原理，写完不用现在念给我听。"
+    expect:
+      - event: function_call
+        calls:
+          - name: dispatch_task
+      - event: response
+
+  - user: "分布式系统的 CAP 定理是什么？"
+    expect:
+      - event: response

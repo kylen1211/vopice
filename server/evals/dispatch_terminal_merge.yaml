@@ -1,0 +1,65 @@
+name: dispatch_terminal_merge
+
+# C-10 (contract/cases.md §1, FR-3 判据3: 并发结论消息合并播报). One user
+# turn asks for two background things at once, which nudges the delegate
+# LLM (`TaskDispatchWorker.reply`) to fan out `tasks=[task1, task2]` in a
+# single call — both exec jobs fire within the same `reply()` invocation
+# (§0.3 步骤①, back-to-back `self.create_task(...)`, not serialized), so
+# their real `openclaw agent` runs start close together. Real dispatch, no
+# stub — same D-015 task-wording rationale as dispatch_terminal_report.yaml
+# (avoid trivially-short task text).
+#
+# What this file can and can't prove (measured, not assumed — see
+# backend-notes.md for the run excerpt): contract's own C-10 precondition
+# is two `injection_queue.put()` calls **< 200ms apart**, driven by a test
+# stub — `_DispatchMaterialInjector._drain_loop` (task_dispatch.py) only
+# merges items that are *already* in the queue at the instant it finishes
+# draining the first one (no grace period), so the merge window is really a
+# few ms, not 200ms. Two independent real `openclaw agent` runs (same local
+# gateway, similar-length prompts) landed their terminal events **~331ms**
+# apart on a measured run here — just outside that window, so two separate
+# playback turns were observed instead of one merged one. That's expected,
+# real-world timing, not a defect in this file or in
+# `_DispatchMaterialInjector`. Contract's own judgment for C-10 already
+# treats this as needing two pieces of evidence together ("与 T-6 的注入帧
+# 计数断言构成双证"): the merge-count claim itself (期望①, "只产生一条
+# LLMMessagesAppendFrame") is `server/tests/`'s job (T-6, direct assertion
+# with a controlled stub); this file only carries the *reachable* half —
+# both concurrently-dispatched real tasks get played back without the
+# pipeline hanging, breaking, or double-answering the *same* task. It does
+# not hard-assert an exact response count, since that count is a coin flip
+# at real-dispatch timing and asserting either exact value would make this
+# scenario flaky by construction (same class of issue as the documented
+# dual_brain_inject/interrupt timing flakiness, debts D-011/D-012).
+#
+# Run it (two terminals, both in server/):
+#
+#   NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
+#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     pipecat eval run evals/dispatch_terminal_merge.yaml -v --logs-dir eval-runs
+#
+# 判据: exit code 0 here, plus (external to this file) grep
+# /tmp/pipecat-dispatch.txt for the two `[openclaw-exec] terminal-report`
+# lines and read off their timestamp gap — < 200ms is a bonus (merge
+# actually observed), anything else is still a pass for this file alone,
+# with the merge-count claim resting on T-6.
+
+turns:
+  # Absorb the on_client_ready greeting turn before sending the real
+  # question (see smoke.yaml — sending user text as turn 0 risks an
+  # interruption that corrupts context, reproduced 20260801).
+  - expect:
+      - event: response
+
+  - user: "帮我在后台做两件事：第一，写一段大约150字的说明介绍一下什么是光合作用；第二，写一段大约150字的说明介绍一下什么是细胞分裂。都写完之后不用现在念给我听。"
+    expect:
+      - event: function_call
+        calls:
+          - name: dispatch_task
+      - event: response
+
+  # No `user:` — waits for the first terminal-report-driven playback (task
+  # A or B, whichever's real run finishes first; order isn't fixed).
+  - expect:
+      - event: response
+        within_ms: 90000

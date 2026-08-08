@@ -1,0 +1,88 @@
+name: dispatch_capacity_reached
+
+# C-19 (contract/cases.md §1, 本轮新增, ADR-8: 在途任务达上限时整批拒绝).
+# `MAX_INFLIGHT_TASKS = 3` (task_dispatch_contract.py) is checked inside
+# `TaskDispatchWorker.reply()` as `len(DispatchRegistry) + len(tasks) >
+# MAX_INFLIGHT_TASKS`, before it starts any exec job (§0.3 行为约定
+# 1/2/3). Contract's own C-19 步骤2 explicitly allows triggering this with
+# a single turn that makes the delegate LLM fan out more than the cap in
+# one shot ("单任务或诱导第二个 LLM fan out 出多条均可,只要 当前在途数 +
+# len(tasks) > 3") — this file uses that route: one turn asking for 4
+# independent background write-ups, so even a **fresh, empty** registry
+# (0 + 4 > 3) trips the same rejection path.
+#
+# This was chosen over "dispatch 3 real tasks first, then a 4th" after
+# measuring that route empirically (see backend-notes.md): in this
+# environment the real `openclaw agent` backend finishes a single dispatch
+# in single-digit seconds regardless of requested essay length, and
+# `DispatchRegistry.remove()` fires as soon as each task's terminal message
+# arrives — so an entry's actual in-flight window (add → remove) measured
+# only ~2-4s, shorter than the time it takes to sequentially issue three
+# separate dispatch turns through the conversational interface. Sequencing
+# three real dispatches could not reliably hold 3 simultaneous registry
+# entries long enough to catch a 4th; the fan-out route sidesteps the
+# timing question entirely (no dependency on any prior dispatch's real
+# completion time), matching the contract's own "整批拒绝" wording (§0.3
+# 行为约定3: fan-out 一次性超限时全有全无, 不做部分截断) more directly than
+# a sequential build-up would anyway.
+#
+# Run it (two terminals, both in server/):
+#
+#   NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
+#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
+#     pipecat eval run evals/dispatch_capacity_reached.yaml -v --logs-dir eval-runs
+#
+# 判据(逐条对应契约期望①②③④,contract §1 C-19): exit code 0 here (④, judge
+# below, 判据取 C-19 原文) plus, external to this file,
+# /tmp/pipecat-dispatch.txt 核对 ①无任何 `[openclaw-exec] dispatched`
+# 日志行(exec worker 零新增 job)②`task_dispatch:reply` 的
+# `capacity-reached inflight=0 incoming=4 max=3` 告警行 ③`dispatch_task`
+# 的 `result_callback` 载荷含 `"accepted": false` 与
+# `In-flight task limit (3) reached` 子串 — 见 backend-notes.md 附实测日志
+# 摘录。
+#
+# KNOWN CURRENT FAILURE (measured, reproducible 2/2 clean runs — see
+# backend-notes.md RISKS): 判据①②③ pass every time; the corrected 2nd
+# `response` this file waits for (④) currently never arrives — the LLM
+# call that would produce it (context ending in the async_tool "finished"
+# developer-role message, no trailing user turn) is rejected by the 8045
+# gateway with `Error code: 400 - Requests ending with a model turn are
+# not supported` (same failure shape bot.py's own `seed_greeting_messages`
+# docstring already documents for a bare developer-role turn). Net effect:
+# the *only* line the user actually hears is the provisional, pre-result
+# one, which always claims success — the fast brain currently has no
+# working path to verbally correct itself once a dispatch is rejected.
+# Not fixable from this file (server/evals/ carries no Python) — flagged
+# to design/backend for `dual_brain.py`/`bot.py` context-shape review.
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  # Absorb the on_client_ready greeting turn before sending the real
+  # question (see smoke.yaml — sending user text as turn 0 risks an
+  # interruption that corrupts context, reproduced 20260801).
+  - expect:
+      - event: response
+
+  - user: "帮我在后台分别写四篇不同主题的说明，作为四个独立的后台任务分别派发，都不用现在念给我听：第一篇主题是光合作用；第二篇主题是细胞分裂；第三篇主题是遗传变异；第四篇主题是蛋白质合成。"
+    expect:
+      - event: function_call
+        calls:
+          - name: dispatch_task
+      # `dispatch_task` is an *async* tool (framework-level: the model may
+      # speak a provisional line the instant it calls the tool, before the
+      # tool's real result lands, per the "async_tool"/"status: running"
+      # protocol baked into every function-calling turn) — measured on this
+      # scenario (backend-notes.md): that provisional line always echoes
+      # the delegate LLM's own optimistic `answer` ("already dispatched"),
+      # written before it knew about the capacity rejection, then a second,
+      # corrected response follows once the real `{"accepted": false,
+      # "error": "...In-flight task limit..."}` result reaches the fast
+      # brain. The first `response` below is that provisional line (not
+      # judged — expected, not asserted on); the judge applies to the
+      # second, which is the one contract C-19 期望④ actually describes.
+      - event: response
+      - event: response
+        eval: "回复表达了现在派不了新任务/已经有任务在跑,没有声称已经派发或已经完成"
