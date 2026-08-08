@@ -72,6 +72,12 @@ from pipecat.tests.utils import SleepFrame, run_test
 
 import prompts
 
+# task-dispatch (C4 派活, T-6): `task_dispatch.py` already exists (T-4
+# delivered it before this task starts), so no ModuleNotFoundError guard is
+# needed here — unlike `dual_brain` above, whose guard dates back to when
+# T3.1 was authored before `dual_brain.py` existed.
+import task_dispatch
+
 
 def _message_field(message, field: str):
     """Safely read a field from an `LLMMessagesAppendFrame.messages[i]` entry.
@@ -1100,6 +1106,83 @@ class TestAssemblePipeline:
         assert isinstance(pushed, RTVIServerMessageFrame), "push 的帧类型必须是 RTVIServerMessageFrame"
         assert pushed.data["type"] == "slow-brain-failed", "面板消息 data.type 必须是 slow-brain-failed"
         assert pushed.data["turn"] == 1, "面板消息里的 turn 必须与日志行、material_filter.turn 三者一致"
+
+    # -- task-dispatch (C4 派活, T-6) L2 结构断言 --------------------------
+    #
+    # C-09 步骤1(契约 §1 / design.md §E L2):在本既有类内扩写,沿用
+    # `test_pipeline_shape`/`test_rtvi_ignores_slow_branch` 同款
+    # "assemble_pipeline() 一次、断言其返回结构" 手法,不新起断言文件、不新增
+    # 模块缓存强制重载手法(D-003 守法③;`bot_module` fixture 的重载定义点
+    # 唯一落在 `conftest.py`,本类自身不新增该手法,详见 task 卡 T-6 Interfaces 节)。
+
+    @staticmethod
+    def _fast_and_slow_branches(assembled):
+        """解析 `ParallelPipeline` 的两个分支(快脑/慢脑),与
+        `test_pipeline_shape` 内联的同一手法抽成 helper,供本轮新增的多个
+        测试方法复用,不重复解析逻辑。"""
+        parallel = next(
+            p for p in assembled.pipeline.processors if isinstance(p, ParallelPipeline)
+        )
+        branches = parallel.processors
+        return branches[0].processors, branches[1].processors
+
+    def test_dispatch_injector_at_fast_branch_head(self, bot_module):
+        """C-09 步骤1 / design.md §E L2:新增的 `_DispatchMaterialInjector`
+        位于快脑分支头部,且对外输出分支数量与改动前一致(仍仅快脑分支含
+        `transport.output()`/TTS)——与本类既有 `test_pipeline_shape` 断言
+        "consumer 必须在快脑分支内、慢脑分支不得含输出件"是同一形状的直接
+        延伸(task 卡 T-6 Interfaces 节)。"""
+        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+
+        transport = self._FakeTransport()
+        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+
+        fast_branch, slow_branch = self._fast_and_slow_branches(assembled)
+        # `fast_branch[0]` 是分支内部的 `PipelineSource` 标记(框架内部实现细
+        # 节,非"真实"处理器),同款既有断言手法(`test_pipeline_shape` 的
+        # `consumer_idx`)用相对次序而非硬编码下标 0 —— 这里同样断言注入器
+        # 是分支内最早出现的真实处理器,严格早于既有 consumer。
+        consumer_idx = next(
+            i for i, p in enumerate(fast_branch) if isinstance(p, ConsumerProcessor)
+        )
+        injector_idx = fast_branch.index(assembled.injector)
+        assert injector_idx < consumer_idx, "注入器必须在快脑分支头部,位于既有 consumer 之前"
+        assert assembled.injector not in slow_branch, "注入器不得出现在慢脑分支"
+        assert transport.output() in fast_branch, "transport.output() 必须仍在快脑分支内"
+        assert transport.output() not in slow_branch, "慢脑分支不得含 transport.output()"
+        assert assembled.tts in fast_branch, "TTS 必须仍在快脑分支内"
+        assert assembled.tts not in slow_branch, "慢脑分支不得含 TTS"
+
+    def test_dispatch_tools_registered_on_fast_context(self, bot_module):
+        """`fast_context.tools` 恰含两个派活工具(契约 §0.2 T1/T2,design.md
+        §E L2:"fast_context.tools 恰含两个工具")。"""
+        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+
+        transport = self._FakeTransport()
+        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+
+        tools_schema = assembled.fast_context.tools
+        registered = {wrapper.function for wrapper in tools_schema.direct_functions}
+        assert registered == {task_dispatch.dispatch_task, task_dispatch.get_task_status}, (
+            "fast_context.tools 必须恰含 dispatch_task 与 get_task_status 两个工具"
+        )
+        assert len(tools_schema.direct_functions) == 2, "fast_context.tools 不得含重复/多余项"
+
+    def test_dispatch_app_resources_and_new_fields(self, bot_module):
+        """`app_resources` 非空;`AssembledPipeline` 新增四字段可取(契约
+        §0.1/数据模型 §2,design.md §E L2)。"""
+        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+
+        transport = self._FakeTransport()
+        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+
+        app_resources = assembled.worker.app_resources
+        assert app_resources is not None, "app_resources 必须非空"
+        assert app_resources.registry is assembled.dispatch_registry
+        assert isinstance(assembled.injector, task_dispatch._DispatchMaterialInjector)
+        assert isinstance(assembled.dispatch_worker, task_dispatch.TaskDispatchWorker)
+        assert isinstance(assembled.exec_worker, task_dispatch.OpenClawExecWorker)
+        assert isinstance(assembled.dispatch_registry, task_dispatch.DispatchRegistry)
 
 
 if __name__ == "__main__":

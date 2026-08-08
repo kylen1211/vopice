@@ -20,6 +20,9 @@ _FAKE_REQUIRED_ENV = {
     "LLM_API_KEY": "sk-test-key",
     "LLM_MODEL": "gemini-3.6-flash-high",
     "SLOW_LLM_MODEL": "gemini-3-pro",
+    # task-dispatch (C4 派活) T-5 新增必需项（server/config.py §0.6）——T-6 交接缝隙
+    # 修复：T-5 加了这一项但当时未同步这里，主会话核实后追加授权本卡补齐。
+    "OPENCLAW_AGENT_ID": "dev",
     "SONIOX_API_KEY": "soniox-test-key",
     "ELEVENLABS_API_KEY": "elevenlabs-test-key",
     "ELEVENLABS_VOICE_ID": "voice-test-id",

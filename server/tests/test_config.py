@@ -16,11 +16,15 @@ REQUIRED_ENV = {
 
 # fast-slow-brain design §6.2 / RTM：1 期 5 项必需项被新 8 项取代，
 # OPENAI_MODEL/KOKORO_VOICE_ID 不再必需（U1/U2/U6 用此常量，见 T1.1）。
+#
+# task-dispatch (C4 派活) T-5 新增第 9 项必需项 OPENCLAW_AGENT_ID（server/config.py
+# §0.6，会话键模板 agent:{agent_id}:... 的 agent_id 段）——T-6 独占路径同步项。
 NEW_REQUIRED_ENV = {
     "LLM_BASE_URL": "http://127.0.0.1:8045/v1",
     "LLM_API_KEY": "sk-test-key",
     "LLM_MODEL": "gemini-3.6-flash-high",
     "SLOW_LLM_MODEL": "gemini-3-pro",
+    "OPENCLAW_AGENT_ID": "dev",
     "SONIOX_API_KEY": "soniox-test-key",
     "ELEVENLABS_API_KEY": "elevenlabs-test-key",
     "ELEVENLABS_VOICE_ID": "voice-test-id",
@@ -50,6 +54,7 @@ def test_missing_key_lists_all_missing(monkeypatch):
     assert "LLM_BASE_URL" in message
     assert "LLM_API_KEY" in message
     assert "SLOW_LLM_MODEL" in message
+    assert "OPENCLAW_AGENT_ID" in message
     assert "SONIOX_API_KEY" in message
     assert "ELEVENLABS_API_KEY" in message
     assert "ELEVENLABS_VOICE_ID" in message
