@@ -21,7 +21,8 @@ values — the server refuses to start if any required one is missing (fails
 fast, lists what's missing). This checks *presence*, not *reachability*: if
 the values are present but the gateway itself isn't actually running, the
 server still starts — the first LLM call will just fail (non-fatal, logged;
-see the known-gaps note in §13 of `openspec/changes/pipecat-native-p1/design.md`
+see the known-gaps note in §13 of
+`~/git/voice-translate-v2/openspec/changes/archive/2026-08-01-pipecat-native-p1/design.md`
 for what's and isn't surfaced to the user when that happens).
 
 ## Configuration
@@ -62,17 +63,17 @@ for what's and isn't surfaced to the user when that happens).
    | `LLM_BASE_URL` | Local OpenAI-compatible gateway URL (1 期: `:8045`) |
    | `LLM_API_KEY` | Gateway key |
    | `LLM_MODEL` | 快脑 model name the gateway routes to |
-   | `SLOW_LLM_MODEL` | 慢脑 model name the gateway routes to — deliberately a slower/deeper model than `LLM_MODEL` (see `openspec/changes/fast-slow-brain/design.md` §6.2) |
+   | `SLOW_LLM_MODEL` | 慢脑 model name the gateway routes to — deliberately a slower/deeper model than `LLM_MODEL` (see `openspec/changes/archive/2026-08-03-fast-slow-brain/design.md` §6.2) |
 
    See `.env.example` for the rest of the required variables.
 
    This is a cloud-provider setup requiring reachable APIs and paid keys,
    not the local-CPU Whisper/Kokoro setup this project started with. The
    multi-sentence playback overlap tracked in
-   `docs/backlog.md` B2 (root-caused against the old Kokoro/local-CPU TTS)
+   `pipeline/debts.md` D-002 (root-caused against the old Kokoro/local-CPU TTS)
    was re-checked under ElevenLabs at 第9组 M3 (2026-08-03 manual dogfood):
    **did not reproduce** — multi-sentence playback was normal, no
-   overlap/stuck state. See B2 for the caveat on why this doesn't retire
+   overlap/stuck state. See D-002 for the caveat on why this doesn't retire
    the entry outright.
 
 4. **Run the bot**:

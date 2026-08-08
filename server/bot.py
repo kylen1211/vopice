@@ -246,7 +246,7 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
     slow_material_filter = dual_brain.build_slow_material_filter()
     slow_material_filter.bind_context(slow_context)
 
-    # B5 修法(docs/backlog.md)：旁听快脑原始文本，不经 TTS 排队，供慢脑的
+    # D-005 修法(pipeline/debts.md,原 B5)：旁听快脑原始文本，不经 TTS 排队，供慢脑的
     # 完成注入消息在触发重新生成前提醒快脑"你刚才已经这样回答过"，避免快脑
     # 因看不到自己已答内容而把问题从头重答一遍。会话隔离，同一 rationale
     # 见 `dual_brain.build_fast_answer_tap` docstring。

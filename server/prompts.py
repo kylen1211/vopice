@@ -31,7 +31,7 @@ CAPABILITY_BOUNDARY_SECTION = (
 LANGUAGE_SECTION = "Always reply in Chinese (Mandarin), regardless of the language of the input text."
 
 # 简洁段(用户 2026-08-03 要求)：快脑回答尽量简洁，直接给核心内容，不铺垫、
-# 不啰嗦。副作用是缓解 B5(docs/backlog.md)——回答越短，TTS 播报耗时越短，
+# 不啰嗦。副作用是缓解 D-005(pipeline/debts.md,原 B5)——回答越短，TTS 播报耗时越短，
 # 慢脑补充触发时"快脑自己那句话还没写进 context"这个窗口也就越小；这只是
 # 概率性缓解、不是根治(根治靠 _FastAnswerTap 旁听录音机)，两者配合使用。
 CONCISENESS_SECTION = (

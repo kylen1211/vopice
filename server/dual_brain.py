@@ -255,7 +255,7 @@ def build_slow_material_filter() -> _SlowMaterialFilter:
 class _FastAnswerTap(FrameProcessor):
     """Passthrough tap that shadows the fast brain's own text output (B5 修法).
 
-    B5 根因(`docs/backlog.md`)：快脑自己那句回答要真正写进 `fast_context`，
+    D-005 根因(`pipeline/debts.md`,原 B5)：快脑自己那句回答要真正写进 `fast_context`，
     依赖 `LLMFullResponseEndFrame` 被 TTS 内部按音频播放顺序释放的队列放行
     ——这个延迟跟回答长度成正比。慢脑"素材已齐"的注入若在这个窗口内触发，
     快脑因看不到自己已经答过，会把问题从头重答一遍。

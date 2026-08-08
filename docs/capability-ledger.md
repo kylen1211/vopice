@@ -1,6 +1,7 @@
 # 2 期能力账单对照表(草稿,待用户核)
 
-> 每项能力 = 旧库参考 + pipecat 官方对应件 + 新骨架现状。2 期迭代方案与门一 PRD 从此表推导。
+> 每项能力 = 旧库参考 + pipecat 官方对应件 + 新骨架现状。2 期迭代方案与各变更 prd.md 从此表推导。
+> **进度回写(2026-08-08)**:C3 快慢脑已完成归档;C2 只做了 provider 层。详见文末「能力二分」表的状态列。
 > 口径(2026-08-02 用户裁决):防捕获去除;**派活与慢脑是两个独立功能**;陪练=配置态不单列;同声翻译+面试辅助是仅有的两个"实际要加的功能",放最后。
 > 状态:✅ 新骨架已有 / ⚠️ 有但有债 / ❌ 未做 / 📄 仅设计。旧库定位细节查 `legacy-capability-index.md`,官方资料取数查 `official-resources-map.md`。
 
@@ -31,7 +32,7 @@
 | 打断 | voice-interaction R9-R11 | `fundamentals/interruptions`、`turn-management-interruption-config.py` | ⚠️ | 有但未专测(R2) |
 | 语义轮次 | butler.py:507 | **`LocalSmartTurnAnalyzerV3`** + `turn-management-smart-turn-local.py` | ❌ | 已核(2026-08-02):**V3 是框架默认停顿策略**(`turns/user_turn_strategies.py:46`),连显式构造都不用,确认默认生效+调参即可 |
 | 外放回声(AEC) | 回声隔离 `vt/audio/` | 浏览器 AEC(网页/Electron 白捡);官方 audio filters 全是**降噪类无 AEC 件**(`KrispVivaFilter`/koala/rnnoise/aic,无 `KrispFilter` 类名) | ⚠️ | 网页端已白捡;桌面端选型定成败 |
-| STT/TTS/LLM 可插拔 | `vt/providers/registry.py`、`va/services/llm_factory.py` | service 构造注入 + `ServiceSwitcher` | ❌ | 现硬编码;改造方向明确(核对结论 4) |
+| STT/TTS/LLM 可插拔 | `vt/providers/registry.py`、`va/services/llm_factory.py` | service 构造注入 + `ServiceSwitcher` | ⚠️ | **provider 层已做**(2026-08-08:STT Soniox/Deepgram、TTS ElevenLabs/Cartesia,config 驱动 + 惰性 import),未走流程见债务 D-008;**运行时 `ServiceSwitcher` 仍未做** |
 | 场景装配/开关(陪练在此层) | `va/scenarios/` 配方 + dual-pipeline-core | 官方无场景配方层;薄装配(llm_factory 模式) | ❌ | **陪练=换 prompt/换 LLM,随此层自然获得** |
 | 断连韧性、云 API 失败恢复 | scenario-assembly R17/R18 | `client/concepts/session-lifecycle` | ❌ | B1 断线重连现在还是坏的 |
 | 出错口头告知 | — | ErrorFrame→TTS 方向(1 期未验证) | ❌ | REQ-004 backlog |
@@ -43,7 +44,7 @@
 
 | 子能力 | 旧库参考 | 官方对应件 | 现状 | 备注 |
 |---|---|---|---|---|
-| 快脑先答→慢脑深析→回流补充 | **`vt/processors/assist.py`(成功版)**;简化版 `va/processors/assist_answer.py` | 无现成件;组装件=ParallelPipeline、async FrameProcessor、producer/consumer;**最佳参照实例=`features-concurrent-llm-evaluation.py`(双 LLM 并行,2026-08-02 核出)**;注意 producer/consumer examples 零用例但官方 tests 有 5 用例(`tests/test_producer_consumer.py`,含跨 ParallelPipeline 分支搬运 `test_produce_parallel_pipeline_no_passthrough`,即快慢脑接法;2026-08-02 更正) | ❌ | 2 期核心;NFR 旧标准可参考:首响 ≤1s、衔接静默 ≤2s、不自相矛盾(spec R7/R8) |
+| 快脑先答→慢脑深析→回流补充 | **`vt/processors/assist.py`(成功版)**;简化版 `va/processors/assist_answer.py` | 无现成件;组装件=ParallelPipeline、async FrameProcessor、producer/consumer;**最佳参照实例=`features-concurrent-llm-evaluation.py`(双 LLM 并行,2026-08-02 核出)**;注意 producer/consumer examples 零用例但官方 tests 有 5 用例(`tests/test_producer_consumer.py`,含跨 ParallelPipeline 分支搬运 `test_produce_parallel_pipeline_no_passthrough`,即快慢脑接法;2026-08-02 更正) | ✅ | **已完成**(fast-slow-brain 变更,2026-08-03 归档 gate=WAIVED);能力规格 `docs/specs/dual-brain.md`,设计契约 `openspec/changes/archive/2026-08-03-fast-slow-brain/design.md`;遗留债务 D-004(慢脑跑偏)/D-005(重复作答待真机验)/D-006/D-007 |
 
 ## G3 · 派活(独立功能)
 
@@ -107,15 +108,15 @@
 
 ### 核心能力
 
-| # | 能力 | 出处 |
-|---|---|---|
-| C1 | 桌面客户端载体(壳 + 悬浮面板 + 语音任务入口) | G0 全部 |
-| C2 | 服务可插拔 + 场景装配层(使能层:陪练配置态、同传/面试均挂此层) | G1 |
-| C3 | 快慢脑(快答→深析→回流续接) | G2 全部 |
-| C4 | 派活(派发/状态/多任务/中止 + 不中断 + 完成确认铁律 + 授权审计 + 手动接管) | G3 全部 |
-| C5 | 页面监控(浏览器采集 + 截屏 VLM + AT-SPI2 + 感知降级/注入防线) | G4 全部 |
-| C6 | 同声翻译(真功能①,放最后) | 场景层 |
-| C7 | 面试辅助(真功能②,放最后) | 场景层 |
+| # | 能力 | 出处 | 状态(2026-08-08) |
+|---|---|---|---|
+| C1 | 桌面客户端载体(壳 + 悬浮面板 + 语音任务入口) | G0 全部 | ❌ 未起 |
+| C2 | 服务可插拔 + 场景装配层(使能层:陪练配置态、同传/面试均挂此层) | G1 | ⚠️ provider 层已做(债务 D-008);ServiceSwitcher + 装配层未做 |
+| C3 | 快慢脑(快答→深析→回流续接) | G2 全部 | ✅ **已完成**(2026-08-03 归档);带 D-004/D-005/D-006/D-007 |
+| C4 | 派活(派发/状态/多任务/中止 + 不中断 + 完成确认铁律 + 授权审计 + 手动接管) | G3 全部 | ❌ 未起(旧流程曾建空壳目录,已删) |
+| C5 | 页面监控(浏览器采集 + 截屏 VLM + AT-SPI2 + 感知降级/注入防线) | G4 全部 | ❌ 未起 |
+| C6 | 同声翻译(真功能①,放最后) | 场景层 | ❌ 未起 |
+| C7 | 面试辅助(真功能②,放最后) | 场景层 | ❌ 未起 |
 
 ### 优化方案
 
@@ -124,8 +125,8 @@
 | O1 | 打断专测(有但未专测) | G1 | — |
 | O2 | 语义轮次:确认 V3 默认生效 + 调参 | G1 | — |
 | O3 | AEC:网页已白捡;桌面端随 C1 选型连带定 | G1 | C1 |
-| O4 | 断连韧性(B1 重连修复 + 云 API 失败恢复) | G1 | — |
-| O5 | TTS 播放完整性(B2,`stop_frame_timeout_s` 修法已验证) | G1 | — |
+| O4 | 断连韧性(**债务 D-001** 重连修复 + 云 API 失败恢复) | G1 | — |
+| O5 | TTS 播放完整性(**债务 D-002**,`stop_frame_timeout_s` 修法已验证) | G1 | — |
 | O6 | 出错口头告知(ErrorFrame→TTS) | G1 | — |
 | O7 | 会话上下文 / 语言模板会话绑定增强 | G1 | — |
 | O8 | 音频设备自检/失效检测(桌面端才需要) | G1 | C1 |

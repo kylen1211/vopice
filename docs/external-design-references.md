@@ -1,6 +1,6 @@
 # 外部方案参考(已核实数据,自含版)
 
-> 用途:**方案参考**——设计期(门二)借鉴外部同类项目的契约与机制,不重开框架选型(pipecat 已定)。
+> 用途:**方案参考**——设计期(dev-pipeline S2a)借鉴外部同类项目的契约与机制,不重开框架选型(pipecat 已定)。
 > 本文自含全部关键内容,原始调研目录(`~/research/` 下相关话题)清理后不影响使用。
 > 核实方式:GitHub API / gh code search / PyPI / 本地 pipecat clone 源码,核实日期 2026-08-01~02。未核实项显式标注。
 
@@ -44,7 +44,7 @@
 
 另:旧项目成功版快慢脑在 `~/git/voice-translate-v2` 的 `vt/processors/assist.py`(账单 G2 已录)。
 
-### 2b. 专业快慢脑方案(2026-08-02 补检,详表见 `~/git/voice-agent/openspec/changes/fast-slow-brain/research.md` §5 与 `~/research/2026-08-02-快慢脑专业方案调研/`)
+### 2b. 专业快慢脑方案(2026-08-02 补检,详表见 `~/git/voice-agent/openspec/changes/archive/2026-08-03-fast-slow-brain/research.md` §5 与 `~/research/2026-08-02-快慢脑专业方案调研/`)
 
 - **Talker-Reasoner**(DeepMind,arXiv:2410.08328):恒并发 + belief state 共享内存回流 + 快脑唯一发言——我方 2 期方案的范式正名;无官方代码。
 - **ConvFill**(华盛顿大学,arXiv:2511.07397,**开源** `vysri/conversational-infill`):知识块短语流 + 短语级追加续答 + 计时阈值填充语;与我方"恒双脑/实时增量注入/分句融入/垫话兜底"四项裁决逐条同构,门二工程参照首选。
