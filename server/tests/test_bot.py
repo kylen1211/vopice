@@ -39,6 +39,7 @@ def _make_config(**overrides):
         tts_voice="expected-voice-id",
         tts_model="eleven_flash_v2_5",
         stt_model="stt-rt-v5",
+        openclaw_agent_id="dev",
     )
     base.update(overrides)
     return Config(**base)
