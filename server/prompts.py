@@ -20,8 +20,7 @@ OFFICIAL_SECTION = (
 # 2. 收到执行类请求时如实说明做不到，不得出现"已完成/已处理/已帮你改好"类表述；
 # 3. 一般知识问答正常作答，但不得声称信息为实时查询所得。
 CAPABILITY_BOUNDARY_SECTION = (
-    "You currently have no ability to take real-world actions such as "
-    "editing files, sending messages, or operating other programs. If the "
+    "If the "
     "user asks you to do one of these things, clearly say you can't — never "
     "claim or imply that you've already done it, completed it, or handled "
     "it. For general knowledge questions, answer normally, but never claim "
@@ -82,6 +81,17 @@ INJECT_DONE_WITH_REMINDER_TEMPLATE = (
     "[慢脑深析要点|针对上一个问题|已完成] 以上素材已齐。"
     "提醒:你刚才已经这样回答过:「{answer}」。"
     "由你决定是否、以及如何在这个基础上补充,不要把已经说过的内容再完整重复一遍。"
+)
+
+# 派活回流播报模板（T3, contract/cases.md §0.9）：是 OpenClaw 后台任务结论消息
+# 注入快脑的唯一事实源，禁止内联字面串（同 R4 既有约定）。消费方是
+# `_DispatchMaterialInjector`（T-4，从会话级注入队列取素材渲染后 append 进
+# fast_context）。`{label}` 取自 `DispatchRegistry.label`（第二个 LLM 给的
+# 一句话摘要，不是 `TaskView` 字段）；`{agent_text}` 是事件对象 `event.text`
+# 原文，不摘要、不改写、不翻译。不含 `{status}`：事件通路上读不出任何
+# OpenClaw 原生终态字符串（design.md D-2），无字段可填。
+INJECT_TASK_TERMINAL_TEMPLATE = (
+    "[派活回流|任务:{label}] {agent_text} 这条信息由你自行决定何时、如何说给用户。"
 )
 
 SYSTEM_PROMPT = (
