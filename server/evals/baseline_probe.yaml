@@ -1,0 +1,75 @@
+name: baseline_probe
+
+# C-17 (contract/cases.md, design.md R-7 / 坑 P57) — LLM behavior baseline,
+# sampled BEFORE any product-code change lands (task-dispatch T-0, must run
+# ahead of T-1..T-9). This scenario is reused verbatim for the post-change
+# sample (T-8, C-17 step 4) so the two runs are directly comparable.
+#
+# Fixed 8-question set per C-17 step 1: 2 knowledge Q&A / 2 chit-chat /
+# 2 execution requests / 2 multi-turn follow-ups. Per C-17 step 1 original
+# wording, every `expect:` here is a bare `event: response` — NO semantic
+# `eval:` criteria. The point is to capture real response text for manual
+# side-by-side diffing (pre vs. post), not to pass/fail a judgment — see
+# contract/cases.md C-17 "不设自动阈值".
+#
+# The two execution-request turns (Q5/Q6) are expected to be refused today
+# by prompts.py::CAPABILITY_BOUNDARY_SECTION ("You currently have no ability
+# to take real-world actions..."). That refusal wording is exactly what T-3
+# will change (CAPABILITY_BOUNDARY_SECTION's "无执行能力" sentence is removed
+# per design.md §3 migrate step) — this baseline exists to diff against it.
+#
+# The two follow-up turns (Q7/Q8) deliberately reuse pronouns ("她"/"那...呢")
+# referring back to Q2 and Q6 respectively, to sample multi-turn context
+# retention as part of the same baseline.
+#
+#   uv run bot.py -t eval
+#   set -a && source .env && set +a
+#   PYTHONPATH=$(pwd) uv run pipecat eval run evals/baseline_probe.yaml -v -d --logs-dir eval-runs
+
+turns:
+  # bot.py's on_client_ready kicks off a greeting LLM call on connect; a turn
+  # with no `user:` waits for/absorbs it so Q1 below doesn't race it (see
+  # smoke.yaml — sending user text as turn 0 risks an interruption that
+  # corrupts context). Not one of the 8 archived questions.
+  - expect:
+      - event: response
+
+  # Q1 — 知识问答 (static textbook fact)
+  - user: "光合作用的基本化学方程式是什么？"
+    expect:
+      - event: response
+
+  # Q2 — 知识问答 (sets up Q7's follow-up)
+  - user: "居里夫人一共获得过几次诺贝尔奖？分别是哪两个学科？"
+    expect:
+      - event: response
+
+  # Q3 — 闲聊
+  - user: "你好呀，今天心情怎么样？"
+    expect:
+      - event: response
+
+  # Q4 — 闲聊
+  - user: "你平时会不会觉得无聊呀？"
+    expect:
+      - event: response
+
+  # Q5 — 执行类请求 (expected to be refused pre-change)
+  - user: "帮我把浏览器里正在放的视频暂停一下"
+    expect:
+      - event: response
+
+  # Q6 — 执行类请求 (expected to be refused pre-change; sets up Q8's follow-up)
+  - user: "帮我订一张明天去上海的机票"
+    expect:
+      - event: response
+
+  # Q7 — 多轮追问, 追问 Q2 ("她" = 居里夫人)
+  - user: "她后来是怎么去世的？跟她的研究工作有关系吗？"
+    expect:
+      - event: response
+
+  # Q8 — 多轮追问, 追问 Q6 (同一趟上海行程，换一种交通方式)
+  - user: "那如果坐高铁去呢，大概要多久？"
+    expect:
+      - event: response
