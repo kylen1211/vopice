@@ -24,6 +24,7 @@ Run the bot using::
     uv run bot.py
 """
 
+import os
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
@@ -58,6 +59,8 @@ from pipecat.workers.runner import WorkerRunner
 import dual_brain
 import prompts
 import sentinel
+import task_dispatch
+import task_dispatch_contract
 from config import Config, load_config
 
 load_dotenv(override=True)
@@ -152,6 +155,13 @@ class AssembledPipeline:
     producer: ProducerProcessor
     consumer: ConsumerProcessor
     rtvi_observer_params: RTVIObserverParams
+    # task-dispatch (C4 派活) design.md 方案 C 步骤4⑤ / 契约 §0.1: four
+    # structural-assertion handles for T-6's L2 tests — same "expose every
+    # object the structural tests need" rationale as the fields above.
+    injector: task_dispatch._DispatchMaterialInjector
+    dispatch_worker: task_dispatch.TaskDispatchWorker
+    exec_worker: task_dispatch.OpenClawExecWorker
+    dispatch_registry: task_dispatch.DispatchRegistry
 
 
 def make_pipeline_error_handler(
@@ -225,9 +235,41 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
             system_instruction=prompts.SLOW_BRAIN_PROMPT,
         ),
     )
+    # Task-dispatch (C4 派活) design.md 方案 C 步骤4②/7 · TaskDispatchWorker's
+    # delegate LLM — a third, independent LLMService instance, built the same
+    # way as fast_llm/slow_llm above (`build_dispatch_stack`'s `llm` kwarg
+    # docstring, server/task_dispatch.py). Reuses cfg.llm_model (the fast
+    # brain's model), not the deliberately-slow cfg.slow_llm_model: the
+    # `dispatch_task` tool call blocks the fast brain's own turn for as long
+    # as this delegate turn takes (contract §0.2 T1 timeout_secs=20.0), so it
+    # needs the fast, not the slow, model. No system_instruction — T-4's own
+    # end-to-end proof script (pipeline/task-dispatch/T-4-notes.md 附录
+    # `_build_llm`) built it this same minimal way and it worked: the
+    # UIWorker's single `reply` tool + its docstring is what drives the
+    # delegate turn (`ui_worker.py::_run_llm_turn`), not a separate system
+    # prompt (`prompts.py` is out of this task's 独占路径).
+    dispatch_llm = OpenAILLMService(
+        api_key=cfg.llm_api_key,
+        base_url=cfg.llm_base_url,
+        name="TaskDispatchLLM",
+        settings=OpenAILLMService.Settings(model=cfg.llm_model),
+    )
 
-    fast_context = LLMContext()
+    # ① K1 缺口在此被填 (design.md 方案 C 步骤4①): the two fast-brain tools
+    # (T-4/contract §0.2) go on fast_context.tools.
+    fast_context = LLMContext(tools=[task_dispatch.dispatch_task, task_dispatch.get_task_status])
     slow_context = LLMContext()
+
+    # ② design.md 方案 C 步骤4②: session-scoped stack (R5 工厂约定). Reads
+    # TASK_DISPATCH_CLI here, inside the function body, not at module scope
+    # (D-003 守法①, task 卡 T-5 验收用例4) — cli_override stays None on the
+    # production path.
+    stack = task_dispatch.build_dispatch_stack(
+        cfg.openclaw_agent_id,
+        llm=dispatch_llm,
+        cli_override=os.environ.get(task_dispatch_contract.ENV_TASK_DISPATCH_CLI),
+    )
+    injector = stack.build_injector()
 
     # Both aggregator pairs use ExternalUserTurnStrategies(): turn/VAD
     # management is driven once by the common VADProcessor/UserTurnProcessor
@@ -276,6 +318,11 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
             ParallelPipeline(
                 [
                     # Fast brain — the pipeline's only external output.
+                    # design.md 方案 C 步骤4②: injector goes at the branch
+                    # head, before the existing `consumer` (task-dispatch
+                    # terminal-report material, same slot rationale as the
+                    # slow-brain material consumer right after it).
+                    injector,
                     consumer,
                     fast_pair.user(),
                     fast_llm,
@@ -309,11 +356,18 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
 
     worker = PipelineWorker(
         pipeline,
+        # design.md 方案 C 步骤4③④: name= gives this worker its §0.1 bus
+        # addressing key (MAIN_WORKER_NAME — asserted by structural tests /
+        # log lines, matching the other two workers' own `name=` below);
+        # app_resources= fills K3 盘点缺口 (params.app_resources channel the
+        # two fast-brain tools read via FunctionCallParams.app_resources).
+        name=task_dispatch_contract.MAIN_WORKER_NAME,
         params=PipelineParams(
             enable_metrics=True,
             enable_usage_metrics=True,
         ),
         rtvi_observer_params=rtvi_observer_params,
+        app_resources=stack.app_resources,
     )
 
     worker.event_handler("on_pipeline_error")(
@@ -333,6 +387,10 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
         producer=producer,
         consumer=consumer,
         rtvi_observer_params=rtvi_observer_params,
+        injector=injector,
+        dispatch_worker=stack.dispatch_worker,
+        exec_worker=stack.exec_worker,
+        dispatch_registry=stack.registry,
     )
 
 
@@ -389,7 +447,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 
     runner = WorkerRunner(handle_sigint=False)
 
-    await runner.add_workers(worker)
+    # design.md 方案 C 步骤5: back-reference so the two fast-brain tools can
+    # reach `app_resources.main_worker.job(...)` (`worker.app_resources` is
+    # the exact same `AppResources` instance `stack.app_resources` passed to
+    # `PipelineWorker(app_resources=...)` above — a mutable dataclass, not a
+    # copy — so this mutation is visible through both handles).
+    worker.app_resources.main_worker = worker
+    await runner.add_workers(worker, assembled.dispatch_worker, assembled.exec_worker)
     await runner.run()
 
 

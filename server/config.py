@@ -17,11 +17,16 @@ _PHASE2_SCENARIOS = {"interview", "translate", "companion", "butler"}
 # OPENAI_MODEL/KOKORO_VOICE_ID 删除（同步删 .env.example 与 test_config.py 断言），
 # 新增慢脑 LLM + Soniox STT + ElevenLabs TTS 共 5 项。这 4 项与所选 provider 无关，
 # 任何组合都必需。
+#
+# task-dispatch (C4 派活) design.md 方案 C 步骤4/契约 §0.6：新增 OPENCLAW_AGENT_ID——
+# 派活会话键模板 `agent:{agent_id}:voice-agent-{token}` 的 agent_id 段，是本变更唯一
+# 新增的必需配置项（task 卡 T-5 独占字段定义点）。
 _BASE_REQUIRED_ENV_TO_FIELD = {
     "LLM_BASE_URL": "llm_base_url",
     "LLM_API_KEY": "llm_api_key",
     "LLM_MODEL": "llm_model",
     "SLOW_LLM_MODEL": "slow_llm_model",
+    "OPENCLAW_AGENT_ID": "openclaw_agent_id",
 }
 
 # 2026-08-03 决议：STT/TTS 各保留两家可选厂商，用 STT_PROVIDER/TTS_PROVIDER 选。
@@ -70,6 +75,7 @@ class Config:
     llm_api_key: str
     llm_model: str
     slow_llm_model: str
+    openclaw_agent_id: str
     stt_api_key: str
     tts_api_key: str
     tts_voice: str
