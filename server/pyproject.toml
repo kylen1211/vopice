@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Voice AI bot built with Pipecat"
 requires-python = ">=3.11"
 dependencies = [
-    "pipecat-ai[deepgram,elevenlabs,evals,openai,runner,silero,soniox,webrtc,whisper]==1.6.0",
+    "pipecat-ai[deepgram,elevenlabs,evals,mcp,openai,runner,silero,soniox,webrtc,whisper]==1.6.0",
 ]
 
 [dependency-groups]
