@@ -1,8 +1,58 @@
-# voice-agent · Backlog
+---
+debts:
+  - id: D-001
+    desc: 断开重连失败——WebRTC 断开后页面内再连,POST /start 返回 200 但客户端不再发 offer,连接卡死
+    module: client/
+    ttl: 2026-09-30
+    source: pipecat-native-p1
+  - id: D-002
+    desc: TTS 多句应答偶发卡死/重叠(Kokoro 慢速 CPU 场景根因已定位,ElevenLabs 下未复现)
+    module: server/bot.py
+    ttl: 2026-12-31
+    source: pipecat-native-p1
+  - id: D-003
+    desc: server/bot.py 模块顶层副作用逼测试用 sys.modules 手法绕过,建议改惰性单例
+    module: server/bot.py
+    ttl: 2026-12-31
+    source: fast-slow-brain
+  - id: D-004
+    desc: 连续追问时慢脑跑偏分析最早话题——击穿 design §5.2"位置即归属"契约假设
+    module: server/prompts.py
+    ttl: 2026-09-30
+    source: fast-slow-brain
+  - id: D-005
+    desc: 快脑重复作答——_FastAnswerTap 修法已实现但真机联测未确认,不据此关闭
+    module: server/dual_brain.py
+    ttl: 2026-09-30
+    source: fast-slow-brain
+  - id: D-006
+    desc: M2 慢脑失败面板提示可见性未验证(联测期间慢脑全程未失败,需故障注入或自然触发)
+    module: client/
+    ttl: 2026-12-31
+    source: fast-slow-brain
+  - id: D-007
+    desc: M8 空输出面板闪现观感未验证(需 D-005 修复后或自然遇到"有素材但判定无需补充"场景)
+    module: client/
+    ttl: 2026-12-31
+    source: fast-slow-brain
+  - id: D-008
+    desc: Deepgram/Cartesia 多 provider 能力未走任何流程直接合入,无需求与设计留痕
+    module: server/config.py
+    ttl: 2026-09-30
+    source: 73125d7
+---
 
-已知限制与待办事项,按发现时间倒序排列。
+# voice-agent · 项目债务簿
 
-## B1 · 断开重连失败(客户端 SDK 层)
+> dev-pipeline 唯一债务载体,跨变更存续。frontmatter 由 `ledger.sh debts-check` /
+> `pipeline-check.sh debts` 机检,正文是人读的根因详情。
+> 2026-08-08 由已废弃的 `docs/backlog.md`(旧三门流程载体)整体迁入,原文件已删除。
+> ttl 是复审到期日,不是承诺修复日;超期且命中变更触达模块时 s0 会阻断(exit 7),
+> 清偿或人工豁免后方可继续。
+
+---
+
+## D-001 · 断开重连失败(客户端 SDK 层) ← 原 B1
 
 - **现象**:WebRTC 连接断开后,在同一页面再次点击连接,`POST /start` 正常返回 200,但客户端不再发起
   `/sessions/{id}/api/offer` 请求,连接卡死(浏览器控制台无报错)。
@@ -10,13 +60,14 @@
   未见自定义连接状态管理代码——判断是上游客户端 SDK 断开后状态未清理干净导致,不是本项目 server 端
   代码问题。
 - **临时规避**:刷新页面(而非用页面内"断开重连")。
-- **裁决**:2026-08-01 dogfood 排障期间用户裁决暂不深挖客户端 SDK 源码,记 backlog。
+- **裁决**:2026-08-01 dogfood 排障期间用户裁决暂不深挖客户端 SDK 源码。
+- **对应路线图**:能力账单优化项 O4(断连韧性)。
 
-## B2 · TTS 多句应答偶发卡死/重叠——根因已定位,暂不修
+## D-002 · TTS 多句应答偶发卡死/重叠——根因已定位,暂不修 ← 原 B2
 
 - **现象**:一轮回复被拆成多句 TTS 分别合成时,播放偶发卡死(状态停在"说话中"但实际没声音,需手动打断才能
-  解开)或音频重叠。归档变更 `openspec/changes/archive/2026-08-01-pipecat-native-p1`(voice-translate-v2
-  仓库)tasks.md 2.3 / 4.4"新发现 1"最早记录的是"重叠",20260801-02 dogfood 期间新发现同一根因还会导致
+  解开)或音频重叠。旧库归档变更 `2026-08-01-pipecat-native-p1`(voice-translate-v2 仓库)
+  tasks.md 2.3 / 4.4"新发现 1"最早记录的是"重叠",20260801-02 dogfood 期间新发现同一根因还会导致
   "彻底卡死不出声"这种更严重的表现。
 - **根因(已用 venv 内实际运行的 `pipecat-ai` 1.6.0 源码 + 实测数据核实,非猜测)**:
   `pipecat/services/tts_service.py` 的 `TTSService.__init__` 有个 `stop_frame_timeout_s: float = 3.0`
@@ -30,15 +81,15 @@
   影响正常收尾判定(正常收尾走显式信号,3s 超时只是没收到显式信号时的兜底),只在本机慢速 CPU 合成长句
   的场景下才会触发。
 - **裁决**:2026-08-02 用户裁决记录根因即可,暂不改代码。
-- **M3 复验结论(2026-08-03,第 9 组人工联测,fast-slow-brain 变更)**:TTS 服务已从本机 Kokoro(纯 CPU)
+- **复验结论(2026-08-03,fast-slow-brain 第 9 组 M3 人工联测)**:TTS 服务已从本机 Kokoro(纯 CPU)
   切到 ElevenLabs(云端)——**本次真机联测未复现**,多句回复依次播放,面板逐句刷新,用户确认无卡死无
-  重叠。**不当作"已解决"关闭本条**:上面的根因分析(`stop_frame_timeout_s` 默认 3.0s vs 本机 Kokoro
-  CPU 合成长句 TTFB 踩线超时)是针对 Kokoro 场景定位的,ElevenLabs 是云端合成、延迟特性完全不同,本次
-  未复现更可能是"触发条件(本机 CPU 慢速合成)不再存在"而非"根因已被修复"——若未来又切回本机
-  TTS/更换到另一个可能慢速合成的 TTS 服务,该根因仍可能重新触发,届时仍应参考上面记录的修法
-  (显式调大 `stop_frame_timeout_s`)。
+  重叠。**不当作"已解决"关闭本条**:上面的根因分析是针对 Kokoro 场景定位的,ElevenLabs 是云端合成、
+  延迟特性完全不同,本次未复现更可能是"触发条件(本机 CPU 慢速合成)不再存在"而非"根因已被修复"——
+  若未来又切回本机 TTS/更换到另一个可能慢速合成的 TTS 服务,该根因仍可能重新触发,届时仍应参考上面
+  记录的修法(显式调大 `stop_frame_timeout_s`)。
+- **对应路线图**:能力账单优化项 O5。
 
-## B3 · `server/bot.py` 模块顶层副作用逼测试用 `sys.modules` 手法绕过——建议后续重构
+## D-003 · `server/bot.py` 模块顶层副作用逼测试用 `sys.modules` 手法绕过 ← 原 B3
 
 - **现象**:`bot.py` 顶层直接跑 `load_dotenv(override=True)` + `cfg = load_config()`(官方脚手架既定结构),
   任何 `import bot` 都会立刻读取真实环境变量。`server/tests/test_bot.py` 的 `bot_module` fixture 为了在
@@ -47,13 +98,12 @@
 - **风险**:`sys.modules` 是进程级全局状态操作,依赖 fixture teardown/setup 隐式顺序不出错;若未来引入
   `pytest-xdist` 并行,或其他测试文件也 `import bot`/`import config` 并假设单例语义,可能产生跨测试污染。
   当前(fast-slow-brain 第 1 组,2026-08-02)单文件场景下逻辑已核对正确、测试通过,但手法本身脆弱。
-- **根因**:副作用放在模块顶层而非函数内,是官方脚手架产物,不在本组任务卡改动范围内。
+- **根因**:副作用放在模块顶层而非函数内,是官方脚手架产物,不在当时任务卡改动范围内。
 - **修法方向(暂不做)**:把 `cfg = load_config()` 挪进 `bot()`/`run_bot()` 函数体或做成惰性单例,届时可去掉
   `test_bot.py` 里的 `sys.modules` 手法,换成更干净的依赖注入测试写法。
-- **裁决**:2026-08-02 第 1 组组末双裁决(security-reviewer 视角)MEDIUM 发现,判定不阻塞本组验收,记
-  backlog 供后续重构 `bot.py` 顶层结构时一并处理。
+- **裁决**:2026-08-02 第 1 组组末双裁决(security-reviewer 视角)MEDIUM 发现,判定不阻塞当期验收。
 
-## B4 · 连续追问场景下慢脑会"跑偏"分析最早话题而非当前话题——已批准契约(§5.2/§6.7①)存在缺口
+## D-004 · 连续追问场景下慢脑"跑偏"分析最早话题——已批准契约(§5.2/§6.7①)存在缺口 ← 原 B4
 
 - **现象**:fast-slow-brain 第 7 组 eval 实跑(`dual_brain_interrupt.yaml`/`dual_brain_supersede.yaml`,
   2026-08-03)两次独立复现:深问题(CAP 定理)→ 追问(供 R5-S1 用的一个简单问题 / 供 R7-S1 用的另一个
@@ -82,33 +132,29 @@
   代码判定,前提是慢脑产出的内容确实是针对最新问题的;若模型自己把话题跑偏,位置对了、内容却文不对
   题,快脑会把过时话题的材料当成当前话题的补充说出来)和**§6.7①慢脑 prompt 文本**(可能需要显式加一句
   "只分析最新一条用户消息,不要理会更早的问题")。
-- **裁决**:2026-08-03 用户裁决——本期口径"不做质量把控、整体跑通即可"(design.md 开工前已拍板),记
-  backlog,不在第 7 组内修复(任务卡范围只允许改 `server/evals/`,不许碰 `dual_brain.py`/`prompts.py`),
-  按原计划继续第 8/9 组。后续若要处理,建议路径:先补一次 mini 技术分析(强化 `SLOW_BRAIN_PROMPT` 显式
-  限定"只分析最新一条用户消息"+ 视情况在零输出轮次给 `slow_context` 补一条占位 assistant 消息维持角色
-  交替),过一轮轻量评审后再改,不当场直接改已批准的 prompt 契约文本。
+- **裁决**:2026-08-03 用户裁决——当期口径"不做质量把控、整体跑通即可"(design.md 开工前已拍板),
+  不在第 7 组内修复(任务卡范围只允许改 `server/evals/`,不许碰 `dual_brain.py`/`prompts.py`)。
+  后续若要处理,建议路径:先补一次 mini 技术分析(强化 `SLOW_BRAIN_PROMPT` 显式限定"只分析最新一条
+  用户消息"+ 视情况在零输出轮次给 `slow_context` 补一条占位 assistant 消息维持角色交替),过一轮轻量
+  评审后再改,不当场直接改已批准的 prompt 契约文本。
 
-## B5 · 快脑自己的应答未写入 context 就被慢脑补充触发重新生成——R4"补充自判"契约前提失效,导致重复作答
+## D-005 · 快脑自己的应答未写入 context 就被慢脑补充触发重新生成 ← 原 B5
 
 - **修法已实现(2026-08-03,`_FastAnswerTap` 旁听录音机)**:插在 `fast_llm` 和
-  `sentinel_filter`/TTS 之间(`bot.py::assemble_pipeline`),不经 TTS 那条按
-  播放顺序释放的队列,直接旁听快脑原始 `LLMTextFrame` 输出,记入
-  `last_answer`。慢脑`素材已齐`触发重新生成时(`dual_brain._SlowMaterialTransformer`),
-  若 `last_answer` 非空,注入文案换成 `prompts.INJECT_DONE_WITH_REMINDER_TEMPLATE`,
-  带上"你刚才已经这样回答过:……"的提醒,交给快脑自己判断补充还是不重答。
-  **不改变** R4 已批准的触发时机契约(何时触发慢脑注入这件事一行未动),
-  只改注入消息的**内容**。全套单测(pytest 43 passed)+ ruff + pyright 全绿。
+  `sentinel_filter`/TTS 之间(`bot.py::assemble_pipeline`),不经 TTS 那条按播放顺序释放的队列,直接
+  旁听快脑原始 `LLMTextFrame` 输出,记入 `last_answer`。慢脑`素材已齐`触发重新生成时
+  (`dual_brain._SlowMaterialTransformer`),若 `last_answer` 非空,注入文案换成
+  `prompts.INJECT_DONE_WITH_REMINDER_TEMPLATE`,带上"你刚才已经这样回答过:……"的提醒,交给快脑自己
+  判断补充还是不重答。**不改变** R4 已批准的触发时机契约(何时触发慢脑注入这件事一行未动),只改注入
+  消息的**内容**。全套单测 + ruff + pyright 当时全绿。
 - **仍是"降低复现概率"而非"从根上消除并发窗口"**:调研已确认官方
-  `LLMAssistantPushAggregationFrame` 方案证伪(聚合器的内容本身也被同一条
-  TTS 播放顺序队列拖住,提前提交只是交白卷),"等真正落盘再触发"方案会
-  正面推翻已批准的 R4 契约、需重新走门二——均已排除,旁听录音机是当前
-  唯一可行路径。真实效果(尤其"提醒是否真的让快脑放弃整段重答"这个语用
-  层面的判断,取决于快脑对提醒句的理解,不是机制层面能 100% 保证)待下次
-  真机联测确认,**不据此关闭本条**。
-
+  `LLMAssistantPushAggregationFrame` 方案证伪(聚合器的内容本身也被同一条 TTS 播放顺序队列拖住,提前
+  提交只是交白卷),"等真正落盘再触发"方案会正面推翻已批准的 R4 契约、需重新走评审——均已排除,旁听
+  录音机是当前唯一可行路径。真实效果(尤其"提醒是否真的让快脑放弃整段重答"这个语用层面的判断,取决于
+  快脑对提醒句的理解,不是机制层面能 100% 保证)**待下次真机联测确认,不据此关闭本条**。
 - **现象**:第 9 组 M6 人工真机联测(2026-08-03)实测发现——用户问"Java 分布式锁有什么方案"并追加
   "说核心内容、不要太多",快脑先给出一句简短(且明显被截断,只提了 ZooKeeper、漏了 Redis)的回答;
-  约 8 秒后慢脑补充素材注入完成(`role: "user"`,§6.1 本期固定角色)触发快脑重新生成,快脑却把整个
+  约 8 秒后慢脑补充素材注入完成(`role: "user"`,§6.1 当期固定角色)触发快脑重新生成,快脑却把整个
   问题从头完整重答了一遍(Redis + ZooKeeper 都完整讲了),用户听感是"同一条信息说了两遍"。
 - **根因(2026-08-03 主会话逐行核对 `bot.log`,turn=13)**:快脑自己那句简答在 `10:58:58.243`
   就已生成完毕(`OpenAILLMService#0 processing time: 1.682s`),距慢脑注入完成(`10:59:06.981`,
@@ -125,6 +171,28 @@
 - **影响**:直接击穿 R4"补充自判"契约的前提假设(design.md §737 行:补充需以"快脑看得见自己已答"为
   基础)——不是补充逻辑判断错了,而是判断赖以依据的输入(自己说过的话)在特定时序下会丢失,导致快脑
   退化成"从头重答",与 design.md:189 已知限制同源但触发条件更宽(不需要换快档就能复现)。
-- **裁决**:2026-08-03 用户裁决——与 B4 同一口径,记 backlog、不阻塞第 9 组剩余项,按本期"整体跑通
-  即可"继续推进,门三收尾时一并盘点。后续若要处理,建议先精确定位"快脑 assistant 消息丢失"的触发
-  路径(相邻两轮间隔过短导致的写入竞争 vs 其他机制),而非直接改 R4 触发条件或注入时机。
+- **后续建议**:先精确定位"快脑 assistant 消息丢失"的触发路径(相邻两轮间隔过短导致的写入竞争 vs
+  其他机制),而非直接改 R4 触发条件或注入时机。
+
+## D-006 · M2 慢脑失败面板提示可见性未验证 ← fast-slow-brain gate.yml uncovered
+
+- **原因**:2026-08-03 门三真机联测期间慢脑全程未失败(`bot.log` 零 `slow-failed` 命中),该观察项未触发。
+- **触发条件**:下次人工故障注入,或生产环境自然触发慢脑失败时验证。
+- **裁决**:用户 2026-08-03 批准 WAIVED 放行,不为专门验证另行补测。
+
+## D-007 · M8 空输出面板闪现观感未验证 ← fast-slow-brain gate.yml uncovered
+
+- **原因**:2026-08-03 门三会话零 ∅ 输出(素材有内容但被 D-005 缺陷导致误判为需要重答,而非判断
+  "无需补充"),该 UI 观感场景未触发。
+- **触发条件**:D-005 修复后,或自然遇到"有素材但快脑判定无需补充"场景时验证。
+- **裁决**:用户 2026-08-03 批准 WAIVED 放行。
+
+## D-008 · Deepgram/Cartesia 多 provider 能力未走流程直接合入
+
+- **现象**:提交 `73125d7`(feat,新增 deepgram STT 与 cartesia TTS)、`c9d6be9`(fix,按 provider
+  条件校验必需项)、`964eb3b`(docs)已合入分支,能力本身工作且带单测,但**未经任何需求/设计流程**,
+  也未登记进任何需求事实源。
+- **影响**:能力账单里 C2(服务可插拔 + 场景装配层)的实际完成度与文档记载不一致——账单标 ❌,
+  实际 provider 层已可插拔,但装配层(场景配方、运行时 `ServiceSwitcher`)仍未做。
+- **建议处置**:下次触达 `server/config.py`/`server/bot.py` 的变更里补一段现状说明,把 C2 的真实完成度
+  写进当次 prd.md 的现状盘点,不必倒补一份完整需求文档。
