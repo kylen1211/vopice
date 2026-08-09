@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import dataclasses
 import inspect
 import json
 import re
@@ -38,6 +39,7 @@ import unittest.mock
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 from pipecat.bus.messages import BusJobRequestMessage
 from pipecat.frames.frames import LLMMessagesAppendFrame
 from pipecat.pipeline.job_context import JobStatus
@@ -206,6 +208,18 @@ def test_task_dispatch_worker_has_no_job_group_symbols():
         assert forbidden not in source, f"TaskDispatchWorker 类体内不得出现 {forbidden!r}"
 
 
+def test_dispatch_registry_entry_is_frozen():
+    """task_dispatch_contract.py:158 `DispatchRegistryEntry` 声明
+    `@dataclass(frozen=True)`(类 docstring:"Pure dataclasses (fields only,
+    no behavior)"的不可变性设计属性,§5 集成闸门变异抽样 mutant③守卫:
+    `frozen=True`→`frozen=False`)——构造出的实例对任一字段赋值必须抛
+    `dataclasses.FrozenInstanceError`。"""
+    entry = task_dispatch.DispatchRegistryEntry(session_key="k", label="l", created_at=0.0)
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        entry.label = "mutated-after-construction"
+
+
 # ---------------------------------------------------------------------------
 # §0.2 T2 · tasks show 降级 (found: false, 不抛异常)
 # ---------------------------------------------------------------------------
@@ -240,6 +254,78 @@ class TestTasksShowDegrade(unittest.IsolatedAsyncioTestCase):
             },
             result,
         )
+
+
+def _make_exec_worker() -> task_dispatch.OpenClawExecWorker:
+    """`_poll_until_visible` 只是 `OpenClawExecWorker` 的一个不依赖 `start()`
+    的方法(不触碰 `self._bridge_ready`/`self._events_task` 等由 `start()`
+    建立的状态),直接构造即可调用——同 `TestDispatchMaterialInjector` 里
+    `OpenClawExecWorker(...)` 的直接构造用法(既有同类写法)。"""
+    return task_dispatch.OpenClawExecWorker(
+        contract.EXEC_WORKER_NAME,
+        agent_id="dev",
+        registry=task_dispatch.build_dispatch_registry(),
+        injection_queue=asyncio.Queue(),
+    )
+
+
+class TestPollUntilVisible(unittest.IsolatedAsyncioTestCase):
+    """task_dispatch.py:653 `if result.exit_code == 0:` 是 `_poll_until_visible`
+    (约638-656行,轮询 `tasks show` 直到命中,是 §0.2 task-record-visible
+    判定的核心分支)里唯一的"命中"判据,此前零单测覆盖——既有
+    `_run_openclaw_subprocess` mock 用例(`TestTasksShowDegrade` /
+    `TestDispatchMaterialInjector`)覆盖的是 `_query_task_view` 与
+    `_maybe_report_terminal_event`,调用路径都不经过 `_poll_until_visible`。
+    §5 集成闸门变异抽样 mutant②守卫:`==`→`!=`。两条用例分别钉死该判据两侧
+    的行为,翻成 `!=` 后至少一条(`test_exit_code_zero_...`)会变红。"""
+
+    async def test_exit_code_zero_returns_found_true_not_cli_failed(self):
+        """`tasks show` 首次轮询即命中(`exit_code=0`)—— 立即返回
+        `(True, False)`,不看 `process.returncode`(此处置为 `None`,模拟
+        探测进程仍在跑)。"""
+        worker = _make_exec_worker()
+        process = MagicMock(returncode=None)
+        outcome = task_dispatch._CliProcessOutcome()
+
+        async def fake_subprocess(argv):
+            self.assertEqual(contract.cmd_tasks_show("session-key-hit"), argv)
+            return task_dispatch._SubprocessResult(exit_code=0, stdout="{}", stderr="")
+
+        with (
+            unittest.mock.patch.object(task_dispatch, "_run_openclaw_subprocess", fake_subprocess),
+            # `==` 若被变异成 `!=`,首次判据不再命中,会一路 busy-loop 到
+            # deadline——缩短超时窗口让这条用例在变异后也能快速变红,而不是
+            # 真的空等 `_LOOKUP_POLL_TIMEOUT_SECS`(30s)。
+            unittest.mock.patch.object(task_dispatch, "_LOOKUP_POLL_TIMEOUT_SECS", 0.05),
+        ):
+            result = await worker._poll_until_visible("session-key-hit", process, outcome)
+
+        self.assertEqual((True, False), result)
+
+    async def test_cli_already_exited_nonzero_returns_cli_failed_not_found(self):
+        """CLI 已提前退出且非 0(`process.returncode` 非 None 且非 0,C-04
+        "bad --agent"快失败场景)、`tasks show` 一直未命中——返回
+        `(False, True)`,不是 `(True, False)`。`outcome.captured` 预先
+        `set()`,对应生产语义"这条分支只在 CLI 已经死透、watcher 早已捕获
+        stderr 时才走到",避免真等 `asyncio.wait_for(..., timeout=2.0)`。"""
+        worker = _make_exec_worker()
+        process = MagicMock(returncode=1)
+        outcome = task_dispatch._CliProcessOutcome()
+        outcome.captured.set()
+
+        async def fake_subprocess(argv):
+            self.assertEqual(contract.cmd_tasks_show("session-key-miss"), argv)
+            return task_dispatch._SubprocessResult(
+                exit_code=1, stdout="", stderr="Task not found\n"
+            )
+
+        with (
+            unittest.mock.patch.object(task_dispatch, "_run_openclaw_subprocess", fake_subprocess),
+            unittest.mock.patch.object(task_dispatch, "_LOOKUP_POLL_TIMEOUT_SECS", 0.05),
+        ):
+            result = await worker._poll_until_visible("session-key-miss", process, outcome)
+
+        self.assertEqual((False, True), result)
 
 
 # ---------------------------------------------------------------------------

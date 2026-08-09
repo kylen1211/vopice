@@ -1,5 +1,6 @@
 """Unit tests for server.config.load_config (R5 / P25)."""
 
+import dataclasses
 import re
 
 import pytest
@@ -236,3 +237,15 @@ def test_deepgram_and_cartesia_selected_together_succeeds(monkeypatch):
     assert cfg.tts_api_key == "cartesia-test-key"
     assert cfg.tts_voice == "cartesia-test-voice"
     assert cfg.tts_model is None
+
+
+def test_config_is_frozen(monkeypatch):
+    """config.py:72 `Config` 声明 `@dataclass(frozen=True)`(不可变值对象设计
+    属性,§5 集成闸门变异抽样 mutant①守卫:`frozen=True`→`frozen=False`)——
+    构造出的实例对任一字段赋值必须抛 `dataclasses.FrozenInstanceError`,
+    不能被悄悄改动。"""
+    _set_new_required_env(monkeypatch)
+    cfg = load_config()
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        cfg.llm_model = "mutated-after-construction"
