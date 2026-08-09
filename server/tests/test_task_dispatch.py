@@ -256,6 +256,89 @@ class TestTasksShowDegrade(unittest.IsolatedAsyncioTestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# §0.5 · TaskView 字段选择 —— `_build_task_view` / `_query_task_view` 命中
+# (found: true) 分支(此前零覆盖,见 s6 code-reviewer Important 项)。
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTaskView(unittest.TestCase):
+    """`_build_task_view` 命中路径:"恒在字段"(taskId/runtime/status/
+    notifyPolicy/deliveryStatus/createdAt/startedAt/endedAt/childSessionKey/
+    ownerKey)始终按 record 里的值带出;3 个"条件字段"(error/
+    progressSummary/terminalSummary)在 record 缺失时必须整体不出现在结果
+    dict 里(§0.5"不补默认值"),不是补 None。"""
+
+    _ALWAYS_PRESENT_RECORD: dict = {
+        "taskId": "task-abc",
+        "runtime": "codex",
+        "status": "running",
+        "notifyPolicy": "silent",
+        "deliveryStatus": "pending",
+        "createdAt": "2026-08-01T00:00:00Z",
+        "startedAt": "2026-08-01T00:00:01Z",
+        "endedAt": None,
+        "childSessionKey": "agent:dev:voice-agent-abc123",
+        "ownerKey": "agent:dev:voice-agent-abc123",
+    }
+
+    def test_conditional_fields_absent_when_missing_from_record(self):
+        """只含恒在字段、不含 3 个条件字段的 record —— 结果 dict 里这 3 个
+        key 必须整体缺失(不是 None),`found=True`,`lookup` 回填传入值。"""
+        result = task_dispatch._build_task_view(self._ALWAYS_PRESENT_RECORD, "task-abc")
+
+        for field_name in ("error", "progressSummary", "terminalSummary"):
+            self.assertNotIn(
+                field_name, result, f"{field_name} 在 record 缺失时不得补 None 默认值"
+            )
+        self.assertIs(True, result["found"])
+        self.assertEqual("task-abc", result["lookup"])
+        for field_name, value in self._ALWAYS_PRESENT_RECORD.items():
+            self.assertEqual(value, result[field_name])
+
+    def test_all_fields_pass_through_when_present_in_record(self):
+        """含全部字段(含 3 个条件字段)的 record —— 全部按值带出。"""
+        record = dict(
+            self._ALWAYS_PRESENT_RECORD,
+            error="boom",
+            progressSummary="50% done",
+            terminalSummary="finished ok",
+        )
+
+        result = task_dispatch._build_task_view(record, "task-abc")
+
+        for field_name, value in record.items():
+            self.assertEqual(value, result[field_name])
+        self.assertIs(True, result["found"])
+        self.assertEqual("task-abc", result["lookup"])
+
+
+class TestQueryTaskViewHit(unittest.IsolatedAsyncioTestCase):
+    async def test_query_task_view_hit_matches_build_task_view(self):
+        """`_query_task_view` 命中路径(exit_code=0,record JSON 在 stderr,
+        D-1)——结果须与直接调用 `_build_task_view` 一致,证明命中真的走到
+        了 `_build_task_view`(而不仅是该纯函数本身正确)。"""
+        record = dict(
+            TestBuildTaskView._ALWAYS_PRESENT_RECORD,
+            error="boom",
+            progressSummary="50% done",
+            terminalSummary="finished ok",
+        )
+
+        async def fake_subprocess(argv):
+            self.assertEqual(contract.cmd_tasks_show("task-abc"), argv)
+            return task_dispatch._SubprocessResult(
+                exit_code=0, stdout="", stderr=json.dumps(record)
+            )
+
+        with unittest.mock.patch.object(
+            task_dispatch, "_run_openclaw_subprocess", fake_subprocess
+        ):
+            result = await task_dispatch._query_task_view("task-abc")
+
+        self.assertEqual(task_dispatch._build_task_view(record, "task-abc"), result)
+
+
 def _make_exec_worker() -> task_dispatch.OpenClawExecWorker:
     """`_poll_until_visible` 只是 `OpenClawExecWorker` 的一个不依赖 `start()`
     的方法(不触碰 `self._bridge_ready`/`self._events_task` 等由 `start()`
