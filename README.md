@@ -95,10 +95,15 @@ From `server/`, run the bot with the eval transport, then drive scenarios agains
 ```bash
 uv run bot.py -t eval
 # In another terminal — this project's actual gate set (`pipecat eval run`
-# takes individual scenario files, not a directory):
-uv run pipecat eval run evals/smoke.yaml -v                     # deterministic link-check (text_contains, no judge)
-uv run pipecat eval run evals/r4_no_false_completion.yaml -v    # see judge setup below
-uv run pipecat eval run evals/r4_knowledge_qa.yaml -v           # see judge setup below
+# takes individual scenario files, not a directory). The `pipecat` CLI is a
+# separately-installed global tool, not this project's venv — `uv run pipecat`
+# resolves to `server/.venv/bin/pipecat` and fails with a missing-cli-extra
+# error, so drive it directly (not via `uv run`), with the project on
+# `PYTHONPATH` (needed once `judge_factory` is in play — see judge setup below):
+set -a && source .env && set +a
+PYTHONPATH="$(pwd)" pipecat eval run evals/smoke.yaml -v                     # deterministic link-check (text_contains, no judge)
+PYTHONPATH="$(pwd)" pipecat eval run evals/r4_no_false_completion.yaml -v    # see judge setup below
+PYTHONPATH="$(pwd)" pipecat eval run evals/r4_knowledge_qa.yaml -v           # see judge setup below
 ```
 
 Two more scenarios ship from the scaffold, `evals/starter_text.yaml` and

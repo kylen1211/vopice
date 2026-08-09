@@ -40,6 +40,123 @@ debts:
     module: server/config.py
     ttl: 2026-09-30
     source: 73125d7
+  - id: D-009
+    desc: pipecat UIJobGroupContext 官方无覆盖测试,本期以"不启用 ui_job_group"规避,2期G4启用前须先补三组测试
+    module: server/task_dispatch.py
+    ttl: 2026-12-31
+    source: task-dispatch
+  - id: D-010
+    desc: openclaw 包挂在 ~/.nvm/versions/node/v24.18.0/ 下,该 nvm 版本被卸载会同时废掉 Gateway 与 CLI 入口;根治需 sudo npm install -g openclaw 到系统 Node(新增/重装依赖类操作,未擅自执行)
+    module: infra/openclaw
+    ttl: 2026-12-31
+    source: task-dispatch
+  - id: D-011
+    desc: 本机 eval 环境缺口致 3 个既有音频/本地模型场景无法执行——starter_audio/dual_brain_audio 因缺 requests 模块(ImportError)、starter_text 因本地 Ollama 未启动;C-03/T-8 复验时须沿用同一失败集合判定不算回归,不要误判为改动引入
+    module: server/evals
+    ttl: 2026-09-30
+    source: task-dispatch
+  - id: D-012
+    desc: dual_brain_inject/dual_brain_interrupt 两个 eval 场景为已知双脑注入时序 flaky 用例(同一份代码两次运行结果可能不同,已实测复现两侧皆失败/皆通过),给 C-03 类回归判定带来噪音,建议排查断言的时序窗口是否需放宽或改用更鲁棒的判据
+    module: server/evals
+    ttl: 2026-09-30
+    source: task-dispatch
+  - id: D-013
+    desc: TaskDispatchWorker.reply 工具签名(tasks:list[str])无独立摘要通道,contract §0.9 要求的 DispatchRegistry.label(播报用一句话摘要)实际取"任务书正文折叠空白后前40字符"机械截断,非契约字面"第二个LLM给的摘要";功能等价、未致任何验收用例失败,但多任务播报措辞质量可能不如真摘要,如需严格满足需改 reply 契约签名(新增独立摘要参数)
+    module: server/task_dispatch.py
+    ttl: 2026-09-30
+    source: task-dispatch
+  - id: D-014
+    desc: TaskDispatchWorker 内部委托的第二个 LLM(reply 工具背后那次推理)构造细节是契约空白处——复用 cfg.llm_model(非 cfg.slow_llm_model)、不设 system_instruction,design.md/contract/prd 全文零命中相关规定;真机验证功能可用,但若需要专门角色设定该 prompt 常量按 R4 约定应落 server/prompts.py,当前实现无该角色设定
+    module: server/task_dispatch.py
+    ttl: 2026-09-30
+    source: task-dispatch
+  - id: D-015
+    desc: >-
+      【高优先级,需设计级复核】OpenClawExecWorker 派发时序存在真实竞态,已真机复现一次:design.md 数据模型§2步骤9的字面顺序是
+      "生成session_key → spawn CLI → 轮询tasks show(上限30s)→ 写入DispatchRegistry",而session_key消费方
+      events_wait 事件循环(步骤10)在首个派活前就已连接开始收事件;若任务在注册表写入完成前就产出结论消息(极快任务实测可复现,
+      如"写一句话"), 步骤11的"sessionKey命中注册表"判定不通过, 事件被静默丢弃且不重试(呼应ADR-5"终态只认push不做兜底"),
+      该任务的完成播报永久丢失, 用户只能靠FR-2主动查询才发现任务其实已完成——这直接削弱FR-3(任务完成消息回流播报)对"最快
+      最简单"这类任务的核心承诺, 不是非目标条目11/12覆盖的"异常路径", 是正常路径下的竞态。**关键佐证**: contract §0.6 原文明写
+      "由voice-agent侧先生成session key、再随--session-key传给CLI, 因此派发瞬间即持有lookup, 不必等CLI退出"——这与design.md
+      步骤9把注册表写入排在tasks show轮询成功之后直接矛盾, 即已冻结的contract与design内部自相矛盾, 不是本次新引入的设计决策。
+      可能修法方向(未验证, 需设计复核): 把DispatchRegistry写入提前到session_key生成后立即执行(在spawn CLI之前), 与
+      §0.6承诺对齐;需一并考虑spawn失败(C-04路径)时如何撤销这条提前写入的记录, 避免幽灵条目。本条不是本会话自行拍板修复,
+      按用户裁决"真遇到自己无法处理的异常记录到memory等待处理"归类为此类, 未改动已提交的T-4代码(server/task_dispatch.py,
+      commit 244ca66)。复现步骤见 pipeline/task-dispatch/T-5-notes.md RISK 4。
+    module: server/task_dispatch.py
+    ttl: 2026-08-31
+    source: task-dispatch
+  - id: D-016
+    desc: >-
+      【高优先级,需设计级复核。复现率订正(T-8补充数据,2026-08-09): C-04确定性必现 3/3(T-7一次+T-8两次全部失败),
+      C-19为概率性 1次通过/3次失败(非此前记录的"2/2必现",C-19 不是每次都撞上)】FR-1"派发调用本身失败时经工具报错
+      路径回流"实际不成立: dispatch_task 走
+      pipecat 框架级 async_tool 协议, 工具调用发起瞬间快脑先说一句"乐观"话(此时真实结果未到), 真实结果(如 CLI
+      失败、§0.3 的 CAPACITY_MESSAGE)到达后触发第二次"纠正"LLM调用——该调用因 context 末尾是 role=developer 的
+      async_tool"finished"结果、其后无 user 消息, 被 8045 gateway 以 400 "Requests ending with a model turn
+      are not supported" 拒绝(与 bot.py::seed_greeting_messages docstring 已记录的同一类 gateway 限制同源)。
+      make_pipeline_error_handler 按设计不重试, 纠正永久丢失, 用户最终只听到那句错误的"乐观"话(内容如"已提交到
+      后台处理", 实际什么都没派成)。真机复现2/2次独立全新会话均命中(C-04/C-19 两个 eval 场景各触发一次)。
+      **定位**: 不是 dispatch_task/task_dispatch.py(T-4)自身的缺陷——那两处 role=user 的 LLMMessagesAppendFrame
+      构造(终态播报/CAPACITY_MESSAGE走的是既有队列注入路径)本身正确, 触发400的是 pipecat 框架自己的 async_tool
+      纠正轮机制, 落点大概率在 dual_brain.py 或 bot.py 的 context 组装层——**这两个文件都不在 task-dispatch 变更
+      九张任务卡(T-0~T-8)任何一张的独占路径内**, 需要新一轮技术方案裁决(是否要在 async_tool 的 developer"finished"
+      消息后补一条占位 user 消息, 参照 seed_greeting_messages 已有绕法;或改用其它承载方式), 且需要先用
+      pipecat-context-hub 查证 async_tool 协议的官方行为再动手, 不是本会话能单方面拍板的小补丁。
+      **影响面评估**: 不直接违反 PRD C1(乐观话是"已提交"而非"已完成", 不构成虚假完成声明), 但确实是 FR-1 描述
+      末段字面要求的功能性缺口——用户在派发失败后永远听不到纠正, 只能靠 FR-2 主动查询才会发现任务其实没跑起来。
+      复现细节见 pipeline/task-dispatch/T-7-notes.md RISK 2 与 server/evals/dispatch_cli_failure.yaml、
+      server/evals/dispatch_capacity_reached.yaml(两文件判据均按契约原文保留未改, 真机驱动会失败属预期, T-8
+      验收报告应如实记录为FAIL不得为了让报告好看而弱化判据)。
+    module: dual_brain.py / bot.py(具体落点待裁决,不在本变更任一任务卡独占路径内)
+    ttl: 2026-08-31
+    source: task-dispatch
+  - id: D-017
+    desc: >-
+      【最高优先级,需用户裁决,T-8真机复验中真实发生,非推演】task-dispatch 委托 LLM(TaskDispatchWorker.reply)对
+      "本机桌面操作类"请求缺乏派发前的适用性判断护栏。复现: C-17步骤4改动后基线复验时, 一句日常口语请求"帮我把
+      浏览器里正在放的视频暂停一下"被 dispatch_task 真实派给后台 openclaw agent, 委托LLM自行编写了一份跨平台
+      "暂停浏览器视频"技术任务书(含macOS AppleScript/Linux playerctl+xdotool/Windows PowerShell三套方案)并被
+      真实执行——在运行测试的这台机器上实际调用了xdotool、探测并切换了窗口焦点到Chrome、发送了两次真实的
+      XF86AudioPause/XF86AudioPlay合成按键事件。快脑最终未声称"已完成"(不违反PRD C1字面底线,纠正措辞为"我
+      无法直接控制你的本地浏览器..."), 但过程中已产生真实的、用户未明确同意的桌面副作用, 且中间约27秒用户已
+      听到"已安排后台尝试"这类暗示正在处理的乐观话术。本地开发拓扑下openclaw agent执行环境与本机器是同一台,
+      这是真实发生的副作用不是理论推演;生产拓扑下若执行环境与终端用户设备物理隔离则副作用改为发生在agent自己
+      的宿主环境, 后果视该环境而定, 但本项目当前未对此做任何设计声明。根因: prompts.py 的 CAPABILITY_BOUNDARY_
+      SECTION 在T-3已删除"无执行能力"首句(为落实PRD C1派活能力声明所需, 见T-3任务卡), 但删除后委托LLM侧未
+      获得任何替代性的"这类请求是否适合派给后台CLI agent"判断依据, prompt层面完全空白。建议方向(未验证): 在
+      TaskDispatchWorker背后委托LLM的prompt里加一条"本机设备/桌面控制类请求不适合背景派活, 应在对话中说明
+      做不到"的护栏; 或在dispatch_task工具描述层面收窄适用范围。复现与原样输出见
+      pipeline/task-dispatch/test-report.md 缺陷清单#5。
+    module: server/prompts.py / server/task_dispatch.py(具体落点待裁决)
+    ttl: 2026-08-16
+    source: task-dispatch
+    ruling: >-
+      2026-08-09 用户裁决(原话):"操作问题不用担心,我们目前设置的应该是可以全部放行,所以他怎么操作都
+      没问题,但我们前期任务尽量要简单可控,直接操作浏览器难度有点大,其实可以让他写一篇文章,这种难度
+      小的我们前期是为了流程打通,只有这样我们后期才可以完善"。判定=接受风险,本轮不加代码护栏(prompts.py/
+      task_dispatch.py 均未改动)。管控点从"事后加护栏代码"改为"事前引导任务类型"——后续实际派发给委托
+      LLM 的任务应优先选低风险类型(如"写一篇文章"),避免本机设备控制/浏览器操作类高风险类型,目的是先
+      打通派活全链路流程,再逐步完善护栏。本条转为方向性指导,不阻塞 task-dispatch 变更合并。
+  - id: D-018
+    desc: >-
+      【中优先级,T-8真机复验新发现】快速连续用户话术下 dispatch_task 可能被同一逻辑请求重复触发: 会话内背靠背
+      连续两句话(文本模式下几乎无停顿), 后一句在快脑对前一句处理尚未完全落定时就已送达, 触发快脑对同一句用户话
+      先后两次调用dispatch_task(间隔约2.5秒), 委托LLM两次都判定"需要派活"并各自派出一个exec job, 注册表出现
+      3条记录(A+B1+B2)而非预期2条。复现: bot日志两组独立reply:call_.../dispatched session_key=记录, 间隔
+      约2.5秒。未致任何契约C-*判据结构性失败(C-06'数组长度=注册表条数'判据字面仍成立, 因为3条确实如实反映
+      内存状态), 但本例若换成有副作用的真实任务书(而非测试用sleep), 会造成真实的重复执行代价。根因推测(未
+      验证): 快脑侧对'同一句用户话是否已在处理中'没有去重/防抖机制。复现细节见
+      pipeline/task-dispatch/test-report.md 缺陷清单#2。
+    module: server/task_dispatch.py / server/dual_brain.py(具体落点待排查)
+    ttl: 2026-09-30
+    source: task-dispatch
+    ruling: >-
+      2026-08-09 用户裁决(原话):"关于任务派发2次应该快慢脑协作问题,之前慢脑是提供帮助的高级辅助,只
+      面对回答问题,现在改成了任务,所以他的角色还没调整,这个没问题,后期优化就是专门做这个"。判定根因
+      =慢脑角色定位(原设计"高级辅助答疑" -> 现设计"派发任务")转型未跟随调整的架构层面缺口,本轮不修,
+      留债后续做"快慢脑协作角色重新定位"专项优化时一并处理。
 ---
 
 # voice-agent · 项目债务簿
@@ -196,3 +313,21 @@ debts:
   实际 provider 层已可插拔,但装配层(场景配方、运行时 `ServiceSwitcher`)仍未做。
 - **建议处置**:下次触达 `server/config.py`/`server/bot.py` 的变更里补一段现状说明,把 C2 的真实完成度
   写进当次 prd.md 的现状盘点,不必倒补一份完整需求文档。
+
+## D-009 · pipecat `UIJobGroupContext` 官方无覆盖测试 —— 启用 `ui_job_group` 前的补测门
+
+- **现象**:codegraph blast radius 实锤(纪要 `pipeline/task-dispatch/research/pipecat-worker-source-verification.md`
+  §6 条目 1),pipecat 官方对 `UIJobGroupContext` 无任何覆盖测试。四信封
+  (`group_started` / `job_update` / `job_completed` / `group_completed`)是否实际抵达客户端,
+  官方未验证过。
+- **本期处置(已落地,不是欠账)**:task-dispatch 变更选用 `UIWorker` 但**不启用**该链路,
+  由 `pipeline/task-dispatch/contract/cases.md` C-16 守住——`grep -rn
+  "start_ui_job_group\|ui_job_group\|__cancel_job_group" server/ --include=*.py` 零命中,
+  外加 `server/tests/test_task_dispatch.py` 内一条静态断言测试。
+- **欠的是什么**:将来(2 期 G4「按需监控本机页面内容实时交互」,或任何要做客户端任务进度卡的变更)
+  启用 `ui_job_group` 之前,必须先自行补齐三组测试,不得以"官方件默认可靠"带过:
+  1. 四信封端到端是否实际抵达客户端;
+  2. `cancellable=True` / `False` 是否分别生效;
+  3. `start_ui_job_group` 是否确实立即返回、不阻塞调用方。
+- **触发条件**:任何变更打算移除 C-16 的 grep 零命中约束时。
+- **裁决**:用户 2026-08-08 于 task-dispatch s2a 呈批回合批准登记(裁决点④)。

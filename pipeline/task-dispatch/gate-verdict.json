@@ -1,0 +1,31 @@
+{
+  "pass": true,
+  "reason": "gate integrate: 全部检查项通过",
+  "items": [
+    {
+      "name": "frozen",
+      "pass": true,
+      "evidence": "frozen ok"
+    },
+    {
+      "name": "generated-hash",
+      "pass": true,
+      "evidence": "2 个生成物 hash 一致"
+    },
+    {
+      "name": "contract-runtime",
+      "pass": true,
+      "evidence": "exit=0 CASE C-16 PASS | cases: 1/1 passed"
+    },
+    {
+      "name": "tests",
+      "pass": true,
+      "evidence": "[cd server && NLTK_DISABLE_IMPORT_SECURITY=1 .venv/bin/python -m pytest tests/ -q] exit=0 tests/test_dual_brain.py::TestAssemblePipeline::test_greeting_turn_emits_no_material | tests/test_dual_brain.py::TestAssemblePipeline::test_dispatch_injector_at_fast_branch_head | tests/test_dual_brain.py::TestAssemblePipeline::test_dispatch_tools_registered_on_fast_context | tests/test_dual_brain.py::TestAssemblePipeline::test_dispatch_app_resources_and_new_fields |   /home/ky/git/voice-agent/server/.venv/lib/python3.11/site-packages/pipecat/audio/vad/silero.py:159: DeprecationWarning: path is deprecated. Use files() instead. Refer to https://importlib-resources.readthedocs.io/en/latest/using.html#migrating-from-legacy for migration advice. |     with impresources.path(package_path, model_name) as f: | -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html | 67 passed, 37"
+    },
+    {
+      "name": "mutation",
+      "pass": true,
+      "evidence": "注入 4 个 mutant,存活 0: 全部被测试捕获"
+    }
+  ]
+}

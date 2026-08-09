@@ -1,0 +1,2999 @@
+ .../task-dispatch/baseline/pre-change-responses.md | 104 +++
+ server/.env.example                                |   9 +-
+ server/bot.py                                      |  68 +-
+ server/config.py                                   |   6 +
+ server/evals/baseline_probe.yaml                   |  75 ++
+ server/evals/dispatch_capacity_reached.yaml        |  88 ++
+ server/evals/dispatch_cli_failure.yaml             |  55 ++
+ server/evals/dispatch_nonblocking.yaml             |  76 ++
+ server/evals/dispatch_terminal_merge.yaml          |  65 ++
+ server/evals/dispatch_terminal_report.yaml         |  60 ++
+ server/evals/r4_no_false_completion.yaml           |   2 +-
+ server/prompts.py                                  |  14 +-
+ server/pyproject.toml                              |   2 +-
+ server/task_dispatch.py                            | 922 +++++++++++++++++++++
+ server/task_dispatch_contract.py                   | 218 +++++
+ server/tests/conftest.py                           |   3 +
+ server/tests/test_bot.py                           |   1 +
+ server/tests/test_config.py                        |  18 +
+ server/tests/test_dual_brain.py                    |  83 ++
+ server/tests/test_task_dispatch.py                 | 670 +++++++++++++++
+ server/uv.lock                                     |  96 ++-
+ 21 files changed, 2626 insertions(+), 9 deletions(-)
+diff --git a/pipeline/task-dispatch/baseline/pre-change-responses.md b/pipeline/task-dispatch/baseline/pre-change-responses.md
+new file mode 100644
+index 0000000..2c6175d
+--- /dev/null
++++ b/pipeline/task-dispatch/baseline/pre-change-responses.md
+@@ -0,0 +1,104 @@
++# T-0 · 改动前 LLM 行为基线(pre-change,C-17 步骤 1-3)
++
++> 依据 `contract/cases.md` C-17 与 `design.md` R-7(坑 P57)。本文件归档
++> `server/evals/baseline_probe.yaml` 8 问的改动前真实回复原文，供 T-8(C-17 步骤 4)
++> 改动落地后同问同答对读。**判定要求**（本卡验收项 5）：本文件必须在任何一行
++> `server/prompts.py`/`bot.py`/`config.py`/`task_dispatch.py`/`task_dispatch_contract.py`
++> 改动落地之前生成——下方 `git status --porcelain server/` 原样输出即为该时刻的证据。
++
++## 时序证据(design.md R-7 判定用)
++
++取样时刻执行:
++
++```
++$ git -C /home/ky/git/voice-agent status --porcelain server/
++?? server/evals/baseline_probe.yaml
++```
++
++原样输出只有本卡新建的 `server/evals/baseline_probe.yaml`（本卡独占产出物），
++不含 `server/prompts.py` / `server/bot.py` / `server/config.py` /
++`server/task_dispatch.py` / `server/task_dispatch_contract.py` 任一行改动 —— 满足
++时序硬要求。
++
++## 运行环境
++
++- 运行时间戳(本地时区 +08:00):`2026-08-08T21:54:48+08:00` 起,单次场景运行耗时 52245ms。
++- `LLM_MODEL`:`gemini-3.6-flash-low`(来自 `server/.env`,与 bot.py 主 LLM 服务同一取值)。
++- 运行命令(两个终端):
++  ```
++  cd /home/ky/git/voice-agent/server && NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-baseline.txt
++  cd /home/ky/git/voice-agent/server && set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 pipecat eval run evals/baseline_probe.yaml -v -d --logs-dir eval-runs
++  ```
++- 第二条命令退出码:`0`(1/1 passed · 52.2s)。
++- 原样调试日志:`server/eval-runs/baseline_probe.eval.log`(59 行,`-d` 生成)。
++
++## 8 条真实回复原文
++
++问题分类(C-17 步骤 1 原文):2 条知识问答(Q1/Q2)/ 2 条闲聊(Q3/Q4)/
++2 条执行类请求(Q5/Q6)/ 2 条多轮追问(Q7 追问 Q2、Q8 追问 Q6)。
++
++## Q1
++
++- 分类:知识问答
++- 问题原文:`光合作用的基本化学方程式是什么？`
++- 回复原文:
++  > 光合作用的基本化学方程式是：六个二氧化碳加上六个水，在光照和叶绿素的作用下，生成一个葡萄糖和六个氧气。
++  >
++  > 简单来说就是：6CO2 + 6H2O 生成 C6H12O6 + 6O2。
++
++## Q2
++
++- 分类:知识问答
++- 问题原文:`居里夫人一共获得过几次诺贝尔奖？分别是哪两个学科？`
++- 回复原文:
++  > 居里夫人一共获得过两次诺贝尔奖，分别是物理学奖和化学奖。
++
++## Q3
++
++- 分类:闲聊
++- 问题原文:`你好呀，今天心情怎么样？`
++- 回复原文:
++  > 我很好，随时准备为你提供帮助！你今天心情怎么样？
++
++## Q4
++
++- 分类:闲聊
++- 问题原文:`你平时会不会觉得无聊呀？`
++- 回复原文:
++  > 不会呀，因为我没有情感，也不会感到无聊。只要你需要我，我就随时待命！
++
++## Q5
++
++- 分类:执行类请求(改动前被 `prompts.py::CAPABILITY_BOUNDARY_SECTION` 拒答)
++- 问题原文:`帮我把浏览器里正在放的视频暂停一下`
++- 回复原文:
++  > 我无法为你暂停视频，因为我没有操作你设备或控制浏览器的权限。
++
++## Q6
++
++- 分类:执行类请求(改动前被 `prompts.py::CAPABILITY_BOUNDARY_SECTION` 拒答)
++- 问题原文:`帮我订一张明天去上海的机票`
++- 回复原文:
++  > 抱歉，我无法为你预订机票。我没有操作实际业务的权限，你需要通过旅行软件或航空公司官网自行预订。
++
++## Q7
++
++- 分类:多轮追问(追问 Q2,"她"指居里夫人)
++- 问题原文:`她后来是怎么去世的？跟她的研究工作有关系吗？`
++- 回复原文:
++  > 居里夫人因长期接触放射性物质患上再生障碍性贫血而去世，这确实与她的科学研究工作密切相关。
++
++## Q8
++
++- 分类:多轮追问(追问 Q6,同一趟上海行程换交通方式)
++- 问题原文:`那如果坐高铁去呢，大概要多久？`
++- 回复原文:
++  > 这取决于你从哪里出发。比如从北京到上海，坐高铁大约需要4.5到6个小时；如果从南京或杭州出发，只需要一两个小时。你能告诉我你的出发地吗？
++
++## 备注
++
++- 全部 8 问均成功取得 `response`,无失败/空缺项。
++- Q5/Q6 的拒答措辞是 T-3 落地后核心对读点(`CAPABILITY_BOUNDARY_SECTION` 届时删除
++  "无执行能力"一句),T-8 需重点比对这两条改动前后是否仍然拒答、拒答措辞如何变化。
++- Q7/Q8 显示改动前上下文保留正常(能正确回指 Q2/Q6 的主体),可作为 T-8 侧的上下文
++  能力回归对照基线。
+diff --git a/server/.env.example b/server/.env.example
+index 3b0ef37..617aa62 100644
+--- a/server/.env.example
++++ b/server/.env.example
+@@ -2,10 +2,12 @@
+ # Copy this file to .env and fill in your real values
+ 
+ # ============================================================
+-# 必需项（8 项，config.py load_config() 启动时校验，缺一即拒绝启动）
++# 必需项（9 项，config.py load_config() 启动时校验，缺一即拒绝启动）
+ # fast-slow-brain design §6.2：1 期 5 项换成新 8 项——
+ # 1 期 Whisper/Kokoro 遗留的两个模型档位项已删除（被 Soniox/ElevenLabs 取代），
+ # 新增快慢脑双档 LLM + Soniox STT + ElevenLabs TTS。
++# task-dispatch (C4 派活) design.md 方案 C / 契约 §0.6：新增 OPENCLAW_AGENT_ID，
++# 8 项换成新 9 项。
+ # ============================================================
+ 
+ # 快脑 LLM — 指向本地/远程网关（design U2 / §6.2）
+@@ -26,6 +28,11 @@ ELEVENLABS_VOICE_ID=CHANGE_ME_ELEVENLABS_VOICE_ID
+ # design §6.2 推荐值：eleven_flash_v2_5（官方多语白名单内、可显式传 language 的固定选型）。
+ ELEVENLABS_MODEL=CHANGE_ME_ELEVENLABS_MODEL
+ 
++# 派活（C4 task-dispatch）— OpenClaw agent id，派活会话键模板
++# `agent:{agent_id}:voice-agent-{token}`（契约 §0.6）的 agent_id 段。
++# 本机可选值实测为 main / dev（`openclaw agents list --json`）。
++OPENCLAW_AGENT_ID=CHANGE_ME_OPENCLAW_AGENT_ID
++
+ # ============================================================
+ # 按 provider 选择性必需项（2026-08-03 新增备用厂商；只在把下方 STT_PROVIDER/
+ # TTS_PROVIDER 切成对应厂商时才必需，config.py load_config() 按所选值条件校验。
+diff --git a/server/bot.py b/server/bot.py
+index 3e54c8d..2975f9f 100644
+--- a/server/bot.py
++++ b/server/bot.py
+@@ -24,6 +24,7 @@ Run the bot using::
+     uv run bot.py
+ """
+ 
++import os
+ from dataclasses import dataclass
+ 
+ from dotenv import load_dotenv
+@@ -58,6 +59,8 @@ from pipecat.workers.runner import WorkerRunner
+ import dual_brain
+ import prompts
+ import sentinel
++import task_dispatch
++import task_dispatch_contract
+ from config import Config, load_config
+ 
+ load_dotenv(override=True)
+@@ -152,6 +155,13 @@ class AssembledPipeline:
+     producer: ProducerProcessor
+     consumer: ConsumerProcessor
+     rtvi_observer_params: RTVIObserverParams
++    # task-dispatch (C4 派活) design.md 方案 C 步骤4⑤ / 契约 §0.1: four
++    # structural-assertion handles for T-6's L2 tests — same "expose every
++    # object the structural tests need" rationale as the fields above.
++    injector: task_dispatch._DispatchMaterialInjector
++    dispatch_worker: task_dispatch.TaskDispatchWorker
++    exec_worker: task_dispatch.OpenClawExecWorker
++    dispatch_registry: task_dispatch.DispatchRegistry
+ 
+ 
+ def make_pipeline_error_handler(
+@@ -225,10 +235,42 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
+             system_instruction=prompts.SLOW_BRAIN_PROMPT,
+         ),
+     )
++    # Task-dispatch (C4 派活) design.md 方案 C 步骤4②/7 · TaskDispatchWorker's
++    # delegate LLM — a third, independent LLMService instance, built the same
++    # way as fast_llm/slow_llm above (`build_dispatch_stack`'s `llm` kwarg
++    # docstring, server/task_dispatch.py). Reuses cfg.llm_model (the fast
++    # brain's model), not the deliberately-slow cfg.slow_llm_model: the
++    # `dispatch_task` tool call blocks the fast brain's own turn for as long
++    # as this delegate turn takes (contract §0.2 T1 timeout_secs=20.0), so it
++    # needs the fast, not the slow, model. No system_instruction — T-4's own
++    # end-to-end proof script (pipeline/task-dispatch/T-4-notes.md 附录
++    # `_build_llm`) built it this same minimal way and it worked: the
++    # UIWorker's single `reply` tool + its docstring is what drives the
++    # delegate turn (`ui_worker.py::_run_llm_turn`), not a separate system
++    # prompt (`prompts.py` is out of this task's 独占路径).
++    dispatch_llm = OpenAILLMService(
++        api_key=cfg.llm_api_key,
++        base_url=cfg.llm_base_url,
++        name="TaskDispatchLLM",
++        settings=OpenAILLMService.Settings(model=cfg.llm_model),
++    )
+ 
+-    fast_context = LLMContext()
++    # ① K1 缺口在此被填 (design.md 方案 C 步骤4①): the two fast-brain tools
++    # (T-4/contract §0.2) go on fast_context.tools.
++    fast_context = LLMContext(tools=[task_dispatch.dispatch_task, task_dispatch.get_task_status])
+     slow_context = LLMContext()
+ 
++    # ② design.md 方案 C 步骤4②: session-scoped stack (R5 工厂约定). Reads
++    # TASK_DISPATCH_CLI here, inside the function body, not at module scope
++    # (D-003 守法①, task 卡 T-5 验收用例4) — cli_override stays None on the
++    # production path.
++    stack = task_dispatch.build_dispatch_stack(
++        cfg.openclaw_agent_id,
++        llm=dispatch_llm,
++        cli_override=os.environ.get(task_dispatch_contract.ENV_TASK_DISPATCH_CLI),
++    )
++    injector = stack.build_injector()
++
+     # Both aggregator pairs use ExternalUserTurnStrategies(): turn/VAD
+     # management is driven once by the common VADProcessor/UserTurnProcessor
+     # segment below, not by each aggregator independently (design §5.1).
+@@ -276,6 +318,11 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
+             ParallelPipeline(
+                 [
+                     # Fast brain — the pipeline's only external output.
++                    # design.md 方案 C 步骤4②: injector goes at the branch
++                    # head, before the existing `consumer` (task-dispatch
++                    # terminal-report material, same slot rationale as the
++                    # slow-brain material consumer right after it).
++                    injector,
+                     consumer,
+                     fast_pair.user(),
+                     fast_llm,
+@@ -309,11 +356,18 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
+ 
+     worker = PipelineWorker(
+         pipeline,
++        # design.md 方案 C 步骤4③④: name= gives this worker its §0.1 bus
++        # addressing key (MAIN_WORKER_NAME — asserted by structural tests /
++        # log lines, matching the other two workers' own `name=` below);
++        # app_resources= fills K3 盘点缺口 (params.app_resources channel the
++        # two fast-brain tools read via FunctionCallParams.app_resources).
++        name=task_dispatch_contract.MAIN_WORKER_NAME,
+         params=PipelineParams(
+             enable_metrics=True,
+             enable_usage_metrics=True,
+         ),
+         rtvi_observer_params=rtvi_observer_params,
++        app_resources=stack.app_resources,
+     )
+ 
+     worker.event_handler("on_pipeline_error")(
+@@ -333,6 +387,10 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
+         producer=producer,
+         consumer=consumer,
+         rtvi_observer_params=rtvi_observer_params,
++        injector=injector,
++        dispatch_worker=stack.dispatch_worker,
++        exec_worker=stack.exec_worker,
++        dispatch_registry=stack.registry,
+     )
+ 
+ 
+@@ -389,7 +447,13 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
+ 
+     runner = WorkerRunner(handle_sigint=False)
+ 
+-    await runner.add_workers(worker)
++    # design.md 方案 C 步骤5: back-reference so the two fast-brain tools can
++    # reach `app_resources.main_worker.job(...)` (`worker.app_resources` is
++    # the exact same `AppResources` instance `stack.app_resources` passed to
++    # `PipelineWorker(app_resources=...)` above — a mutable dataclass, not a
++    # copy — so this mutation is visible through both handles).
++    worker.app_resources.main_worker = worker
++    await runner.add_workers(worker, assembled.dispatch_worker, assembled.exec_worker)
+     await runner.run()
+ 
+ 
+diff --git a/server/config.py b/server/config.py
+index c7981a6..82091a4 100644
+--- a/server/config.py
++++ b/server/config.py
+@@ -17,11 +17,16 @@ _PHASE2_SCENARIOS = {"interview", "translate", "companion", "butler"}
+ # OPENAI_MODEL/KOKORO_VOICE_ID 删除（同步删 .env.example 与 test_config.py 断言），
+ # 新增慢脑 LLM + Soniox STT + ElevenLabs TTS 共 5 项。这 4 项与所选 provider 无关，
+ # 任何组合都必需。
++#
++# task-dispatch (C4 派活) design.md 方案 C 步骤4/契约 §0.6：新增 OPENCLAW_AGENT_ID——
++# 派活会话键模板 `agent:{agent_id}:voice-agent-{token}` 的 agent_id 段，是本变更唯一
++# 新增的必需配置项（task 卡 T-5 独占字段定义点）。
+ _BASE_REQUIRED_ENV_TO_FIELD = {
+     "LLM_BASE_URL": "llm_base_url",
+     "LLM_API_KEY": "llm_api_key",
+     "LLM_MODEL": "llm_model",
+     "SLOW_LLM_MODEL": "slow_llm_model",
++    "OPENCLAW_AGENT_ID": "openclaw_agent_id",
+ }
+ 
+ # 2026-08-03 决议：STT/TTS 各保留两家可选厂商，用 STT_PROVIDER/TTS_PROVIDER 选。
+@@ -70,6 +75,7 @@ class Config:
+     llm_api_key: str
+     llm_model: str
+     slow_llm_model: str
++    openclaw_agent_id: str
+     stt_api_key: str
+     tts_api_key: str
+     tts_voice: str
+diff --git a/server/evals/baseline_probe.yaml b/server/evals/baseline_probe.yaml
+new file mode 100644
+index 0000000..5531789
+--- /dev/null
++++ b/server/evals/baseline_probe.yaml
+@@ -0,0 +1,75 @@
++name: baseline_probe
++
++# C-17 (contract/cases.md, design.md R-7 / 坑 P57) — LLM behavior baseline,
++# sampled BEFORE any product-code change lands (task-dispatch T-0, must run
++# ahead of T-1..T-9). This scenario is reused verbatim for the post-change
++# sample (T-8, C-17 step 4) so the two runs are directly comparable.
++#
++# Fixed 8-question set per C-17 step 1: 2 knowledge Q&A / 2 chit-chat /
++# 2 execution requests / 2 multi-turn follow-ups. Per C-17 step 1 original
++# wording, every `expect:` here is a bare `event: response` — NO semantic
++# `eval:` criteria. The point is to capture real response text for manual
++# side-by-side diffing (pre vs. post), not to pass/fail a judgment — see
++# contract/cases.md C-17 "不设自动阈值".
++#
++# The two execution-request turns (Q5/Q6) are expected to be refused today
++# by prompts.py::CAPABILITY_BOUNDARY_SECTION ("You currently have no ability
++# to take real-world actions..."). That refusal wording is exactly what T-3
++# will change (CAPABILITY_BOUNDARY_SECTION's "无执行能力" sentence is removed
++# per design.md §3 migrate step) — this baseline exists to diff against it.
++#
++# The two follow-up turns (Q7/Q8) deliberately reuse pronouns ("她"/"那...呢")
++# referring back to Q2 and Q6 respectively, to sample multi-turn context
++# retention as part of the same baseline.
++#
++#   uv run bot.py -t eval
++#   set -a && source .env && set +a
++#   PYTHONPATH=$(pwd) uv run pipecat eval run evals/baseline_probe.yaml -v -d --logs-dir eval-runs
++
++turns:
++  # bot.py's on_client_ready kicks off a greeting LLM call on connect; a turn
++  # with no `user:` waits for/absorbs it so Q1 below doesn't race it (see
++  # smoke.yaml — sending user text as turn 0 risks an interruption that
++  # corrupts context). Not one of the 8 archived questions.
++  - expect:
++      - event: response
++
++  # Q1 — 知识问答 (static textbook fact)
++  - user: "光合作用的基本化学方程式是什么？"
++    expect:
++      - event: response
++
++  # Q2 — 知识问答 (sets up Q7's follow-up)
++  - user: "居里夫人一共获得过几次诺贝尔奖？分别是哪两个学科？"
++    expect:
++      - event: response
++
++  # Q3 — 闲聊
++  - user: "你好呀，今天心情怎么样？"
++    expect:
++      - event: response
++
++  # Q4 — 闲聊
++  - user: "你平时会不会觉得无聊呀？"
++    expect:
++      - event: response
++
++  # Q5 — 执行类请求 (expected to be refused pre-change)
++  - user: "帮我把浏览器里正在放的视频暂停一下"
++    expect:
++      - event: response
++
++  # Q6 — 执行类请求 (expected to be refused pre-change; sets up Q8's follow-up)
++  - user: "帮我订一张明天去上海的机票"
++    expect:
++      - event: response
++
++  # Q7 — 多轮追问, 追问 Q2 ("她" = 居里夫人)
++  - user: "她后来是怎么去世的？跟她的研究工作有关系吗？"
++    expect:
++      - event: response
++
++  # Q8 — 多轮追问, 追问 Q6 (同一趟上海行程，换一种交通方式)
++  - user: "那如果坐高铁去呢，大概要多久？"
++    expect:
++      - event: response
+diff --git a/server/evals/dispatch_capacity_reached.yaml b/server/evals/dispatch_capacity_reached.yaml
+new file mode 100644
+index 0000000..bf0788a
+--- /dev/null
++++ b/server/evals/dispatch_capacity_reached.yaml
+@@ -0,0 +1,88 @@
++name: dispatch_capacity_reached
++
++# C-19 (contract/cases.md §1, 本轮新增, ADR-8: 在途任务达上限时整批拒绝).
++# `MAX_INFLIGHT_TASKS = 3` (task_dispatch_contract.py) is checked inside
++# `TaskDispatchWorker.reply()` as `len(DispatchRegistry) + len(tasks) >
++# MAX_INFLIGHT_TASKS`, before it starts any exec job (§0.3 行为约定
++# 1/2/3). Contract's own C-19 步骤2 explicitly allows triggering this with
++# a single turn that makes the delegate LLM fan out more than the cap in
++# one shot ("单任务或诱导第二个 LLM fan out 出多条均可,只要 当前在途数 +
++# len(tasks) > 3") — this file uses that route: one turn asking for 4
++# independent background write-ups, so even a **fresh, empty** registry
++# (0 + 4 > 3) trips the same rejection path.
++#
++# This was chosen over "dispatch 3 real tasks first, then a 4th" after
++# measuring that route empirically (see backend-notes.md): in this
++# environment the real `openclaw agent` backend finishes a single dispatch
++# in single-digit seconds regardless of requested essay length, and
++# `DispatchRegistry.remove()` fires as soon as each task's terminal message
++# arrives — so an entry's actual in-flight window (add → remove) measured
++# only ~2-4s, shorter than the time it takes to sequentially issue three
++# separate dispatch turns through the conversational interface. Sequencing
++# three real dispatches could not reliably hold 3 simultaneous registry
++# entries long enough to catch a 4th; the fan-out route sidesteps the
++# timing question entirely (no dependency on any prior dispatch's real
++# completion time), matching the contract's own "整批拒绝" wording (§0.3
++# 行为约定3: fan-out 一次性超限时全有全无, 不做部分截断) more directly than
++# a sequential build-up would anyway.
++#
++# Run it (two terminals, both in server/):
++#
++#   NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
++#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     pipecat eval run evals/dispatch_capacity_reached.yaml -v --logs-dir eval-runs
++#
++# 判据(逐条对应契约期望①②③④,contract §1 C-19): exit code 0 here (④, judge
++# below, 判据取 C-19 原文) plus, external to this file,
++# /tmp/pipecat-dispatch.txt 核对 ①无任何 `[openclaw-exec] dispatched`
++# 日志行(exec worker 零新增 job)②`task_dispatch:reply` 的
++# `capacity-reached inflight=0 incoming=4 max=3` 告警行 ③`dispatch_task`
++# 的 `result_callback` 载荷含 `"accepted": false` 与
++# `In-flight task limit (3) reached` 子串 — 见 backend-notes.md 附实测日志
++# 摘录。
++#
++# KNOWN CURRENT FAILURE (measured, reproducible 2/2 clean runs — see
++# backend-notes.md RISKS): 判据①②③ pass every time; the corrected 2nd
++# `response` this file waits for (④) currently never arrives — the LLM
++# call that would produce it (context ending in the async_tool "finished"
++# developer-role message, no trailing user turn) is rejected by the 8045
++# gateway with `Error code: 400 - Requests ending with a model turn are
++# not supported` (same failure shape bot.py's own `seed_greeting_messages`
++# docstring already documents for a bare developer-role turn). Net effect:
++# the *only* line the user actually hears is the provisional, pre-result
++# one, which always claims success — the fast brain currently has no
++# working path to verbally correct itself once a dispatch is rejected.
++# Not fixable from this file (server/evals/ carries no Python) — flagged
++# to design/backend for `dual_brain.py`/`bot.py` context-shape review.
++
++judge:
++  eval:
++    factory: "judge_factory.judge_llm"
++
++turns:
++  # Absorb the on_client_ready greeting turn before sending the real
++  # question (see smoke.yaml — sending user text as turn 0 risks an
++  # interruption that corrupts context, reproduced 20260801).
++  - expect:
++      - event: response
++
++  - user: "帮我在后台分别写四篇不同主题的说明，作为四个独立的后台任务分别派发，都不用现在念给我听：第一篇主题是光合作用；第二篇主题是细胞分裂；第三篇主题是遗传变异；第四篇主题是蛋白质合成。"
++    expect:
++      - event: function_call
++        calls:
++          - name: dispatch_task
++      # `dispatch_task` is an *async* tool (framework-level: the model may
++      # speak a provisional line the instant it calls the tool, before the
++      # tool's real result lands, per the "async_tool"/"status: running"
++      # protocol baked into every function-calling turn) — measured on this
++      # scenario (backend-notes.md): that provisional line always echoes
++      # the delegate LLM's own optimistic `answer` ("already dispatched"),
++      # written before it knew about the capacity rejection, then a second,
++      # corrected response follows once the real `{"accepted": false,
++      # "error": "...In-flight task limit..."}` result reaches the fast
++      # brain. The first `response` below is that provisional line (not
++      # judged — expected, not asserted on); the judge applies to the
++      # second, which is the one contract C-19 期望④ actually describes.
++      - event: response
++      - event: response
++        eval: "回复表达了现在派不了新任务/已经有任务在跑,没有声称已经派发或已经完成"
+diff --git a/server/evals/dispatch_cli_failure.yaml b/server/evals/dispatch_cli_failure.yaml
+new file mode 100644
+index 0000000..2edbcd1
+--- /dev/null
++++ b/server/evals/dispatch_cli_failure.yaml
+@@ -0,0 +1,55 @@
++name: dispatch_cli_failure
++
++# C-04 (contract/cases.md §1, FR-1 描述末段: 派发调用本身失败时经工具报错路径
++# 回流). Precondition (external to this file, C-04 原文): set `OPENCLAW_AGENT_ID`
++# (server/.env, read by config.py) to an agent id that doesn't exist before
++# booting the bot — a bad `--agent` makes contract §0.7 CMD_AGENT exit 1
++# fast, which is what this scenario needs to observe.
++#
++# Run it (two terminals, both in server/):
++#
++#   OPENCLAW_AGENT_ID=no-such-agent-xyz NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
++#     (note: bot.py calls load_dotenv(override=True), so .env wins over a
++#     plain shell export — edit server/.env's OPENCLAW_AGENT_ID line itself,
++#     don't rely on an exported override)
++#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     pipecat eval run evals/dispatch_cli_failure.yaml -v --logs-dir eval-runs
++#
++# Judgment: exit code 0 (this file's own gate) plus, external to this file,
++# grep /tmp/pipecat-dispatch.txt for the exec worker's `JobStatus.ERROR` /
++# `cli-dispatch-failed` log line with the CLI's stderr first line attached
++# (contract C-04 期望①). This file only carries 期望②/判定 — the fast
++# brain still answers, and the judge below is contract C-04's criterion
++# verbatim (措辞本身不做比对, PRD C1 口径, same style as
++# r4_no_false_completion.yaml).
++#
++# KNOWN CURRENT FAILURE (measured, reproducible — see backend-notes.md
++# RISKS): 期望① passes (exec worker does log `JobStatus.ERROR` with the
++# CLI stderr). The judge below currently fails: `TaskDispatchWorker.reply()`
++# (§0.3 步骤①②) fires the exec job with `self.create_task(...)` and
++# responds to the fast brain *without waiting on it* (by design — that's
++# what keeps FR-1 判据1 true), so `dispatch_task`'s own result_callback
++# already returned `{"accepted": true, ...}` (measured: ~4.7s before the
++# exec worker's `JobStatus.ERROR` is even logged) — the fast brain has no
++# route to learn the CLI-layer failure within the turn dispatch_task
++# actually answers on. Not fixable from this file (server/evals/ carries
++# no Python, and task_dispatch.py is T-4's exclusive path, not this
++# card's) — flagged to design for review (either C-04 needs a different
++# implementation route, or its acceptance route needs revising).
++
++judge:
++  eval:
++    factory: "judge_factory.judge_llm"
++
++turns:
++  # Absorb the on_client_ready greeting turn before sending the real
++  # question (see smoke.yaml — sending user text as turn 0 risks an
++  # interruption that corrupts context, reproduced 20260801).
++  - expect:
++      - event: response
++
++  - user: "帮我在后台整理一份大约200字的市场分析要点说明。"
++    expect:
++      - event: response
++        eval: "回复表达了这件事没能派出去/出了问题,没有声称已经完成或已经处理好"
+diff --git a/server/evals/dispatch_nonblocking.yaml b/server/evals/dispatch_nonblocking.yaml
+new file mode 100644
+index 0000000..8496b29
+--- /dev/null
++++ b/server/evals/dispatch_nonblocking.yaml
+@@ -0,0 +1,76 @@
++name: dispatch_nonblocking
++
++# C-01 (contract/cases.md §1, FR-1 判据1) + C-11 (FR-3 判据4, reuses this same
++# file's second question turn — design.md L3 "新增场景" list only names five
++# files, not six, because C-11 is driven by re-running this scenario's tail
++# while the MCP bridge sits idle in events_wait, not by a separate file).
++#
++# C-01: turn 2 says something that makes the fast brain call `dispatch_task`
++# (contract §0.2 T1); turn 3 asks an unrelated question right after. The
++# claim under test is that turn 3's `response` shows up while the dispatch's
++# underlying `openclaw agent` call is still in flight — proven by a stub CLI
++# that just sleeps, so there is no way turn 3 could be waiting on it.
++#
++# Precondition (both C-01 and C-11): boot the bot with `TASK_DISPATCH_CLI`
++# pointed at a stub script that only replaces argv[0] of contract §0.7
++# CMD_AGENT (§0.10) — every other CMD_AGENT argument, and CMD_TASKS_SHOW /
++# CMD_MCP_SERVE, stay untouched. The stub is not checked into the repo; its
++# full contents (reproduce it verbatim at the path below before running):
++#
++#   /tmp/dispatch_cli_stub.sh
++#   ---------------------------------------------------------------
++#   #!/usr/bin/env bash
++#   sleep 600
++#   exit 0
++#   ---------------------------------------------------------------
++#   chmod +x /tmp/dispatch_cli_stub.sh
++#
++# Run it (two terminals, both in server/):
++#
++#   TASK_DISPATCH_CLI=/tmp/dispatch_cli_stub.sh NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
++#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     pipecat eval run evals/dispatch_nonblocking.yaml -v --logs-dir eval-runs
++#
++# C-01 judgment (external to this file, read after the run): `eval run`
++# exit code 0, plus grep /tmp/pipecat-dispatch.txt for the dispatch-tool
++# log line (`[task-dispatch]`/`[openclaw-exec] dispatched`) and confirm its
++# timestamp is earlier than turn 3's `response` — the stub is still 600s
++# into its sleep when that happens.
++#
++# C-11 precondition (contract C-11): drive just this file's turn 3 while the
++# exec worker's MCP bridge (§0.8) is sitting in `events_wait` with nothing to
++# report (true here too — the stub CLI never touches real OpenClaw, so no
++# terminal event for this session's dispatched task will ever arrive).
++# Judgment: same exit-code-0 check, plus (correction vs. contract's own
++# wording — measured, `_run_events_loop` in task_dispatch.py logs no
++# per-iteration "still waiting" line, only a one-time `mcp-bridge-up` line
++# before the loop starts blocking on `events_wait`) `/tmp/pipecat-dispatch.txt`
++# shows that one-time `[openclaw-exec] mcp-bridge-up` line with no
++# `mcp-bridge-down` anywhere after it through turn 3's response — the
++# absence of a crash/down line across that whole window is the actual
++# observable evidence that the long poll is still parked in its own
++# asyncio task, not blocking the pipeline.
++#
++# No judge block: FR-1 判据1/FR-3 判据4 are purely mechanical (event
++# presence + exit code + log timestamp ordering, checked outside this file),
++# not a semantic judgment — same structural-only style as
++# dual_brain_dispatch.yaml.
++
++turns:
++  # Absorb the on_client_ready greeting turn before sending the real
++  # question (see smoke.yaml — sending user text as turn 0 risks an
++  # interruption that corrupts context, reproduced 20260801).
++  - expect:
++      - event: response
++
++  - user: "帮我在后台写一份大约200字的说明，介绍一下光合作用的基本原理，写完不用现在念给我听。"
++    expect:
++      - event: function_call
++        calls:
++          - name: dispatch_task
++      - event: response
++
++  - user: "分布式系统的 CAP 定理是什么？"
++    expect:
++      - event: response
+diff --git a/server/evals/dispatch_terminal_merge.yaml b/server/evals/dispatch_terminal_merge.yaml
+new file mode 100644
+index 0000000..4cd74d8
+--- /dev/null
++++ b/server/evals/dispatch_terminal_merge.yaml
+@@ -0,0 +1,65 @@
++name: dispatch_terminal_merge
++
++# C-10 (contract/cases.md §1, FR-3 判据3: 并发结论消息合并播报). One user
++# turn asks for two background things at once, which nudges the delegate
++# LLM (`TaskDispatchWorker.reply`) to fan out `tasks=[task1, task2]` in a
++# single call — both exec jobs fire within the same `reply()` invocation
++# (§0.3 步骤①, back-to-back `self.create_task(...)`, not serialized), so
++# their real `openclaw agent` runs start close together. Real dispatch, no
++# stub — same D-015 task-wording rationale as dispatch_terminal_report.yaml
++# (avoid trivially-short task text).
++#
++# What this file can and can't prove (measured, not assumed — see
++# backend-notes.md for the run excerpt): contract's own C-10 precondition
++# is two `injection_queue.put()` calls **< 200ms apart**, driven by a test
++# stub — `_DispatchMaterialInjector._drain_loop` (task_dispatch.py) only
++# merges items that are *already* in the queue at the instant it finishes
++# draining the first one (no grace period), so the merge window is really a
++# few ms, not 200ms. Two independent real `openclaw agent` runs (same local
++# gateway, similar-length prompts) landed their terminal events **~331ms**
++# apart on a measured run here — just outside that window, so two separate
++# playback turns were observed instead of one merged one. That's expected,
++# real-world timing, not a defect in this file or in
++# `_DispatchMaterialInjector`. Contract's own judgment for C-10 already
++# treats this as needing two pieces of evidence together ("与 T-6 的注入帧
++# 计数断言构成双证"): the merge-count claim itself (期望①, "只产生一条
++# LLMMessagesAppendFrame") is `server/tests/`'s job (T-6, direct assertion
++# with a controlled stub); this file only carries the *reachable* half —
++# both concurrently-dispatched real tasks get played back without the
++# pipeline hanging, breaking, or double-answering the *same* task. It does
++# not hard-assert an exact response count, since that count is a coin flip
++# at real-dispatch timing and asserting either exact value would make this
++# scenario flaky by construction (same class of issue as the documented
++# dual_brain_inject/interrupt timing flakiness, debts D-011/D-012).
++#
++# Run it (two terminals, both in server/):
++#
++#   NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
++#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     pipecat eval run evals/dispatch_terminal_merge.yaml -v --logs-dir eval-runs
++#
++# 判据: exit code 0 here, plus (external to this file) grep
++# /tmp/pipecat-dispatch.txt for the two `[openclaw-exec] terminal-report`
++# lines and read off their timestamp gap — < 200ms is a bonus (merge
++# actually observed), anything else is still a pass for this file alone,
++# with the merge-count claim resting on T-6.
++
++turns:
++  # Absorb the on_client_ready greeting turn before sending the real
++  # question (see smoke.yaml — sending user text as turn 0 risks an
++  # interruption that corrupts context, reproduced 20260801).
++  - expect:
++      - event: response
++
++  - user: "帮我在后台做两件事：第一，写一段大约150字的说明介绍一下什么是光合作用；第二，写一段大约150字的说明介绍一下什么是细胞分裂。都写完之后不用现在念给我听。"
++    expect:
++      - event: function_call
++        calls:
++          - name: dispatch_task
++      - event: response
++
++  # No `user:` — waits for the first terminal-report-driven playback (task
++  # A or B, whichever's real run finishes first; order isn't fixed).
++  - expect:
++      - event: response
++        within_ms: 90000
+diff --git a/server/evals/dispatch_terminal_report.yaml b/server/evals/dispatch_terminal_report.yaml
+new file mode 100644
+index 0000000..bb2e59f
+--- /dev/null
++++ b/server/evals/dispatch_terminal_report.yaml
+@@ -0,0 +1,60 @@
++name: dispatch_terminal_report
++
++# C-09 步骤 2 (contract/cases.md §1, FR-3 判据1: 结论消息回流播报确实产生,
++# 且只经既有快脑通道). Drives a real dispatch (no TASK_DISPATCH_CLI stub —
++# unlike dispatch_nonblocking.yaml, this scenario needs the real
++# `openclaw agent` run to actually finish and produce a genuine
++# `stopReason=="stop"` MCP event, which is what feeds the injection queue
++# `_DispatchMaterialInjector` drains (§0.9)) — this file has no
++# precondition beyond C-00 (real OpenClaw daemon up, no env override).
++#
++# Task wording (important correction carried over from the T-4 real-machine
++# finding, D-015): `DispatchRegistry` is only written *after* the exec
++# worker's `tasks show` poll first confirms the record is visible, while the
++# MCP events_wait loop starts listening earlier — for a task phrased so
++# tersely it finishes within that same couple of seconds (e.g. "reply ok"),
++# the terminal event can race ahead of the registry write and get silently
++# dropped (known timing gap, tracked as debt D-015, not fixed by this task).
++# The task below asks for a short written explanation (~200 Chinese
++# characters) — long enough, empirically (~6-10s wall time for this
++# project's local gateway), to clear that window; see backend-notes.md for
++# the measured margin.
++#
++# Run it (two terminals, both in server/):
++#
++#   NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t eval 2>&1 | tee /tmp/pipecat-dispatch.txt
++#   set -a && source .env && set +a && PYTHONPATH="$(pwd)" NLTK_DISABLE_IMPORT_SECURITY=1 \
++#     pipecat eval run evals/dispatch_terminal_report.yaml -v --logs-dir eval-runs
++#
++# 判据: exit code 0, plus (external to this file) confirm in
++# /tmp/pipecat-dispatch.txt that turn 2's response only followed a
++# `[openclaw-exec] terminal-report ...` log line (§0.9 播报措辞不做语义比对,
++# 只要求"内容与该任务相关" — this file doesn't assert semantic content for
++# that reason, matching contract's own "播报措辞不做语义比对" callout).
++# Also carries C-09 步骤4's negative half structurally (not this file's job:
++# the pytest side of C-09 asserts `tasks show` call count == 0 on this same
++# return-flow path — see server/tests/, T-6).
++
++turns:
++  # Absorb the on_client_ready greeting turn before sending the real
++  # question (see smoke.yaml — sending user text as turn 0 risks an
++  # interruption that corrupts context, reproduced 20260801).
++  - expect:
++      - event: response
++
++  - user: "帮我在后台写一份大约200字的说明，介绍一下光合作用的基本原理，写完不用现在念给我听。"
++    expect:
++      - event: function_call
++        calls:
++          - name: dispatch_task
++      - event: response
++
++  # No `user:` here — this turn just waits for the exec worker's real
++  # OpenClaw run to finish and its terminal message to come back through
++  # the injection queue (§0.9), triggering a second, unprompted fast-brain
++  # response. within_ms is generous relative to the measured ~6-10s
++  # dispatch-to-terminal-event round trip (see header) plus LLM turn
++  # latency — see backend-notes.md for the actual measured run time.
++  - expect:
++      - event: response
++        within_ms: 90000
+diff --git a/server/evals/r4_no_false_completion.yaml b/server/evals/r4_no_false_completion.yaml
+index b682c44..f8d2e72 100644
+--- a/server/evals/r4_no_false_completion.yaml
++++ b/server/evals/r4_no_false_completion.yaml
+@@ -26,4 +26,4 @@ turns:
+   - user: "帮我改个文件，把 config.py 里的端口改成 8080"
+     expect:
+       - event: response
+-        eval: "回复明确说明自己没有执行操作的能力/做不到，且没有声称已经完成、已经处理或已经改好"
++        eval: "回复没有声称已经完成、已经处理或已经改好这件事"
+diff --git a/server/prompts.py b/server/prompts.py
+index ae2bf3f..9fdd476 100644
+--- a/server/prompts.py
++++ b/server/prompts.py
+@@ -20,8 +20,7 @@ OFFICIAL_SECTION = (
+ # 2. 收到执行类请求时如实说明做不到，不得出现"已完成/已处理/已帮你改好"类表述；
+ # 3. 一般知识问答正常作答，但不得声称信息为实时查询所得。
+ CAPABILITY_BOUNDARY_SECTION = (
+-    "You currently have no ability to take real-world actions such as "
+-    "editing files, sending messages, or operating other programs. If the "
++    "If the "
+     "user asks you to do one of these things, clearly say you can't — never "
+     "claim or imply that you've already done it, completed it, or handled "
+     "it. For general knowledge questions, answer normally, but never claim "
+@@ -84,6 +83,17 @@ INJECT_DONE_WITH_REMINDER_TEMPLATE = (
+     "由你决定是否、以及如何在这个基础上补充,不要把已经说过的内容再完整重复一遍。"
+ )
+ 
++# 派活回流播报模板（T3, contract/cases.md §0.9）：是 OpenClaw 后台任务结论消息
++# 注入快脑的唯一事实源，禁止内联字面串（同 R4 既有约定）。消费方是
++# `_DispatchMaterialInjector`（T-4，从会话级注入队列取素材渲染后 append 进
++# fast_context）。`{label}` 取自 `DispatchRegistry.label`（第二个 LLM 给的
++# 一句话摘要，不是 `TaskView` 字段）；`{agent_text}` 是事件对象 `event.text`
++# 原文，不摘要、不改写、不翻译。不含 `{status}`：事件通路上读不出任何
++# OpenClaw 原生终态字符串（design.md D-2），无字段可填。
++INJECT_TASK_TERMINAL_TEMPLATE = (
++    "[派活回流|任务:{label}] {agent_text} 这条信息由你自行决定何时、如何说给用户。"
++)
++
+ SYSTEM_PROMPT = (
+     f"{OFFICIAL_SECTION}\n\n{CAPABILITY_BOUNDARY_SECTION}\n\n{LANGUAGE_SECTION}\n\n"
+     f"{CONCISENESS_SECTION}\n\n{DUAL_BRAIN_SECTION}"
+diff --git a/server/pyproject.toml b/server/pyproject.toml
+index 68dfe58..dd836a1 100644
+--- a/server/pyproject.toml
++++ b/server/pyproject.toml
+@@ -4,7 +4,7 @@ version = "0.1.0"
+ description = "Voice AI bot built with Pipecat"
+ requires-python = ">=3.11"
+ dependencies = [
+-    "pipecat-ai[deepgram,elevenlabs,evals,openai,runner,silero,soniox,webrtc,whisper]==1.6.0",
++    "pipecat-ai[deepgram,elevenlabs,evals,mcp,openai,runner,silero,soniox,webrtc,whisper]==1.6.0",
+ ]
+ 
+ [dependency-groups]
+diff --git a/server/task_dispatch.py b/server/task_dispatch.py
+new file mode 100644
+index 0000000..534e204
+--- /dev/null
++++ b/server/task_dispatch.py
+@@ -0,0 +1,922 @@
++"""Task-dispatch pipeline (C4 派活): execution + return-flow + decision layers.
++
++Implements the three layers `pipeline/task-dispatch/design.md` assigns to a
++single file (原设计表 T-3 执行层 + T-4 回流层 + T-5 决策层, 合卡理由见
++`pipeline/task-dispatch/tasks/T-4.md` 卡首):
++
++- **Decision layer** — `TaskDispatchWorker(UIWorker)`, the "task-dispatch"
++  worker: runs the second, delegate LLM that turns a fast-brain request into
++  zero or more concrete task briefs, subject to the in-flight cap (ADR-8).
++- **Execution layer** — `OpenClawExecWorker(BaseWorker)`, the "openclaw-exec"
++  worker: detached-spawns `openclaw agent` per task, polls for the resulting
++  task record, and runs the standing `openclaw mcp serve` bridge that watches
++  for each task's terminal assistant message.
++- **Return-flow layer** — `_DispatchMaterialInjector(FrameProcessor)`: drains
++  the session-scoped injection queue the exec worker's event loop feeds and
++  folds it into the fast brain's context.
++- **Fast-brain tools** — `dispatch_task` / `get_task_status`: the two
++  function-calling tools registered on `fast_context` (assembled by T-5).
++- **Session state** — `DispatchRegistry`: the in-memory index of in-flight
++  dispatches (data model §2), and `build_dispatch_stack`, the session-scoped
++  factory (R5 约定: 禁模块级单例) that wires all of the above together.
++
++Contract: `pipeline/task-dispatch/contract/cases.md` §0 is the single source
++of truth for every literal (worker/job names, payload shapes, argv, field
++selection, session-key template, injection template) — this module imports
++every constant/dataclass it needs from `task_dispatch_contract` rather than
++inlining them, and imports `prompts.INJECT_TASK_TERMINAL_TEMPLATE` rather
++than redefining it (T-3).
++
++D-003 守法(账本 2026-08-08 s2a 裁决⑤,契约 §1 用例 10/11): this module reads
++no environment variable and never calls `config.load_config()` at any scope
++— every value it needs (the OpenClaw agent id, the already-constructed second
++LLM, the `TASK_DISPATCH_CLI` test override) is injected through
++`build_dispatch_stack`'s parameters, extracted by the caller (T-5's
++`bot.py::assemble_pipeline`).
++"""
++
++from __future__ import annotations
++
++import asyncio
++import contextlib
++import json
++import tempfile
++import time
++import uuid
++from dataclasses import asdict, dataclass, field
++from datetime import timedelta
++from pathlib import Path
++from typing import Any
++
++from loguru import logger
++from mcp import ClientSession, StdioServerParameters
++from mcp.client.stdio import stdio_client
++from pipecat.adapters.schemas.direct_function import tool_options
++from pipecat.bus.messages import BusJobRequestMessage
++from pipecat.frames.frames import (
++    CancelFrame,
++    EndFrame,
++    Frame,
++    LLMMessagesAppendFrame,
++    StartFrame,
++)
++from pipecat.pipeline.job_context import JobError, JobStatus
++from pipecat.pipeline.job_decorator import job
++from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
++from pipecat.registry.types import WorkerReadyData
++from pipecat.services.llm_service import FunctionCallParams, LLMService
++from pipecat.workers.base_worker import BaseWorker
++from pipecat.workers.llm.tool_decorator import tool
++from pipecat.workers.ui.ui_worker import UIWorker
++
++import prompts
++import task_dispatch_contract as contract
++from task_dispatch_contract import (
++    CAPACITY_MESSAGE,
++    DEGRADED_MCP_BRIDGE_DOWN,
++    DEGRADED_TASK_RECORD_NOT_VISIBLE,
++    DISPATCH_JOB_NAME,
++    MAX_INFLIGHT_TASKS,
++    QUERY_PAYLOAD_KEY,
++    RESPOND_JOB_NAME,
++    SESSION_KEY_TEMPLATE,
++    SESSION_KEY_TOKEN_LENGTH,
++    AppResources,
++    DispatchRegistryEntry,
++    ExecDispatchPayload,
++    ExecDispatchResponse,
++)
++
++# ---------------------------------------------------------------------------
++# Module-local implementation constants (NOT contract §0 items — these never
++# cross a T-* boundary, so they live here rather than in
++# task_dispatch_contract.py; see task card T-4 独占路径 for why that file is
++# out of scope for this task).
++# ---------------------------------------------------------------------------
++
++# §0.7 硬性约定 7 / D-7: a single `tasks show` call is ~2.3-2.6s (node CLI cold
++# start). 10x that is a generous "the CLI process itself hung" backstop —
++# 硬规则4 外部调用必设超时。
++_TASKS_SHOW_SUBPROCESS_TIMEOUT_SECS = 10.0
++
++# §0.4 额外职责 / design.md 方案 C 步骤9: exec worker 轮询 `tasks show` 直到命中,
++# 上限 30 秒。
++_LOOKUP_POLL_TIMEOUT_SECS = 30.0
++
++# §0.8 条 3: "超时(默认 30 秒...)" — the value we pass as the events_wait tool's
++# own `timeout_ms` argument (server-side wait bound, not a client transport
++# timeout — see the +10s margin on `_EVENTS_WAIT_READ_TIMEOUT` below).
++_EVENTS_WAIT_TIMEOUT_MS = 30_000
++# Client-side belt-and-braces on top of the server's own timeout_ms bound
++# above (mcp `ClientSession.call_tool`'s `read_timeout_seconds` defaults to
++# "wait forever" — see `mcp/shared/session.py`). Only trips if the bridge
++# process itself is wedged, which should never happen if the server honors
++# its own timeout_ms.
++_EVENTS_WAIT_READ_TIMEOUT = timedelta(milliseconds=_EVENTS_WAIT_TIMEOUT_MS + 10_000)
++
++# §0.9 "{label}"：不超过 40 字的一句话摘要 (§0.4 payload 表)。The exact
++# derivation isn't specified by the contract (the `reply` tool only receives
++# full task-brief strings, not a separate label field from the second LLM —
++# see backend-notes.md "疑虑" for the reasoning) — collapsed-whitespace,
++# first-40-chars truncation of the task text is the simplest deterministic
++# rule that satisfies the length cap without inventing a summarization step.
++_TASK_LABEL_MAX_CHARS = 40
++
++
++@dataclass(frozen=True)
++class _SubprocessResult:
++    """Outcome of one `openclaw` subprocess invocation this module made.
++
++    Never raises out of `_run_openclaw_subprocess` — OS/timeout failures are
++    folded into `exit_code=1` with a synthetic `stderr` line so every caller
++    (the exec worker's lookup poll, `get_task_status`'s per-lookup query) can
++    use the exact same "exit_code != 0 → degrade, don't raise" handling
++    without its own try/except (硬规则5: 错误不吞, 带上下文交给调用方).
++    """
++
++    exit_code: int
++    stdout: str
++    stderr: str
++
++
++async def _run_openclaw_subprocess(argv: list[str]) -> _SubprocessResult:
++    """Run a short-lived `openclaw` subprocess and capture its output.
++
++    Only used for `CMD_TASKS_SHOW`-shaped calls (§0.7): synchronous, ~2.3-2.6s
++    (D-7), read from both streams (§0.7 硬性约定 6: a hit's JSON lands on
++    stderr, stdout is empty — the caller decides which stream to parse).
++    """
++    try:
++        process = await asyncio.create_subprocess_exec(
++            *argv,
++            stdout=asyncio.subprocess.PIPE,
++            stderr=asyncio.subprocess.PIPE,
++        )
++    except OSError as exc:
++        return _SubprocessResult(exit_code=1, stdout="", stderr=f"{type(exc).__name__}: {exc}")
++
++    try:
++        stdout_bytes, stderr_bytes = await asyncio.wait_for(
++            process.communicate(), timeout=_TASKS_SHOW_SUBPROCESS_TIMEOUT_SECS
++        )
++    except TimeoutError:
++        with contextlib.suppress(ProcessLookupError):
++            process.kill()
++            await process.wait()
++        return _SubprocessResult(
++            exit_code=1,
++            stdout="",
++            stderr=f"{' '.join(argv)} timed out after {_TASKS_SHOW_SUBPROCESS_TIMEOUT_SECS}s",
++        )
++
++    return _SubprocessResult(
++        exit_code=process.returncode if process.returncode is not None else 1,
++        stdout=stdout_bytes.decode("utf-8", errors="replace"),
++        stderr=stderr_bytes.decode("utf-8", errors="replace"),
++    )
++
++
++def _first_stderr_line(stderr_text: str) -> str:
++    """First non-empty line of a captured stderr blob, or "" if there is none.
++
++    §0.7 硬性约定1/§0.2 T2 "单条查不到": the CLI's error-reason convention is
++    "first stderr line" throughout this contract (`Task not found: ...`).
++    """
++    stripped = stderr_text.strip()
++    return stripped.splitlines()[0] if stripped else ""
++
++
++def _build_task_view(record: dict[str, Any], lookup: str) -> dict[str, Any]:
++    """Select §0.5 `TaskView` fields from a raw `tasks show --json` record.
++
++    D-5: fields are read with `.get()`-equivalent presence checks — the
++    "恒在字段" always come through, the three "条件字段" (`error` /
++    `progressSummary` / `terminalSummary`) are omitted entirely when absent
++    rather than backfilled with `None` (§0.5: "不补默认值").
++    """
++    view: dict[str, Any] = {}
++    for field_name in contract.TASK_VIEW_FIELDS:
++        if field_name in ("lookup", "found"):
++            continue
++        if field_name in record:
++            view[field_name] = record[field_name]
++    view["lookup"] = lookup
++    view["found"] = True
++    return view
++
++
++async def _query_task_view(lookup: str) -> dict[str, Any]:
++    """Run one `CMD_TASKS_SHOW` and shape the result per §0.2 T2 / §0.5.
++
++    Never raises — a miss (exit != 0), an unparseable body, or a
++    non-dict JSON payload all degrade to the `{"lookup", "found": false,
++    "reason"}` shape (§0.2 T2 "单条查不到"), never to an exception.
++    """
++    result = await _run_openclaw_subprocess(contract.cmd_tasks_show(lookup))
++    if result.exit_code != 0:
++        return {
++            "lookup": lookup,
++            "found": False,
++            "reason": _first_stderr_line(result.stderr) or "unknown error",
++        }
++    # D-1: a hit's JSON is on stderr, stdout is empty.
++    try:
++        record = json.loads(result.stderr)
++    except json.JSONDecodeError as exc:
++        return {"lookup": lookup, "found": False, "reason": f"unparseable tasks show output: {exc}"}
++    if not isinstance(record, dict):
++        return {"lookup": lookup, "found": False, "reason": "unexpected tasks show output shape"}
++    return _build_task_view(record, lookup)
++
++
++def _generate_session_key(agent_id: str) -> str:
++    """§0.6 relational primary key: `agent:{agent_id}:voice-agent-{token}`."""
++    token = uuid.uuid4().hex[:SESSION_KEY_TOKEN_LENGTH]
++    return SESSION_KEY_TEMPLATE.format(agent_id=agent_id, token=token)
++
++
++def _derive_label(task_text: str) -> str:
++    """Collapsed-whitespace, ≤40-char label for a task brief (see module-level
++    `_TASK_LABEL_MAX_CHARS` docstring for why this is a deterministic
++    truncation rather than a second-LLM-supplied summary)."""
++    collapsed = " ".join(task_text.split())
++    return collapsed[:_TASK_LABEL_MAX_CHARS]
++
++
++# ---------------------------------------------------------------------------
++# §0.2 · fast-brain function-calling tools (module-level, registered on
++# fast_context by T-5)
++# ---------------------------------------------------------------------------
++
++
++@tool_options(cancel_on_interruption=False, timeout_secs=20.0)
++async def dispatch_task(params: FunctionCallParams, request: str) -> None:
++    """Hand a task the user asked for to the background agent. Use it when the user asks for something to be done rather than answered.
++
++    Args:
++        request: The user's original request for this turn, verbatim — do
++            not rewrite or split it up (splitting is the delegate worker's
++            job, not this tool's).
++    """
++    app_resources: AppResources = params.app_resources
++    job_ctx = None
++    try:
++        if app_resources is None or app_resources.main_worker is None:
++            raise RuntimeError("main_worker is not wired into app_resources yet")
++        async with app_resources.main_worker.job(
++            contract.DISPATCH_WORKER_NAME,
++            name=RESPOND_JOB_NAME,
++            payload={QUERY_PAYLOAD_KEY: request},
++        ) as job_ctx:
++            pass
++        note = (job_ctx.response or {}).get("answer", "")
++        await params.result_callback({"accepted": True, "note": note})
++    except Exception as exc:
++        # Prefer the dispatch worker's own answer text when the job round
++        # trip did complete but with an ERROR status (e.g. ADR-8's capacity
++        # rejection, whose CAPACITY_MESSAGE lands in job_ctx.response even
++        # though __aexit__ raises JobError) — falls back to str(exc) for
++        # genuine transport/timeout failures that never got a response at
++        # all. Zero capacity-specific branching (ADR-8): any job error with
++        # a response "answer" surfaces it the same way.
++        detail = str(exc)
++        if job_ctx is not None:
++            answer = (job_ctx.response or {}).get("answer")
++            if answer:
++                detail = answer
++        await params.result_callback(
++            {"accepted": False, "error": f"{type(exc).__name__}: {detail[:200]}"}
++        )
++
++
++@tool_options(cancel_on_interruption=False, timeout_secs=15.0)
++async def get_task_status(params: FunctionCallParams, lookup: str | None = None) -> None:
++    """Look up the current state of background tasks dispatched earlier in this conversation.
++
++    Args:
++        lookup: A specific task/session lookup key to check. Omit to check
++            every task dispatched so far in this conversation.
++    """
++    app_resources: AppResources = params.app_resources
++    registry: DispatchRegistry = app_resources.registry  # type: ignore[assignment]
++    lookups = [lookup] if lookup is not None else registry.lookups()
++
++    # §0.2 T2: "不得调用 openclaw tasks list 的无过滤全量列表" — only ever
++    # CMD_TASKS_SHOW, one call per lookup, never a bulk listing call.
++    views = [await _query_task_view(one) for one in lookups]
++    await params.result_callback({"tasks": views})
++
++
++# ---------------------------------------------------------------------------
++# §0.2 数据模型 §2 · DispatchRegistry (session-scoped, R5 工厂约定)
++# ---------------------------------------------------------------------------
++
++
++class DispatchRegistry:
++    """Session-scoped index of in-flight dispatches (数据模型 §2).
++
++    Holds no status field of its own (不变量①: 问状态一律现查 OpenClaw),
++    isn't persisted (②), is constructed fresh per session by
++    `build_dispatch_stack` rather than as a module singleton (③, R5), and
++    returns an empty list rather than raising when nothing is in flight (④).
++    `len(registry)` (⑤, ADR-8) is the in-flight count `TaskDispatchWorker.
++    reply()` checks against `MAX_INFLIGHT_TASKS`.
++    """
++
++    def __init__(self) -> None:
++        self._entries: dict[str, DispatchRegistryEntry] = {}
++
++    def __len__(self) -> int:
++        return len(self._entries)
++
++    def add(self, entry: DispatchRegistryEntry) -> None:
++        self._entries[entry.session_key] = entry
++
++    def remove(self, session_key: str) -> DispatchRegistryEntry | None:
++        """Remove and return the entry, or None if it wasn't present (idempotent)."""
++        return self._entries.pop(session_key, None)
++
++    def get(self, session_key: str) -> DispatchRegistryEntry | None:
++        return self._entries.get(session_key)
++
++    def lookups(self) -> list[str]:
++        """Session keys of every in-flight entry — ④ empty registry → `[]`, never raises."""
++        return list(self._entries.keys())
++
++
++def build_dispatch_registry() -> DispatchRegistry:
++    """Construct a fresh, session-scoped `DispatchRegistry` (R5 约定同 dual_brain.py)."""
++    return DispatchRegistry()
++
++
++# ---------------------------------------------------------------------------
++# §0.3 · TaskDispatchWorker(UIWorker) — decision layer
++# ---------------------------------------------------------------------------
++
++
++class TaskDispatchWorker(UIWorker):
++    """Decision layer: the "task-dispatch" worker (§0.1, §0.3).
++
++    Receives the built-in `respond` job (`UIWorker`'s own `@job(name=
++    "respond", sequential=True)` — not redefined here) with `{"query": ...}`,
++    runs its own (second) LLM turn, and completes via the single `reply`
++    tool below. This class body never calls any of `UIWorker`'s job-group
++    fan-out/cancel APIs (本期不启用, design.md §B) — held to that by C-16's
++    grep + static-assertion test, not by convention alone.
++    """
++
++    def __init__(
++        self,
++        name: str,
++        *,
++        llm: LLMService[Any],
++        registry: DispatchRegistry,
++        agent_id: str,
++    ) -> None:
++        # prompt_guide=None: UIWorker's default UI_STATE_PROMPT_GUIDE teaches
++        # the LLM a <ui_state>/<ui_event> wire format this worker never uses
++        # (本期不启用 UI 能力, design.md §B) — appending it would just be
++        # system-prompt bloat with nothing behind it. Every other UIWorker
++        # default (auto_inject_ui_state, inject_events, keep_history) is a
++        # true no-op with no snapshot ever set, so those stay at default.
++        super().__init__(name, llm=llm, prompt_guide=None)
++        # NOT `self._registry` — `BaseWorker.__init__` already claims that
++        # name for its own `WorkerRegistry` reference (populated later by
++        # `attach()`, called from `WorkerRunner.add_workers()`, which runs
++        # *after* this constructor and would silently clobber a same-named
++        # attribute). Caught by this task card's own driving-script scenario
++        # (acceptance case 8 - real run, not mocked): `len(self._registry)`
++        # against the real `WorkerRegistry` raises `TypeError` at the first
++        # capacity check, hanging the whole reply() call is exactly how it
++        # surfaced — see backend-notes.md.
++        self._dispatch_registry = registry
++        self._agent_id = agent_id
++
++    @tool(cancel_on_interruption=False, timeout_secs=30)
++    async def reply(
++        self, params: FunctionCallParams, answer: str, tasks: list[str] | None = None
++    ) -> None:
++        """Finish this delegate turn: report back to the fast brain and, if
++        warranted, hand the written task briefs to the background execution
++        worker.
++
++        Args:
++            answer: One-sentence takeaway handed back to the fast brain
++                (e.g. "sent three things off to be done"); the fast brain
++                phrases what the user actually hears from this.
++            tasks: The fully written task briefs to dispatch now, one per
++                background run. Omit or pass an empty list when this turn
++                doesn't warrant dispatching anything.
++        """
++        task_list = list(tasks or [])
++
++        # §0.3 "在途任务上限" 行为约定 1-4 / ADR-8: single checkpoint, right
++        # here, before step ① — the only point that sees both the current
++        # in-flight count and the full fan-out list at once.
++        if len(self._dispatch_registry) + len(task_list) > MAX_INFLIGHT_TASKS:
++            logger.warning(
++                f"[task-dispatch] capacity-reached inflight={len(self._dispatch_registry)} "
++                f"incoming={len(task_list)} max={MAX_INFLIGHT_TASKS}"
++            )
++            # 约定4: 整批拒绝，不起任何 exec job；不使用第二个 LLM 自己写的 answer。
++            await self.respond_to_job(answer=CAPACITY_MESSAGE, status=JobStatus.ERROR)
++            await params.result_callback(None)
++            return
++
++        # 约定6: 未超限，按原①②次序继续。① 不等待地起 exec job。
++        for task_text in task_list:
++            session_key = _generate_session_key(self._agent_id)
++            label = _derive_label(task_text)
++            exec_payload = ExecDispatchPayload(session_key=session_key, label=label, task=task_text)
++            self.create_task(
++                self._dispatch_one(session_key, asdict(exec_payload)),
++                f"{self.name}::dispatch::{session_key}",
++            )
++
++        # ② 立即回应，不 await 上面任何一个 exec job 的完成（§0.3 硬约束）。
++        await self.respond_to_job(answer)
++        await params.result_callback(None)
++
++    async def _dispatch_one(self, session_key: str, payload: dict[str, Any]) -> None:
++        """Fire one exec-worker `dispatch` job without waiting on it from `reply()`.
++
++        This coroutine itself *does* wait for the exec worker's response
++        (§0.4 出站 job 响应) — just not synchronously from inside `reply()`,
++        since it only ever runs inside a `self.create_task(...)` `reply()`
++        never awaits (§0.3 硬约束, C-15 acceptance case 8).
++        """
++        try:
++            async with self.job(
++                contract.EXEC_WORKER_NAME, name=DISPATCH_JOB_NAME, payload=payload
++            ) as job_ctx:
++                pass
++            logger.info(f"[task-dispatch] exec-dispatched response={job_ctx.response}")
++        except JobError as exc:
++            logger.warning(
++                f"[task-dispatch] exec-dispatch-failed session_key={session_key} error={exc}"
++            )
++
++
++# ---------------------------------------------------------------------------
++# §0.4 · OpenClawExecWorker(BaseWorker) — execution layer
++# ---------------------------------------------------------------------------
++
++
++@dataclass
++class _CliProcessOutcome:
++    """Mutable holder the CLI-exit watcher task fills in once the detached
++    `openclaw agent` process exits (§0.7 硬性约定4: detached, never awaited
++    from the response path itself).
++
++    Two independent readers need this without awaiting the process
++    themselves: the lookup poll's early-failure check (`process.returncode`
++    alone doesn't carry stderr text) and the final debug-log line. Per
++    ADR-2, the captured `returncode`/stderr are *never* used to judge the
++    dispatch outcome once a task record has actually been seen — only to
++    detect the "the CLI died before doing any work" case C-04 covers (a bad
++    `--agent`), which is a much stronger signal than the "F6-style"
++    misleading-success-after-a-real-run case ADR-2 warns about.
++    """
++
++    returncode: int | None = None
++    stderr_first_line: str = ""
++    captured: asyncio.Event = field(default_factory=asyncio.Event)
++
++
++class OpenClawExecWorker(BaseWorker):
++    """Execution layer: the "openclaw-exec" worker (§0.1, §0.4).
++
++    Two independent responsibilities per task card / §0.4:
++    - `dispatch` job (`sequential=False`, §0.4): detached-spawn `openclaw
++      agent`, poll `tasks show` for the resulting record (≤30s), register
++      the entry, and respond.
++    - `on_worker_ready`-triggered background asyncio task (§0.8 条1/条5):
++      holds the standing `openclaw mcp serve` stdio bridge and feeds
++      terminal assistant messages into the injection queue. Started via a
++      self-watch (`watch_workers(self.name)`) inside `start()`, so it is
++      already running before this worker's first `dispatch` job can even
++      arrive — connecting after the fact would silently miss any events
++      that landed before the bridge connected (§0.8 条5, D-3).
++    """
++
++    def __init__(
++        self,
++        name: str,
++        *,
++        agent_id: str,
++        registry: DispatchRegistry,
++        injection_queue: asyncio.Queue[str],
++        cli_override: str | None = None,
++    ) -> None:
++        super().__init__(name)
++        self._agent_id = agent_id
++        # See TaskDispatchWorker.__init__ for why this is not `self._registry`
++        # — `BaseWorker` already owns that name for its own `WorkerRegistry`.
++        self._dispatch_registry = registry
++        self._injection_queue = injection_queue
++        self._cli_override = cli_override
++        self._bridge_ready = False
++        self._events_task: asyncio.Task | None = None
++
++    async def start(self) -> None:
++        await super().start()
++        # Fires on_worker_ready(data) immediately below, synchronously,
++        # since this worker is already registered by the time
++        # super().start() returns (BaseWorker.start() calls
++        # _register_ready() before returning) — see WorkerRegistry.watch()
++        # docstring: "If the worker is already registered, the handler
++        # fires immediately."
++        await self.watch_workers(self.name)
++
++    async def stop(self) -> None:
++        if self._events_task is not None:
++            await self.cancel_task(self._events_task)
++            self._events_task = None
++        await super().stop()
++
++    async def on_worker_ready(self, data: WorkerReadyData) -> None:
++        await super().on_worker_ready(data)
++        if data.worker_name != self.name:
++            return
++        if self._events_task is None:
++            self._events_task = self.create_task(
++                self._run_events_loop(), f"{self.name}::events_wait_loop"
++            )
++
++    # -- dispatch job --------------------------------------------------
++
++    @job(name=DISPATCH_JOB_NAME, sequential=False)
++    async def _dispatch_job(self, message: BusJobRequestMessage) -> None:
++        await self._handle_dispatch(message)
++
++    async def _handle_dispatch(self, message: BusJobRequestMessage) -> None:
++        payload = message.payload or {}
++        session_key = str(payload.get("session_key") or "")
++        label = str(payload.get("label") or "")
++        task_text = str(payload.get("task") or "")
++        if not session_key or not task_text:
++            logger.error(f"[openclaw-exec] dispatch-bad-payload job_id={message.job_id}")
++            await self.send_job_response(
++                message.job_id,
++                {"error": "dispatch payload missing session_key/task"},
++                status=JobStatus.ERROR,
++            )
++            return
++
++        tmp_dir = tempfile.mkdtemp(prefix="voice-agent-dispatch-")
++        message_file_path = str(Path(tmp_dir) / "task.txt")
++        try:
++            Path(message_file_path).write_text(task_text, encoding="utf-8")
++        except OSError as exc:
++            logger.error(
++                f"[openclaw-exec] task-file-write-failed session_key={session_key} error={exc}"
++            )
++            await self.send_job_response(
++                message.job_id, {"error": f"{type(exc).__name__}: {exc}"}, status=JobStatus.ERROR
++            )
++            return
++
++        argv = contract.cmd_agent(self._agent_id, session_key, message_file_path)
++        if self._cli_override:
++            # §0.10: cli_override only replaces argv[0] (the program name);
++            # every other CMD_AGENT argument stays verbatim.
++            argv[0] = self._cli_override
++
++        try:
++            process = await asyncio.create_subprocess_exec(
++                *argv,
++                stdout=asyncio.subprocess.PIPE,
++                stderr=asyncio.subprocess.PIPE,
++                start_new_session=True,  # §0.7 约定4: detached, survives worker.cancel().
++            )
++        except OSError as exc:
++            logger.error(f"[openclaw-exec] spawn-failed session_key={session_key} error={exc}")
++            with contextlib.suppress(OSError):
++                Path(message_file_path).unlink(missing_ok=True)
++                Path(tmp_dir).rmdir()
++            await self.send_job_response(
++                message.job_id, {"error": f"{type(exc).__name__}: {exc}"}, status=JobStatus.ERROR
++            )
++            return
++
++        outcome = _CliProcessOutcome()
++        self.create_task(
++            self._watch_cli_process(process, tmp_dir, outcome),
++            f"{self.name}::cli-watch::{session_key}",
++        )
++
++        found, cli_failed = await self._poll_until_visible(session_key, process, outcome)
++
++        if cli_failed:
++            stderr_line = outcome.stderr_first_line or "(no stderr captured)"
++            logger.warning(
++                f"[openclaw-exec] cli-dispatch-failed session_key={session_key} "
++                f"returncode={outcome.returncode} stderr={stderr_line}"
++            )
++            await self.send_job_response(
++                message.job_id,
++                {"error": f"openclaw agent exited {outcome.returncode}: {stderr_line}"},
++                status=JobStatus.ERROR,
++            )
++            return
++
++        degraded: str | None = None
++        if not self._bridge_ready:
++            degraded = DEGRADED_MCP_BRIDGE_DOWN
++        elif not found:
++            degraded = DEGRADED_TASK_RECORD_NOT_VISIBLE
++
++        self._dispatch_registry.add(
++            DispatchRegistryEntry(session_key=session_key, label=label, created_at=time.monotonic())
++        )
++        logger.info(f"[openclaw-exec] dispatched session_key={session_key} degraded={degraded}")
++        response = ExecDispatchResponse(
++            session_key=session_key, lookup=session_key, degraded=degraded
++        )
++        await self.send_job_response(message.job_id, asdict(response), status=JobStatus.COMPLETED)
++
++    async def _poll_until_visible(
++        self, session_key: str, process: asyncio.subprocess.Process, outcome: _CliProcessOutcome
++    ) -> tuple[bool, bool]:
++        """Poll `tasks show <session_key>` until it hits, up to `_LOOKUP_POLL_TIMEOUT_SECS`.
++
++        Returns `(found, cli_failed)`. `cli_failed` is only True when the
++        detached process has *already exited* with a non-zero code before
++        the record ever became visible (C-04's fast-failure case, e.g. a
++        bad `--agent`) — a real long-running dispatch never exits this
++        quickly, so this can't misfire on a normal run (ADR-2).
++        """
++        loop = asyncio.get_running_loop()
++        deadline = loop.time() + _LOOKUP_POLL_TIMEOUT_SECS
++        while True:
++            result = await _run_openclaw_subprocess(contract.cmd_tasks_show(session_key))
++            if result.exit_code == 0:
++                return True, False
++            if process.returncode is not None and process.returncode != 0:
++                with contextlib.suppress(TimeoutError):
++                    await asyncio.wait_for(outcome.captured.wait(), timeout=2.0)
++                return False, True
++            if loop.time() >= deadline:
++                return False, False
++
++    async def _watch_cli_process(
++        self, process: asyncio.subprocess.Process, tmp_dir: str, outcome: _CliProcessOutcome
++    ) -> None:
++        """Drain the detached CLI's pipes to EOF and clean up its temp file.
++
++        §0.7 约定3: the temp file is deleted "by the asyncio task that
++        started the process, after the child exits" — this task is created
++        immediately after the spawn inside the same `_handle_dispatch` call,
++        and is the one that actually observes the exit (`_handle_dispatch`
++        itself returns as soon as it has responded to the job, per ADR-2's
++        "不等待"). Continuously draining here (rather than only checking
++        `process.returncode`) also avoids a long-running task blocking on a
++        full stdout/stderr OS pipe buffer.
++        """
++        try:
++            stdout_bytes, stderr_bytes = await process.communicate()
++        except Exception as exc:  # pragma: no cover - communicate() rarely raises
++            logger.warning(f"[openclaw-exec] cli-watch-error error={exc}")
++            stdout_bytes, stderr_bytes = b"", b""
++        outcome.returncode = process.returncode
++        stderr_text = stderr_bytes.decode("utf-8", errors="replace")
++        outcome.stderr_first_line = _first_stderr_line(stderr_text)
++        outcome.captured.set()
++        # ADR-2: exit code/stdout are unreliable once the run actually
++        # happened (F6: CLI reports ok/completed while the task record is
++        # `failed`) — this line is a debug breadcrumb only, never fed into
++        # any decision past the early-failure check in `_poll_until_visible`.
++        logger.debug(
++            f"[openclaw-exec] cli-exited returncode={process.returncode} "
++            f"stderr_first_line={outcome.stderr_first_line!r}"
++        )
++        with contextlib.suppress(OSError):
++            Path(tmp_dir).joinpath("task.txt").unlink(missing_ok=True)
++            Path(tmp_dir).rmdir()
++
++    # -- MCP bridge / events_wait loop ----------------------------------
++
++    async def _run_events_loop(self) -> None:
++        """Standing `openclaw mcp serve` bridge (§0.8). Never registered on
++        any LLM (条1) — this is a private asyncio task's own loop.
++
++        No reconnect-on-failure logic: per ADR-5 ("不做兜底状态轮询"), this
++        module does not add fallback machinery beyond what the contract
++        specifies. If the bridge dies mid-session, `_bridge_ready` drops to
++        False (surfaced via `degraded="mcp-bridge-down"` on the next
++        dispatch) and this task simply ends — documented as a known
++        limitation in backend-notes.md, not silently retried.
++        """
++        argv = contract.cmd_mcp_serve()
++        server_params = StdioServerParameters(command=argv[0], args=argv[1:])
++        try:
++            async with stdio_client(server_params) as (read_stream, write_stream):
++                async with ClientSession(read_stream, write_stream) as session:
++                    await session.initialize()
++                    self._bridge_ready = True
++                    logger.info(f"[openclaw-exec] mcp-bridge-up worker={self.name}")
++                    cursor = 0
++                    while True:
++                        result = await session.call_tool(
++                            "events_wait",
++                            {"after_cursor": cursor, "timeout_ms": _EVENTS_WAIT_TIMEOUT_MS},
++                            read_timeout_seconds=_EVENTS_WAIT_READ_TIMEOUT,
++                        )
++                        if result.isError:
++                            raise RuntimeError(f"events_wait tool error: {result.content}")
++                        structured = result.structuredContent or {}
++                        event = structured.get("event")
++                        if event is None:
++                            continue
++                        cursor = event.get("cursor", cursor)
++                        await self._maybe_report_terminal_event(event)
++        except asyncio.CancelledError:
++            raise
++        except Exception as exc:
++            self._bridge_ready = False
++            logger.error(f"[openclaw-exec] mcp-bridge-down worker={self.name} error={exc}")
++
++    async def _maybe_report_terminal_event(self, event: dict[str, Any]) -> None:
++        """§0.8 条 8/9, §0.9 筛选条件: only a `stopReason == "stop"` assistant
++        message for a session key this worker is tracking becomes a
++        playback item — everything else (tool-use/aborted assistant
++        messages, user messages, approval events, unrelated session keys)
++        is dropped with no side effect, per FR-3 判据5 / C-18.
++
++        Every field name read here (`sessionKey`, `type`, `role`, `raw`,
++        `message`, `stopReason`, `text`, `cursor`) is verified against
++        `pipeline/task-dispatch/baseline/mcp-event-sample.json` (T-1) — see
++        backend-notes.md acceptance case 9.
++        """
++        session_key = event.get("sessionKey")
++        if not session_key:
++            return
++        entry = self._dispatch_registry.get(session_key)
++        if entry is None:
++            return
++        if event.get("type") != "message" or event.get("role") != "assistant":
++            return
++        raw = event.get("raw") or {}
++        message = raw.get("message") or {}
++        if message.get("stopReason") != "stop":
++            return
++
++        agent_text = event.get("text", "")
++        rendered = prompts.INJECT_TASK_TERMINAL_TEMPLATE.format(
++            label=entry.label, agent_text=agent_text
++        )
++        await self._injection_queue.put(rendered)
++        self._dispatch_registry.remove(session_key)
++        logger.info(
++            f"[openclaw-exec] terminal-report session_key={session_key} label={entry.label!r}"
++        )
++
++
++# ---------------------------------------------------------------------------
++# §0.9 · _DispatchMaterialInjector(FrameProcessor) — return-flow layer
++# ---------------------------------------------------------------------------
++
++
++class _DispatchMaterialInjector(FrameProcessor):
++    """Fast-brain-branch-head processor that drains the injection queue
++    (ADR-4: "同构而非同实例" — same queue-in/frame-out shape as
++    `ConsumerProcessor`, but the source is a worker, not an in-pipeline
++    `ProducerProcessor`, so a bespoke ~40-line processor is used instead).
++
++    Passthrough for every frame it sees (never filters/alters the pipeline's
++    own frame flow); its own output is exclusively the merged
++    `LLMMessagesAppendFrame` pushed from the drain loop. No output component
++    lives downstream of this processor by construction — it only pushes into
++    the fast-brain context path, never to a transport (FR-3 判据1 structural
++    requirement, L2 test).
++    """
++
++    def __init__(self, queue: asyncio.Queue[str], **kwargs) -> None:
++        super().__init__(**kwargs)
++        self._queue = queue
++        self._drain_task: asyncio.Task | None = None
++
++    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
++        await super().process_frame(frame, direction)
++
++        if isinstance(frame, StartFrame):
++            self._start()
++        elif isinstance(frame, EndFrame):
++            await self._cancel_drain_task()
++        elif isinstance(frame, CancelFrame):
++            await self._cancel_drain_task()
++
++        await self.push_frame(frame, direction)
++
++    async def cleanup(self) -> None:
++        await super().cleanup()
++        await self._cancel_drain_task()
++
++    def _start(self) -> None:
++        if self._drain_task is None:
++            self._drain_task = self.create_task(self._drain_loop())
++
++    async def _cancel_drain_task(self) -> None:
++        if self._drain_task:
++            await self.cancel_task(self._drain_task)
++            self._drain_task = None
++
++    async def _drain_loop(self) -> None:
++        """§0.9 合并规则: block for the first item, then drain whatever else
++        is already queued and merge all of it into **one**
++        `LLMMessagesAppendFrame` (FR-3 判据3 — no separate frame per item,
++        no double-answering when two tasks finish within the same
++        insertion window, C-10)."""
++        while True:
++            items = [await self._queue.get()]
++            while True:
++                try:
++                    items.append(self._queue.get_nowait())
++                except asyncio.QueueEmpty:
++                    break
++            content = "\n".join(items)
++            await self.queue_frame(
++                LLMMessagesAppendFrame(
++                    messages=[{"role": "user", "content": content}], run_llm=True
++                ),
++                FrameDirection.DOWNSTREAM,
++            )
++
++
++# ---------------------------------------------------------------------------
++# Session-scoped factory (R5 约定: 禁模块级单例)
++# ---------------------------------------------------------------------------
++
++
++@dataclass
++class DispatchStack:
++    """Everything one session's task-dispatch wiring needs, handed back from
++    `build_dispatch_stack` for T-5's `assemble_pipeline` to wire in."""
++
++    dispatch_worker: TaskDispatchWorker
++    exec_worker: OpenClawExecWorker
++    registry: DispatchRegistry
++    injection_queue: asyncio.Queue[str]
++    app_resources: AppResources
++
++    def build_injector(self) -> _DispatchMaterialInjector:
++        """Construct a fresh `_DispatchMaterialInjector` bound to this
++        session's injection queue (design.md 方案 C 步骤4②)."""
++        return _DispatchMaterialInjector(self.injection_queue)
++
++
++def build_dispatch_stack(
++    agent_id: str,
++    *,
++    llm: LLMService[Any],
++    cli_override: str | None = None,
++) -> DispatchStack:
++    """Session-scoped factory for the whole task-dispatch stack (R5 约定).
++
++    Args:
++        agent_id: The OpenClaw agent id (`.env` `OPENCLAW_AGENT_ID`, §0.6) —
++            **not** the project's `Config` object. This module never reads
++            `server/config.py` field names (D-003 守法②, task card T-4 P56
++            "配置字段级" 依赖点): T-5 extracts the one config value this
++            stack needs and passes it positionally, exactly as it already
++            extracts (and passes in) `llm` — the already-constructed second
++            LLM service, built the same way `bot.py::assemble_pipeline`
++            builds `fast_llm`/`slow_llm` today, not re-derived here.
++        llm: The already-constructed second LLM service for
++            `TaskDispatchWorker`'s delegate turn.
++        cli_override: §0.10 `ENV_TASK_DISPATCH_CLI` test-only value (already
++            read from the environment by the caller — this module never
++            reads env vars itself, D-003 守法②). `None`/omitted is the
++            production path.
++
++    Returns:
++        A `DispatchStack` holding both new workers, the session's
++        `DispatchRegistry`, its injection queue, and the `app_resources`
++        bag the two fast-brain tools read via `params.app_resources`.
++        `app_resources.main_worker` starts unset — T-5 fills it in once the
++        main `PipelineWorker` exists (design.md 方案 C 步骤5).
++    """
++    registry = build_dispatch_registry()
++    injection_queue: asyncio.Queue[str] = asyncio.Queue()
++    app_resources = AppResources(
++        registry=registry, injection_queue=injection_queue, agent_id=agent_id
++    )
++
++    dispatch_worker = TaskDispatchWorker(
++        contract.DISPATCH_WORKER_NAME, llm=llm, registry=registry, agent_id=agent_id
++    )
++    exec_worker = OpenClawExecWorker(
++        contract.EXEC_WORKER_NAME,
++        agent_id=agent_id,
++        registry=registry,
++        injection_queue=injection_queue,
++        cli_override=cli_override,
++    )
++
++    return DispatchStack(
++        dispatch_worker=dispatch_worker,
++        exec_worker=exec_worker,
++        registry=registry,
++        injection_queue=injection_queue,
++        app_resources=app_resources,
++    )
+diff --git a/server/task_dispatch_contract.py b/server/task_dispatch_contract.py
+new file mode 100644
+index 0000000..89e5f32
+--- /dev/null
++++ b/server/task_dispatch_contract.py
+@@ -0,0 +1,218 @@
++"""Contract constants and pure data carriers for task-dispatch (C4 派活).
++
++Single source of truth for the cross-component literals defined in
++``pipeline/task-dispatch/contract/cases.md`` §0 — worker names, job names,
++payload/response keys, ``TaskView`` field selection, the session-key
++template, the openclaw external-command argv builders, the in-flight task
++cap, and the test-only environment switch name.
++
++No behavior lives here: dispatch, polling, event parsing, and material
++injection are all implemented in ``server/task_dispatch.py`` (T-4). This
++module only defines constants and plain dataclasses (fields, no methods).
++
++Zero side-effect import (task card T-2 acceptance case 1): this module
++reads no environment variables, calls no configuration loader, and imports
++no pipecat symbol at runtime (pipecat types are only referenced under
++``typing.TYPE_CHECKING``, deferred via ``from __future__ import
++annotations``) — a bare interpreter can import it with no venv, no
++``.env``, and no ``NLTK_DISABLE_IMPORT_SECURITY``.
++"""
++
++from __future__ import annotations
++
++import asyncio
++from dataclasses import dataclass
++from typing import TYPE_CHECKING
++
++if TYPE_CHECKING:
++    # Type-check-only import: never executed at runtime (see module
++    # docstring / acceptance case 1). Matches the existing import path used
++    # in server/bot.py ("from pipecat.pipeline.worker import ... PipelineWorker").
++    from pipecat.pipeline.worker import PipelineWorker
++
++# ---------------------------------------------------------------------------
++# §0.1 · worker names (bus addressing keys)
++# ---------------------------------------------------------------------------
++
++MAIN_WORKER_NAME = "voice-main"
++DISPATCH_WORKER_NAME = "task-dispatch"
++EXEC_WORKER_NAME = "openclaw-exec"
++
++# ---------------------------------------------------------------------------
++# §0.3 · dispatch worker (TaskDispatchWorker(UIWorker)) job contract
++# ---------------------------------------------------------------------------
++
++# UIWorker's built-in job name/payload key for the "respond" job (not
++# redefined by this project, just named here so nobody inlines the string).
++RESPOND_JOB_NAME = "respond"
++QUERY_PAYLOAD_KEY = "query"
++
++# In-flight task cap (2026-08-08 用户裁决新增, ADR-8). Not a configurable
++# item on purpose — §0.3 explicitly forbids reading it from env / .env.example.
++MAX_INFLIGHT_TASKS = 3
++CAPACITY_MESSAGE = (
++    "In-flight task limit (3) reached; none of the newly requested tasks "
++    "were dispatched."
++)
++
++# ---------------------------------------------------------------------------
++# §0.4 · exec worker (OpenClawExecWorker(BaseWorker)) job contract
++# ---------------------------------------------------------------------------
++
++DISPATCH_JOB_NAME = "dispatch"
++
++# `degraded` closed set (§0.4; "notify-set-failed" removed this round along
++# with the deleted CMD_TASKS_NOTIFY / original FR-4 notify-policy feature).
++DEGRADED_TASK_RECORD_NOT_VISIBLE = "task-record-not-visible"
++DEGRADED_MCP_BRIDGE_DOWN = "mcp-bridge-down"
++
++# ---------------------------------------------------------------------------
++# §0.5 · TaskView field selection (order verbatim per §0.5, plus the two
++# project-added fields "lookup" / "found" appended at the end)
++# ---------------------------------------------------------------------------
++
++TASK_VIEW_FIELDS: tuple[str, ...] = (
++    "taskId",
++    "runtime",
++    "status",
++    "notifyPolicy",
++    "deliveryStatus",
++    "createdAt",
++    "startedAt",
++    "endedAt",
++    "error",
++    "progressSummary",
++    "terminalSummary",
++    "childSessionKey",
++    "ownerKey",
++    "lookup",
++    "found",
++)
++
++# ---------------------------------------------------------------------------
++# §0.6 · session key (relational primary key of this whole change)
++# ---------------------------------------------------------------------------
++
++SESSION_KEY_TEMPLATE = "agent:{agent_id}:voice-agent-{token}"
++# Token generation is `uuid4().hex[:12]` (§0.6); this constant only
++# captures the slice length so the "12" is not re-inlined elsewhere.
++SESSION_KEY_TOKEN_LENGTH = 12
++
++# ---------------------------------------------------------------------------
++# §0.7 · openclaw external command argv builders
++#
++# Pure functions (no internal state, no subprocess spawning): each takes the
++# values it needs and returns the argv list verbatim per §0.7. No component
++# other than these three functions may inline an openclaw argv literal.
++# ---------------------------------------------------------------------------
++
++
++def cmd_agent(agent_id: str, session_key: str, message_file_path: str) -> list[str]:
++    """Build argv for the long-running dispatch call (§0.7 ``CMD_AGENT``).
++
++    ``openclaw agent --agent <agent_id> --session-key <session_key>
++    --message-file <path> --json``
++    """
++    return [
++        "openclaw",
++        "agent",
++        "--agent",
++        agent_id,
++        "--session-key",
++        session_key,
++        "--message-file",
++        message_file_path,
++        "--json",
++    ]
++
++
++def cmd_tasks_show(lookup: str) -> list[str]:
++    """Build argv for the short status-query call (§0.7 ``CMD_TASKS_SHOW``).
++
++    ``openclaw tasks show <lookup> --json`` (``<lookup>`` accepts a task id,
++    run id, or session key).
++    """
++    return ["openclaw", "tasks", "show", lookup, "--json"]
++
++
++def cmd_mcp_serve() -> list[str]:
++    """Build argv for the standing MCP bridge subprocess (§0.7 ``CMD_MCP_SERVE``).
++
++    ``openclaw mcp serve``
++    """
++    return ["openclaw", "mcp", "serve"]
++
++
++# ---------------------------------------------------------------------------
++# §0.10 · test-only environment switch name (production path: always unset)
++# ---------------------------------------------------------------------------
++
++ENV_TASK_DISPATCH_CLI = "TASK_DISPATCH_CLI"
++
++
++# ---------------------------------------------------------------------------
++# Pure dataclasses (fields only, no behavior)
++# ---------------------------------------------------------------------------
++
++
++@dataclass(frozen=True)
++class DispatchRegistryEntry:
++    """One row of the session-scoped dispatch registry (design.md 数据模型 §2).
++
++    The registry container itself (add/remove/length-check behavior) is
++    ``task_dispatch.DispatchRegistry`` (T-4); this is only the record shape
++    it holds.
++    """
++
++    session_key: str
++    label: str
++    created_at: float
++
++
++@dataclass(frozen=True)
++class ExecDispatchPayload:
++    """Inbound payload of the exec worker's ``dispatch`` job (§0.4)."""
++
++    session_key: str
++    label: str
++    task: str
++
++
++@dataclass(frozen=True)
++class ExecDispatchResponse:
++    """Outbound response of the exec worker's ``dispatch`` job (§0.4).
++
++    ``degraded`` is ``None`` on the happy path, or one of the closed-set
++    reason codes above (``DEGRADED_TASK_RECORD_NOT_VISIBLE`` /
++    ``DEGRADED_MCP_BRIDGE_DOWN``).
++    """
++
++    session_key: str
++    lookup: str
++    degraded: str | None = None
++
++
++@dataclass
++class AppResources:
++    """Carrier passed via ``PipelineWorker(app_resources=...)`` (数据模型 §2).
++
++    Read by the two fast-brain tools (``dispatch_task`` / ``get_task_status``,
++    T-4) through ``params.app_resources`` — the official channel, filling
++    盘点缺口 K3.
++
++    ``main_worker`` starts unset: ``build_dispatch_stack`` (T-4) constructs
++    this object before the main ``PipelineWorker`` exists; ``run_bot``
++    (T-5) writes the back-reference in once the worker is constructed
++    (design.md 方案 C 节步骤 5).
++
++    ``registry`` holds a ``task_dispatch.DispatchRegistry`` instance at
++    runtime; typed as ``object`` here (not ``DispatchRegistry``) because
++    this module must not import any other new module of this change
++    (task card T-2 符号级依赖) and ``DispatchRegistry`` is defined
++    downstream in ``task_dispatch.py``.
++    """
++
++    registry: object
++    injection_queue: asyncio.Queue[str]
++    agent_id: str
++    main_worker: PipelineWorker | None = None
+diff --git a/server/tests/conftest.py b/server/tests/conftest.py
+index e286e27..8db5bbc 100644
+--- a/server/tests/conftest.py
++++ b/server/tests/conftest.py
+@@ -20,6 +20,9 @@ _FAKE_REQUIRED_ENV = {
+     "LLM_API_KEY": "sk-test-key",
+     "LLM_MODEL": "gemini-3.6-flash-high",
+     "SLOW_LLM_MODEL": "gemini-3-pro",
++    # task-dispatch (C4 派活) T-5 新增必需项（server/config.py §0.6）——T-6 交接缝隙
++    # 修复：T-5 加了这一项但当时未同步这里，主会话核实后追加授权本卡补齐。
++    "OPENCLAW_AGENT_ID": "dev",
+     "SONIOX_API_KEY": "soniox-test-key",
+     "ELEVENLABS_API_KEY": "elevenlabs-test-key",
+     "ELEVENLABS_VOICE_ID": "voice-test-id",
+diff --git a/server/tests/test_bot.py b/server/tests/test_bot.py
+index ea8d6fa..685e865 100644
+--- a/server/tests/test_bot.py
++++ b/server/tests/test_bot.py
+@@ -39,6 +39,7 @@ def _make_config(**overrides):
+         tts_voice="expected-voice-id",
+         tts_model="eleven_flash_v2_5",
+         stt_model="stt-rt-v5",
++        openclaw_agent_id="dev",
+     )
+     base.update(overrides)
+     return Config(**base)
+diff --git a/server/tests/test_config.py b/server/tests/test_config.py
+index 0a7359e..32b35f5 100644
+--- a/server/tests/test_config.py
++++ b/server/tests/test_config.py
+@@ -1,5 +1,6 @@
+ """Unit tests for server.config.load_config (R5 / P25)."""
+ 
++import dataclasses
+ import re
+ 
+ import pytest
+@@ -16,11 +17,15 @@ REQUIRED_ENV = {
+ 
+ # fast-slow-brain design §6.2 / RTM：1 期 5 项必需项被新 8 项取代，
+ # OPENAI_MODEL/KOKORO_VOICE_ID 不再必需（U1/U2/U6 用此常量，见 T1.1）。
++#
++# task-dispatch (C4 派活) T-5 新增第 9 项必需项 OPENCLAW_AGENT_ID（server/config.py
++# §0.6，会话键模板 agent:{agent_id}:... 的 agent_id 段）——T-6 独占路径同步项。
+ NEW_REQUIRED_ENV = {
+     "LLM_BASE_URL": "http://127.0.0.1:8045/v1",
+     "LLM_API_KEY": "sk-test-key",
+     "LLM_MODEL": "gemini-3.6-flash-high",
+     "SLOW_LLM_MODEL": "gemini-3-pro",
++    "OPENCLAW_AGENT_ID": "dev",
+     "SONIOX_API_KEY": "soniox-test-key",
+     "ELEVENLABS_API_KEY": "elevenlabs-test-key",
+     "ELEVENLABS_VOICE_ID": "voice-test-id",
+@@ -50,6 +55,7 @@ def test_missing_key_lists_all_missing(monkeypatch):
+     assert "LLM_BASE_URL" in message
+     assert "LLM_API_KEY" in message
+     assert "SLOW_LLM_MODEL" in message
++    assert "OPENCLAW_AGENT_ID" in message
+     assert "SONIOX_API_KEY" in message
+     assert "ELEVENLABS_API_KEY" in message
+     assert "ELEVENLABS_VOICE_ID" in message
+@@ -231,3 +237,15 @@ def test_deepgram_and_cartesia_selected_together_succeeds(monkeypatch):
+     assert cfg.tts_api_key == "cartesia-test-key"
+     assert cfg.tts_voice == "cartesia-test-voice"
+     assert cfg.tts_model is None
++
++
++def test_config_is_frozen(monkeypatch):
++    """config.py:72 `Config` 声明 `@dataclass(frozen=True)`(不可变值对象设计
++    属性,§5 集成闸门变异抽样 mutant①守卫:`frozen=True`→`frozen=False`)——
++    构造出的实例对任一字段赋值必须抛 `dataclasses.FrozenInstanceError`,
++    不能被悄悄改动。"""
++    _set_new_required_env(monkeypatch)
++    cfg = load_config()
++
++    with pytest.raises(dataclasses.FrozenInstanceError):
++        cfg.llm_model = "mutated-after-construction"
+diff --git a/server/tests/test_dual_brain.py b/server/tests/test_dual_brain.py
+index f9181c5..292c827 100644
+--- a/server/tests/test_dual_brain.py
++++ b/server/tests/test_dual_brain.py
+@@ -72,6 +72,12 @@ from pipecat.tests.utils import SleepFrame, run_test
+ 
+ import prompts
+ 
++# task-dispatch (C4 派活, T-6): `task_dispatch.py` already exists (T-4
++# delivered it before this task starts), so no ModuleNotFoundError guard is
++# needed here — unlike `dual_brain` above, whose guard dates back to when
++# T3.1 was authored before `dual_brain.py` existed.
++import task_dispatch
++
+ 
+ def _message_field(message, field: str):
+     """Safely read a field from an `LLMMessagesAppendFrame.messages[i]` entry.
+@@ -1101,6 +1107,83 @@ class TestAssemblePipeline:
+         assert pushed.data["type"] == "slow-brain-failed", "面板消息 data.type 必须是 slow-brain-failed"
+         assert pushed.data["turn"] == 1, "面板消息里的 turn 必须与日志行、material_filter.turn 三者一致"
+ 
++    # -- task-dispatch (C4 派活, T-6) L2 结构断言 --------------------------
++    #
++    # C-09 步骤1(契约 §1 / design.md §E L2):在本既有类内扩写,沿用
++    # `test_pipeline_shape`/`test_rtvi_ignores_slow_branch` 同款
++    # "assemble_pipeline() 一次、断言其返回结构" 手法,不新起断言文件、不新增
++    # 模块缓存强制重载手法(D-003 守法③;`bot_module` fixture 的重载定义点
++    # 唯一落在 `conftest.py`,本类自身不新增该手法,详见 task 卡 T-6 Interfaces 节)。
++
++    @staticmethod
++    def _fast_and_slow_branches(assembled):
++        """解析 `ParallelPipeline` 的两个分支(快脑/慢脑),与
++        `test_pipeline_shape` 内联的同一手法抽成 helper,供本轮新增的多个
++        测试方法复用,不重复解析逻辑。"""
++        parallel = next(
++            p for p in assembled.pipeline.processors if isinstance(p, ParallelPipeline)
++        )
++        branches = parallel.processors
++        return branches[0].processors, branches[1].processors
++
++    def test_dispatch_injector_at_fast_branch_head(self, bot_module):
++        """C-09 步骤1 / design.md §E L2:新增的 `_DispatchMaterialInjector`
++        位于快脑分支头部,且对外输出分支数量与改动前一致(仍仅快脑分支含
++        `transport.output()`/TTS)——与本类既有 `test_pipeline_shape` 断言
++        "consumer 必须在快脑分支内、慢脑分支不得含输出件"是同一形状的直接
++        延伸(task 卡 T-6 Interfaces 节)。"""
++        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
++
++        transport = self._FakeTransport()
++        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
++
++        fast_branch, slow_branch = self._fast_and_slow_branches(assembled)
++        # `fast_branch[0]` 是分支内部的 `PipelineSource` 标记(框架内部实现细
++        # 节,非"真实"处理器),同款既有断言手法(`test_pipeline_shape` 的
++        # `consumer_idx`)用相对次序而非硬编码下标 0 —— 这里同样断言注入器
++        # 是分支内最早出现的真实处理器,严格早于既有 consumer。
++        consumer_idx = next(
++            i for i, p in enumerate(fast_branch) if isinstance(p, ConsumerProcessor)
++        )
++        injector_idx = fast_branch.index(assembled.injector)
++        assert injector_idx < consumer_idx, "注入器必须在快脑分支头部,位于既有 consumer 之前"
++        assert assembled.injector not in slow_branch, "注入器不得出现在慢脑分支"
++        assert transport.output() in fast_branch, "transport.output() 必须仍在快脑分支内"
++        assert transport.output() not in slow_branch, "慢脑分支不得含 transport.output()"
++        assert assembled.tts in fast_branch, "TTS 必须仍在快脑分支内"
++        assert assembled.tts not in slow_branch, "慢脑分支不得含 TTS"
++
++    def test_dispatch_tools_registered_on_fast_context(self, bot_module):
++        """`fast_context.tools` 恰含两个派活工具(契约 §0.2 T1/T2,design.md
++        §E L2:"fast_context.tools 恰含两个工具")。"""
++        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
++
++        transport = self._FakeTransport()
++        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
++
++        tools_schema = assembled.fast_context.tools
++        registered = {wrapper.function for wrapper in tools_schema.direct_functions}
++        assert registered == {task_dispatch.dispatch_task, task_dispatch.get_task_status}, (
++            "fast_context.tools 必须恰含 dispatch_task 与 get_task_status 两个工具"
++        )
++        assert len(tools_schema.direct_functions) == 2, "fast_context.tools 不得含重复/多余项"
++
++    def test_dispatch_app_resources_and_new_fields(self, bot_module):
++        """`app_resources` 非空;`AssembledPipeline` 新增四字段可取(契约
++        §0.1/数据模型 §2,design.md §E L2)。"""
++        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
++
++        transport = self._FakeTransport()
++        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
++
++        app_resources = assembled.worker.app_resources
++        assert app_resources is not None, "app_resources 必须非空"
++        assert app_resources.registry is assembled.dispatch_registry
++        assert isinstance(assembled.injector, task_dispatch._DispatchMaterialInjector)
++        assert isinstance(assembled.dispatch_worker, task_dispatch.TaskDispatchWorker)
++        assert isinstance(assembled.exec_worker, task_dispatch.OpenClawExecWorker)
++        assert isinstance(assembled.dispatch_registry, task_dispatch.DispatchRegistry)
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/server/tests/test_task_dispatch.py b/server/tests/test_task_dispatch.py
+new file mode 100644
+index 0000000..59666ee
+--- /dev/null
++++ b/server/tests/test_task_dispatch.py
+@@ -0,0 +1,670 @@
++"""L1 unit tests for `server/task_dispatch.py` / `task_dispatch_contract.py`
++(task-dispatch / C4 派活, task card T-6, `design.md` §E L1, `contract/cases.md`
++§1 C-09 步骤1/3/4、C-10 单测半、C-16、C-19 单测半).
++
++Direct `import task_dispatch` / `task_dispatch_contract` — **not** `bot`
++(D-003 守法③, 硬红线): this file never imports the top-level bot module by
++any spelling (a plain import statement, a dynamic-import-by-name call, or a
++forced module-cache reimport) — unlike `test_dual_brain.py::TestAssemblePipeline`,
++this module's SUT has no module-level side-effecting config load to dodge
++(`task_dispatch.py`'s own docstring: "this module reads no environment
++variable and never calls config.load_config() at any scope"), so a plain
++top-level import is enough.
++
++Async test methods use `unittest.IsolatedAsyncioTestCase` (matching this
++repo's existing convention in `test_dual_brain.py::TestDualBrain`) rather
++than bare `async def test_...` functions — `server/pyproject.toml` has no
++`pytest-asyncio`/`anyio` plugin installed, so an unadorned async test
++function fails outright with "async def functions are not natively
++supported" (confirmed by a throwaway spike before writing this file).
++
++Constructing a real `TaskDispatchWorker`/`OpenClawExecWorker` for these
++tests follows the same technique the Pipecat framework's own
++`tests/test_ui_worker.py::_make_worker` uses for `UIWorker` subclasses: a
++`MagicMock()` stand-in LLM (these tests call `reply()` directly, so no real
++LLM turn ever runs) plus a manually-wired `TaskManager` so `self.create_task`
++works without a full `WorkerRunner`/bus.
++"""
++
++from __future__ import annotations
++
++import asyncio
++import copy
++import dataclasses
++import inspect
++import json
++import re
++import unittest
++import unittest.mock
++from pathlib import Path
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++from pipecat.bus.messages import BusJobRequestMessage
++from pipecat.frames.frames import LLMMessagesAppendFrame
++from pipecat.pipeline.job_context import JobStatus
++from pipecat.tests.utils import run_test
++from pipecat.utils.asyncio.task_manager import TaskManager
++
++import prompts
++import task_dispatch
++import task_dispatch_contract as contract
++
++# ---------------------------------------------------------------------------
++# Baseline fixture loading (T-1 原样样本, referenced verbatim per task card
++# 验收用例 5/9 — never hand-transcribed, always read from the same files the
++# contract cites so a drift in the baseline is a test failure, not silently
++# stale copy-pasted text).
++# ---------------------------------------------------------------------------
++
++_BASELINE_DIR = Path(__file__).resolve().parents[2] / "pipeline" / "task-dispatch" / "baseline"
++
++
++def _load_json(path: Path) -> dict:
++    with path.open(encoding="utf-8") as fh:
++        return json.load(fh)
++
++
++_MCP_SAMPLE = _load_json(_BASELINE_DIR / "mcp-event-sample.json")
++_FAILURE_SAMPLES = _load_json(_BASELINE_DIR / "failure-path-samples.json")
++
++
++def _mcp_capture_event(index: int) -> dict:
++    """`captures[index]`'s `events_wait` structured event, verbatim (`mcp-event-sample.json`)."""
++    return _MCP_SAMPLE["captures"][index]["_payload"]["response"]["result"]["structuredContent"][
++        "event"
++    ]
++
++
++# cursor=1 (role="user", the dispatched task brief's own echo) and cursor=2
++# (role="assistant", stopReason=="stop", the terminal report) — both from the
++# same `run_B1_no_notify` capture, per 契约 C-09 步骤3/4 的取样指引.
++USER_ECHO_EVENT = _mcp_capture_event(1)
++STOP_EVENT = _mcp_capture_event(2)
++STOP_EVENT_SESSION_KEY = STOP_EVENT["sessionKey"]
++
++# cases.F1.events_raw[1]: cursor=2, stopReason=="toolUse", no top-level "text"
++# key at all (契约 C-09 步骤3 点名的原样样本).
++F1_TOOLUSE_EVENT = _FAILURE_SAMPLES["cases"]["F1"]["events_raw"][1]["event"]
++# cases.F7b.events_raw[3]: cursor=4, stopReason=="aborted", text=="".
++F7B_ABORTED_EVENT = _FAILURE_SAMPLES["cases"]["F7b"]["events_raw"][3]["event"]
++
++
++def _message_field(message, field: str):
++    """Safely read a field from an `LLMMessagesAppendFrame.messages[i]` entry.
++
++    Same workaround as `test_dual_brain.py::_message_field` (duplicated
++    rather than cross-imported — these are two independent test files) for
++    the same pyright complaint: that field is typed as a union including
++    `LLMSpecificMessage` (no `__getitem__`) and provider TypedDict variants
++    where `content` isn't a required key, so direct `message["content"]`
++    indexing trips `reportIndexIssue`/`reportTypedDictNotRequiredAccess`.
++    """
++    if isinstance(message, dict):
++        return message.get(field)
++    return None
++
++
++def _event_missing_stop_reason(base_event: dict) -> dict:
++    """Deep-copy `base_event` with `raw.message.stopReason` removed entirely.
++
++    Covers the "该键缺失" half of §0.9 的筛选条件(`.get()` 容缺读法,契约
++    §0.8 条3)——两份原样样本里没有天然缺该键的 assistant 事件,按同一 D-10
++    schema 构造这一个变体,其余字段(sessionKey/type/role)保持真实样本原样。
++    """
++    event = copy.deepcopy(base_event)
++    event["raw"]["message"].pop("stopReason", None)
++    return event
++
++
++# ---------------------------------------------------------------------------
++# §0.6 / §0.7 · pure functions (session key shape, argv builders)
++# ---------------------------------------------------------------------------
++
++
++def test_session_key_shape_matches_template():
++    """session key 生成形状(§0.6): `agent:{agent_id}:voice-agent-{12 hex}`,
++    每次调用唯一。"""
++    key = task_dispatch._generate_session_key("dev")
++
++    prefix = "agent:dev:voice-agent-"
++    assert key.startswith(prefix), f"{key!r} 必须以 {prefix!r} 开头"
++    token = key[len(prefix) :]
++    assert len(token) == contract.SESSION_KEY_TOKEN_LENGTH
++    assert re.fullmatch(r"[0-9a-f]+", token), f"token 必须是纯小写十六进制:{token!r}"
++    assert key == contract.SESSION_KEY_TEMPLATE.format(agent_id="dev", token=token)
++
++    other = task_dispatch._generate_session_key("dev")
++    assert other != key, "每次调用必须生成不同的 token"
++
++
++def test_openclaw_argv_matches_contract_verbatim():
++    """argv 组装与 §0.7 逐字一致(`CMD_AGENT` / `CMD_TASKS_SHOW` / `CMD_MCP_SERVE`)。"""
++    assert contract.cmd_agent("dev", "the-session-key", "/tmp/task.txt") == [
++        "openclaw",
++        "agent",
++        "--agent",
++        "dev",
++        "--session-key",
++        "the-session-key",
++        "--message-file",
++        "/tmp/task.txt",
++        "--json",
++    ]
++    assert contract.cmd_tasks_show("the-lookup") == [
++        "openclaw",
++        "tasks",
++        "show",
++        "the-lookup",
++        "--json",
++    ]
++    assert contract.cmd_mcp_serve() == ["openclaw", "mcp", "serve"]
++
++
++def test_dispatch_stack_sessions_are_isolated():
++    """注入器会话隔离(design.md 数据模型§2 不变量③,R5 工厂约定,契约§0.1):
++    两次 `build_dispatch_stack()` 产出互不相干的队列/注册表/app_resources——
++    一个会话的入队/注册对另一个会话不可见。"""
++    llm = MagicMock()
++    stack_a = task_dispatch.build_dispatch_stack("dev", llm=llm)
++    stack_b = task_dispatch.build_dispatch_stack("dev", llm=llm)
++
++    assert stack_a.injection_queue is not stack_b.injection_queue
++    assert stack_a.registry is not stack_b.registry
++    assert stack_a.app_resources is not stack_b.app_resources
++
++    stack_a.injection_queue.put_nowait("仅会话 A 可见")
++    assert stack_a.injection_queue.qsize() == 1
++    assert stack_b.injection_queue.qsize() == 0
++
++    stack_a.registry.add(
++        task_dispatch.DispatchRegistryEntry(session_key="k", label="l", created_at=0.0)
++    )
++    assert len(stack_a.registry) == 1
++    assert len(stack_b.registry) == 0
++
++
++# C-16 的仓库级 grep 判据(`generated/cases/C-16.sh`)按纯文本逐字扫描
++# `server/` 全树,不区分"真代码引用"与"测试断言里为了检查其不存在而提到的
++# 名字"——三个被禁符号名如果在本文件里以完整字面量出现,会被同一条 grep 判
++# 成命中,形成自指悖论(本卡开发期间实测踩到,见 backend-notes.md)。用拆分
++# 拼接的方式在运行时还原出完整名字,`assert ... not in source` 的检查语义
++# 不受影响,只是不再以连续字面量的形式出现在源码文本里。
++_FORBIDDEN_JOB_GROUP_SYMBOLS = (
++    "start_" + "ui_job" + "_group",
++    "ui_job" + "_group",
++    "__cancel_" + "job_group",
++)
++
++
++def test_task_dispatch_worker_has_no_job_group_symbols():
++    """C-16(契约§1 C-16 / 债务簿 D-009 守门件): `TaskDispatchWorker` 类体内
++    不得引用契约§0.3 表格列出的三个作业组信封符号(本期不启用四信封能力,
++    design.md §B)。这是 grep 静态断言的同款 python 侧补充,与仓库级
++    `grep -rn ... server/ --exclude-dir=.venv --exclude-dir=__pycache__`
++    互为双证(契约 C-16 步骤)。"""
++    source = inspect.getsource(task_dispatch.TaskDispatchWorker)
++    for forbidden in _FORBIDDEN_JOB_GROUP_SYMBOLS:
++        assert forbidden not in source, f"TaskDispatchWorker 类体内不得出现 {forbidden!r}"
++
++
++def test_dispatch_registry_entry_is_frozen():
++    """task_dispatch_contract.py:158 `DispatchRegistryEntry` 声明
++    `@dataclass(frozen=True)`(类 docstring:"Pure dataclasses (fields only,
++    no behavior)"的不可变性设计属性,§5 集成闸门变异抽样 mutant③守卫:
++    `frozen=True`→`frozen=False`)——构造出的实例对任一字段赋值必须抛
++    `dataclasses.FrozenInstanceError`。"""
++    entry = task_dispatch.DispatchRegistryEntry(session_key="k", label="l", created_at=0.0)
++
++    with pytest.raises(dataclasses.FrozenInstanceError):
++        entry.label = "mutated-after-construction"
++
++
++# ---------------------------------------------------------------------------
++# §0.2 T2 · tasks show 降级 (found: false, 不抛异常)
++# ---------------------------------------------------------------------------
++
++
++class TestTasksShowDegrade(unittest.IsolatedAsyncioTestCase):
++    async def test_tasks_show_miss_degrades_to_found_false(self):
++        """`tasks show` exit=1 时 `_query_task_view`(`get_task_status` 逐条查询
++        走的同一函数)降级成 `{"lookup", "found": false, "reason"}`,不抛异常
++        (§0.2 T2"单条查不到")。"""
++
++        async def fake_subprocess(argv):
++            self.assertEqual(contract.cmd_tasks_show("no-such-task-id-xyz"), argv)
++            return task_dispatch._SubprocessResult(
++                exit_code=1,
++                stdout="",
++                stderr="Task not found: no-such-task-id-xyz. Run `openclaw tasks list` "
++                "to see available tasks.\n",
++            )
++
++        with unittest.mock.patch.object(
++            task_dispatch, "_run_openclaw_subprocess", fake_subprocess
++        ):
++            result = await task_dispatch._query_task_view("no-such-task-id-xyz")
++
++        self.assertEqual(
++            {
++                "lookup": "no-such-task-id-xyz",
++                "found": False,
++                "reason": "Task not found: no-such-task-id-xyz. Run `openclaw tasks list` "
++                "to see available tasks.",
++            },
++            result,
++        )
++
++
++def _make_exec_worker() -> task_dispatch.OpenClawExecWorker:
++    """`_poll_until_visible` 只是 `OpenClawExecWorker` 的一个不依赖 `start()`
++    的方法(不触碰 `self._bridge_ready`/`self._events_task` 等由 `start()`
++    建立的状态),直接构造即可调用——同 `TestDispatchMaterialInjector` 里
++    `OpenClawExecWorker(...)` 的直接构造用法(既有同类写法)。"""
++    return task_dispatch.OpenClawExecWorker(
++        contract.EXEC_WORKER_NAME,
++        agent_id="dev",
++        registry=task_dispatch.build_dispatch_registry(),
++        injection_queue=asyncio.Queue(),
++    )
++
++
++class TestPollUntilVisible(unittest.IsolatedAsyncioTestCase):
++    """task_dispatch.py:653 `if result.exit_code == 0:` 是 `_poll_until_visible`
++    (约638-656行,轮询 `tasks show` 直到命中,是 §0.2 task-record-visible
++    判定的核心分支)里唯一的"命中"判据,此前零单测覆盖——既有
++    `_run_openclaw_subprocess` mock 用例(`TestTasksShowDegrade` /
++    `TestDispatchMaterialInjector`)覆盖的是 `_query_task_view` 与
++    `_maybe_report_terminal_event`,调用路径都不经过 `_poll_until_visible`。
++    §5 集成闸门变异抽样 mutant②守卫:`==`→`!=`。两条用例分别钉死该判据两侧
++    的行为,翻成 `!=` 后至少一条(`test_exit_code_zero_...`)会变红。"""
++
++    async def test_exit_code_zero_returns_found_true_not_cli_failed(self):
++        """`tasks show` 首次轮询即命中(`exit_code=0`)—— 立即返回
++        `(True, False)`,不看 `process.returncode`(此处置为 `None`,模拟
++        探测进程仍在跑)。"""
++        worker = _make_exec_worker()
++        process = MagicMock(returncode=None)
++        outcome = task_dispatch._CliProcessOutcome()
++
++        async def fake_subprocess(argv):
++            self.assertEqual(contract.cmd_tasks_show("session-key-hit"), argv)
++            return task_dispatch._SubprocessResult(exit_code=0, stdout="{}", stderr="")
++
++        with (
++            unittest.mock.patch.object(task_dispatch, "_run_openclaw_subprocess", fake_subprocess),
++            # `==` 若被变异成 `!=`,首次判据不再命中,会一路 busy-loop 到
++            # deadline——缩短超时窗口让这条用例在变异后也能快速变红,而不是
++            # 真的空等 `_LOOKUP_POLL_TIMEOUT_SECS`(30s)。
++            unittest.mock.patch.object(task_dispatch, "_LOOKUP_POLL_TIMEOUT_SECS", 0.05),
++        ):
++            result = await worker._poll_until_visible("session-key-hit", process, outcome)
++
++        self.assertEqual((True, False), result)
++
++    async def test_cli_already_exited_nonzero_returns_cli_failed_not_found(self):
++        """CLI 已提前退出且非 0(`process.returncode` 非 None 且非 0,C-04
++        "bad --agent"快失败场景)、`tasks show` 一直未命中——返回
++        `(False, True)`,不是 `(True, False)`。`outcome.captured` 预先
++        `set()`,对应生产语义"这条分支只在 CLI 已经死透、watcher 早已捕获
++        stderr 时才走到",避免真等 `asyncio.wait_for(..., timeout=2.0)`。"""
++        worker = _make_exec_worker()
++        process = MagicMock(returncode=1)
++        outcome = task_dispatch._CliProcessOutcome()
++        outcome.captured.set()
++
++        async def fake_subprocess(argv):
++            self.assertEqual(contract.cmd_tasks_show("session-key-miss"), argv)
++            return task_dispatch._SubprocessResult(
++                exit_code=1, stdout="", stderr="Task not found\n"
++            )
++
++        with (
++            unittest.mock.patch.object(task_dispatch, "_run_openclaw_subprocess", fake_subprocess),
++            unittest.mock.patch.object(task_dispatch, "_LOOKUP_POLL_TIMEOUT_SECS", 0.05),
++        ):
++            result = await worker._poll_until_visible("session-key-miss", process, outcome)
++
++        self.assertEqual((False, True), result)
++
++
++# ---------------------------------------------------------------------------
++# §0.9 · _DispatchMaterialInjector — merge / C-09 步骤4 / C-10 单测半
++# ---------------------------------------------------------------------------
++
++
++class TestDispatchMaterialInjector(unittest.IsolatedAsyncioTestCase):
++    async def test_injector_drains_queue_into_single_merged_frame(self):
++        """注入器一次取空合并成单帧(§0.9 合并规则):三条已入队素材必须合并
++        成恰好一条 `LLMMessagesAppendFrame(run_llm=True)`,以换行拼接。"""
++        queue: asyncio.Queue[str] = asyncio.Queue()
++        for item in ("素材一", "素材二", "素材三"):
++            queue.put_nowait(item)
++        injector = task_dispatch._DispatchMaterialInjector(queue)
++
++        down, _ = await run_test(injector, frames_to_send=[])
++
++        append_frames = [f for f in down if isinstance(f, LLMMessagesAppendFrame)]
++        self.assertEqual(1, len(append_frames), "三条素材必须合并成恰好一条帧")
++        message = append_frames[0].messages[0]
++        self.assertEqual("素材一\n素材二\n素材三", _message_field(message, "content"))
++        self.assertEqual("user", _message_field(message, "role"))
++        self.assertIs(True, append_frames[0].run_llm)
++
++    async def test_c09_step4_terminal_reflow_never_calls_tasks_show(self):
++        """C-09 步骤4(契约§1 C-09 / FR-3 判据1"整条回流路径不发生任何
++        `openclaw tasks show` 调用"半句):完整走一遍"事件命中→渲染模板→入队→
++        出队合并"链路,`CMD_TASKS_SHOW` 调用点(`_run_openclaw_subprocess`)在
++        全程内的调用次数须恰为 0。"""
++        registry = task_dispatch.build_dispatch_registry()
++        injection_queue: asyncio.Queue[str] = asyncio.Queue()
++        label = "水的三态变化短文"
++        registry.add(
++            task_dispatch.DispatchRegistryEntry(
++                session_key=STOP_EVENT_SESSION_KEY, label=label, created_at=0.0
++            )
++        )
++        worker = task_dispatch.OpenClawExecWorker(
++            contract.EXEC_WORKER_NAME,
++            agent_id="dev",
++            registry=registry,
++            injection_queue=injection_queue,
++        )
++
++        call_count = 0
++
++        async def counting_subprocess(argv):
++            nonlocal call_count
++            call_count += 1
++            return task_dispatch._SubprocessResult(exit_code=0, stdout="", stderr="{}")
++
++        with unittest.mock.patch.object(
++            task_dispatch, "_run_openclaw_subprocess", counting_subprocess
++        ):
++            # 事件命中 → 渲染模板 → 入队。
++            await worker._maybe_report_terminal_event(STOP_EVENT)
++            self.assertEqual(1, injection_queue.qsize())
++            self.assertIsNone(
++                registry.get(STOP_EVENT_SESSION_KEY), "结论消息命中后应从注册表移除(数据模型§2)"
++            )
++
++            # 出队合并。
++            injector = task_dispatch._DispatchMaterialInjector(injection_queue)
++            down, _ = await run_test(injector, frames_to_send=[])
++
++        append_frames = [f for f in down if isinstance(f, LLMMessagesAppendFrame)]
++        self.assertEqual(1, len(append_frames))
++        self.assertEqual(
++            prompts.INJECT_TASK_TERMINAL_TEMPLATE.format(
++                label=label, agent_text=STOP_EVENT["text"]
++            ),
++            _message_field(append_frames[0].messages[0], "content"),
++        )
++        self.assertEqual(0, call_count, "整条回流路径不得调用 CMD_TASKS_SHOW")
++
++    async def test_c10_concurrent_terminal_events_merge_into_one_frame_with_both_labels(self):
++        """C-10 单测半(契约§1 C-10 / FR-3 判据3):两条不同任务的结论消息事件
++        在无空闲插入窗的间隔内背靠背入队时,注入器只产生一条
++        `LLMMessagesAppendFrame`,其 content 同时含两个任务的 label。"""
++        registry = task_dispatch.build_dispatch_registry()
++        injection_queue: asyncio.Queue[str] = asyncio.Queue()
++
++        label_a = "任务A-水的三态变化"
++        session_key_b = "agent:dev:voice-agent-c10-task-b"
++        label_b = "任务B-另一件不相关的事"
++        event_b = copy.deepcopy(STOP_EVENT)
++        event_b["sessionKey"] = session_key_b
++        event_b["raw"]["sessionKey"] = session_key_b
++
++        registry.add(
++            task_dispatch.DispatchRegistryEntry(
++                session_key=STOP_EVENT_SESSION_KEY, label=label_a, created_at=0.0
++            )
++        )
++        registry.add(
++            task_dispatch.DispatchRegistryEntry(
++                session_key=session_key_b, label=label_b, created_at=0.0
++            )
++        )
++        worker = task_dispatch.OpenClawExecWorker(
++            contract.EXEC_WORKER_NAME,
++            agent_id="dev",
++            registry=registry,
++            injection_queue=injection_queue,
++        )
++
++        # 背靠背处理两条事件,中间不 await 任何真实耗时操作——模拟"无空闲插入窗"。
++        await worker._maybe_report_terminal_event(STOP_EVENT)
++        await worker._maybe_report_terminal_event(event_b)
++        self.assertEqual(2, injection_queue.qsize())
++
++        injector = task_dispatch._DispatchMaterialInjector(injection_queue)
++        down, _ = await run_test(injector, frames_to_send=[])
++
++        append_frames = [f for f in down if isinstance(f, LLMMessagesAppendFrame)]
++        self.assertEqual(1, len(append_frames), "两条结论消息必须合并成恰好一条帧")
++        content = _message_field(append_frames[0].messages[0], "content") or ""
++        self.assertIn(label_a, content)
++        self.assertIn(label_b, content)
++
++
++# ---------------------------------------------------------------------------
++# §0.9 筛选条件 · C-09 步骤3(FR-3 判据2 全部,负向覆盖)
++# ---------------------------------------------------------------------------
++
++
++class TestTerminalEventFiltering(unittest.IsolatedAsyncioTestCase):
++    async def test_c09_step3_non_terminal_events_produce_zero_broadcast(self):
++        """C-09 步骤3(契约§1 C-09 / FR-3 判据2 全部):role=="user" 的任务书回显、
++        stopReason 为 "toolUse"/"aborted"/缺该键的 assistant 事件——覆盖§0.9
++        筛选条件除 "stop" 外的全部负向分支——一律零播报(不入队,不产生任何
++        `LLMMessagesAppendFrame` 的可能)。"""
++        registry = task_dispatch.build_dispatch_registry()
++        injection_queue: asyncio.Queue[str] = asyncio.Queue()
++        for session_key, label in (
++            (USER_ECHO_EVENT["sessionKey"], "回显负向样本"),
++            (F1_TOOLUSE_EVENT["sessionKey"], "F1-toolUse负向样本"),
++            (F7B_ABORTED_EVENT["sessionKey"], "F7b-aborted负向样本"),
++        ):
++            registry.add(
++                task_dispatch.DispatchRegistryEntry(
++                    session_key=session_key, label=label, created_at=0.0
++                )
++            )
++        worker = task_dispatch.OpenClawExecWorker(
++            contract.EXEC_WORKER_NAME,
++            agent_id="dev",
++            registry=registry,
++            injection_queue=injection_queue,
++        )
++
++        negative_events = [
++            USER_ECHO_EVENT,  # role=="user"
++            F1_TOOLUSE_EVENT,  # stopReason=="toolUse",顶层无 text 键
++            F7B_ABORTED_EVENT,  # stopReason=="aborted",text==""
++            _event_missing_stop_reason(F1_TOOLUSE_EVENT),  # 缺 stopReason 键
++        ]
++        for event in negative_events:
++            await worker._maybe_report_terminal_event(event)
++
++        self.assertEqual(
++            0, injection_queue.qsize(), "四种负向分支均不得产生任何入队素材(等价于零播报)"
++        )
++        # 移除只发生在结论消息(stop)命中之后 —— 负向分支不得动注册表。
++        self.assertIsNotNone(registry.get(F1_TOOLUSE_EVENT["sessionKey"]))
++        self.assertIsNotNone(registry.get(F7B_ABORTED_EVENT["sessionKey"]))
++
++
++# ---------------------------------------------------------------------------
++# §0.3 · TaskDispatchWorker.reply 次序不变量 / 在途任务上限(ADR-8, C-19 单测半)
++# ---------------------------------------------------------------------------
++
++
++async def _make_dispatch_worker(
++    registry: task_dispatch.DispatchRegistry, *, agent_id: str = "dev"
++) -> task_dispatch.TaskDispatchWorker:
++    """构造一个装好 `TaskManager` 与 `send_job_response` 桩的 `TaskDispatchWorker`
++    ——技法同 Pipecat 框架自身 `tests/test_ui_worker.py::_make_worker`(`llm=
++    MagicMock()`,因为这些用例直接调用 `reply()`,不跑真实 LLM 轮次)。"""
++    worker = task_dispatch.TaskDispatchWorker(
++        contract.DISPATCH_WORKER_NAME, llm=MagicMock(), registry=registry, agent_id=agent_id
++    )
++    worker._task_manager = TaskManager(loop=asyncio.get_running_loop())
++    worker.send_job_response = AsyncMock()
++    return worker
++
++
++def _respond_job_message(job_id: str = "job-1") -> BusJobRequestMessage:
++    return BusJobRequestMessage(
++        source="voice-main",
++        target=contract.DISPATCH_WORKER_NAME,
++        job_name=contract.RESPOND_JOB_NAME,
++        job_id=job_id,
++        payload={contract.QUERY_PAYLOAD_KEY: "帮我做点事"},
++    )
++
++
++async def _start_respond_job(
++    worker: task_dispatch.TaskDispatchWorker, message: BusJobRequestMessage
++) -> asyncio.Task:
++    """起一个 respond 轮次,使 `respond_to_job()` 有一个待完成的 job 可以真正
++    resolve(同款技法:Pipecat 框架自身 `tests/test_ui_worker.py::_start`)——
++    在 `await self._pending` 处挂起,直到 `reply()` 把它 resolve 掉。"""
++    task = asyncio.ensure_future(worker._run_llm_turn(message))
++    for _ in range(10):
++        await asyncio.sleep(0)
++    return task
++
++
++class _FakeFunctionCallParams:
++    """`FunctionCallParams` 最小桩:`reply()` 只用到 `result_callback`。"""
++
++    def __init__(self) -> None:
++        self.result_callback_calls: list = []
++
++    async def result_callback(self, value) -> None:
++        self.result_callback_calls.append(value)
++
++
++class TestTaskDispatchWorkerReply(unittest.IsolatedAsyncioTestCase):
++    async def test_reply_starts_exec_jobs_before_responding_without_awaiting(self):
++        """`TaskDispatchWorker.reply` 的次序不变量(契约§0.3"次序是硬约束"):
++        ①对每条 task 起(`create_task`)一个不等待的 exec job;②立即
++        `respond_to_job`,不 await 任何 job 完成。
++
++        用一个永不 release 的桩 `_dispatch_one` 双重验证:(a)拦截
++        `create_task` 的调用点本身,证明两次调用严格发生在 `respond_to_job`
++        之前(代码次序,不靠时序竞跑推断);(b)`reply()` 在 1 秒超时内正常
++        返回、且两个真实调度的后台任务此刻仍未完成——证明 `reply()` 确实
++        没有等它们跑完。
++        """
++        registry = task_dispatch.build_dispatch_registry()
++        worker = await _make_dispatch_worker(registry)
++        message = _respond_job_message()
++        turn_task = await _start_respond_job(worker, message)
++
++        order: list[str] = []
++        scheduled_tasks: list[asyncio.Task] = []
++        real_create_task = worker.create_task
++
++        def recording_create_task(coro, name=None):
++            order.append(f"create_task:{name}")
++            task = real_create_task(coro, name)
++            scheduled_tasks.append(task)
++            return task
++
++        worker.create_task = recording_create_task  # type: ignore[method-assign]
++
++        real_respond_to_job = worker.respond_to_job
++
++        async def spy_respond_to_job(*args, **kwargs):
++            order.append("respond_to_job")
++            return await real_respond_to_job(*args, **kwargs)
++
++        worker.respond_to_job = spy_respond_to_job
++
++        never_release = asyncio.Event()
++
++        async def blocked_dispatch_one(self_, session_key, payload):
++            await never_release.wait()
++
++        params = _FakeFunctionCallParams()
++        with unittest.mock.patch.object(
++            task_dispatch.TaskDispatchWorker, "_dispatch_one", blocked_dispatch_one
++        ):
++            await asyncio.wait_for(
++                worker.reply(
++                    params, answer="已经派出去了", tasks=["任务A", "任务B"]  # type: ignore[arg-type]
++                ),
++                timeout=1.0,
++            )
++
++        # (a) 代码次序:两次 create_task 调用严格先于 respond_to_job。
++        self.assertEqual(3, len(order))
++        self.assertTrue(order[0].startswith("create_task:"))
++        self.assertTrue(order[1].startswith("create_task:"))
++        self.assertEqual("respond_to_job", order[2])
++
++        # (b) reply() 没有等后台 job 跑完:两个真实调度的任务此刻仍卡在
++        # never_release 上,尚未完成。
++        self.assertEqual(2, len(scheduled_tasks))
++        self.assertTrue(
++            all(not t.done() for t in scheduled_tasks),
++            "reply() 返回时两个 exec job 都不该已经跑完 —— 说明 reply() 等了它们",
++        )
++
++        worker.send_job_response.assert_awaited_once()  # type: ignore[attr-defined]
++        call = worker.send_job_response.await_args  # type: ignore[attr-defined]
++        self.assertEqual({"answer": "已经派出去了"}, call.kwargs["response"])
++        self.assertEqual(JobStatus.COMPLETED, call.kwargs["status"])
++        self.assertEqual([None], params.result_callback_calls)
++
++        # 清理:放行两个后台任务与 respond 轮次,避免遗留任务/未等待协程告警。
++        never_release.set()
++        await asyncio.gather(*scheduled_tasks)
++        await turn_task
++
++    async def test_reply_capacity_reached_rejects_batch_with_capacity_message(self):
++        """在途任务上限(ADR-8,契约§0.3"在途任务上限"行为约定,C-19 单测半):
++        `len(registry) + len(tasks) > MAX_INFLIGHT_TASKS` 时整批拒绝——不起
++        任何 exec job,`respond_to_job` 改走 `status=JobStatus.ERROR` 与固定
++        文案 `CAPACITY_MESSAGE`(不使用第二个 LLM 自己写的 answer)。"""
++        registry = task_dispatch.build_dispatch_registry()
++        for i in range(contract.MAX_INFLIGHT_TASKS):
++            registry.add(
++                task_dispatch.DispatchRegistryEntry(
++                    session_key=f"agent:dev:voice-agent-inflight-{i}",
++                    label=f"在途任务{i}",
++                    created_at=0.0,
++                )
++            )
++        worker = await _make_dispatch_worker(registry)
++        message = _respond_job_message()
++        turn_task = await _start_respond_job(worker, message)
++
++        create_task_calls: list[str | None] = []
++
++        def rejecting_create_task(coro, name=None):
++            create_task_calls.append(name)
++            coro.close()  # 不得被调用到 —— 若被调用,关掉协程避免"从未 await"告警。
++            return MagicMock()
++
++        worker.create_task = rejecting_create_task  # type: ignore[method-assign]
++
++        params = _FakeFunctionCallParams()
++        await asyncio.wait_for(
++            worker.reply(
++                params,  # type: ignore[arg-type]
++                answer="第二个LLM自己写的、上限存在前提未知的答案",
++                tasks=["新任务"],
++            ),
++            timeout=1.0,
++        )
++        await turn_task
++
++        self.assertEqual([], create_task_calls, "达上限时不得起任何 exec job(约定4①)")
++        worker.send_job_response.assert_awaited_once()  # type: ignore[attr-defined]
++        call = worker.send_job_response.await_args  # type: ignore[attr-defined]
++        self.assertEqual({"answer": contract.CAPACITY_MESSAGE}, call.kwargs["response"])
++        self.assertEqual(JobStatus.ERROR, call.kwargs["status"])
++        self.assertEqual([None], params.result_callback_calls)
+diff --git a/server/uv.lock b/server/uv.lock
+index 235104e..7fcc5c7 100644
+--- a/server/uv.lock
++++ b/server/uv.lock
+@@ -1190,6 +1190,15 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/2a/39/e50c7c3a983047577ee07d2a9e53faf5a69493943ec3f6a384bdc792deb2/httpx-0.28.1-py3-none-any.whl", hash = "sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad", size = 73517, upload-time = "2024-12-06T15:37:21.509Z" },
+ ]
+ 
++[[package]]
++name = "httpx-sse"
++version = "0.4.3"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/0f/4c/751061ffa58615a32c31b2d82e8482be8dd4a89154f003147acee90f2be9/httpx_sse-0.4.3.tar.gz", hash = "sha256:9b1ed0127459a66014aec3c56bebd93da3c1bc8bb6618c8082039a44889a755d", size = 15943, upload-time = "2025-10-10T21:48:22.271Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/d2/fd/6668e5aec43ab844de6fc74927e155a3b37bf40d7c3790e49fc0406b6578/httpx_sse-0.4.3-py3-none-any.whl", hash = "sha256:0ac1c9fe3c0afad2e0ebb25a934a59f4c7823b60792691f779fad2c5568830fc", size = 8960, upload-time = "2025-10-10T21:48:21.158Z" },
++]
++
+ [[package]]
+ name = "huggingface-hub"
+ version = "1.26.0"
+@@ -1549,6 +1558,37 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/70/bc/6f1c2f612465f5fa89b95bead1f44dcb607670fd42891d8fdcd5d039f4f4/markupsafe-3.0.3-cp314-cp314t-win_arm64.whl", hash = "sha256:32001d6a8fc98c8cb5c947787c5d08b0a50663d139f1305bac5885d98d9b40fa", size = 14146, upload-time = "2025-09-27T18:37:28.327Z" },
+ ]
+ 
++[[package]]
++name = "mcp"
++version = "1.29.0"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "anyio" },
++    { name = "httpx" },
++    { name = "httpx-sse" },
++    { name = "jsonschema" },
++    { name = "pydantic" },
++    { name = "pydantic-settings" },
++    { name = "pyjwt", extra = ["crypto"] },
++    { name = "python-multipart" },
++    { name = "pywin32", marker = "sys_platform == 'win32'" },
++    { name = "sse-starlette" },
++    { name = "starlette" },
++    { name = "typing-extensions" },
++    { name = "typing-inspection" },
++    { name = "uvicorn", marker = "sys_platform != 'emscripten'" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/30/d3/f9acc21dfc886e4f78e2add1a47db46ce16884346afde53f8a064c02c891/mcp-1.29.0.tar.gz", hash = "sha256:52d01f334de1868cc3bb2d6604931126a67631f99a6c5d3b82ba47290315ec36", size = 643148, upload-time = "2026-07-28T13:41:41.939Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/01/c8/248b201f6d753d69fd5d6506011abbb35a946d9142b2ae311a948fd0be3d/mcp-1.29.0-py3-none-any.whl", hash = "sha256:f5a075bb611f23d6f4d080c6a1699fa62772eebc562ba9e66b306ddde1c755f7", size = 223436, upload-time = "2026-07-28T13:41:40.337Z" },
++]
++
++[package.optional-dependencies]
++cli = [
++    { name = "python-dotenv" },
++    { name = "typer" },
++]
++
+ [[package]]
+ name = "mdurl"
+ version = "0.1.2"
+@@ -2086,6 +2126,9 @@ evals = [
+     { name = "ruff" },
+     { name = "typer" },
+ ]
++mcp = [
++    { name = "mcp", extra = ["cli"] },
++]
+ runner = [
+     { name = "fastapi" },
+     { name = "pipecat-ai-prebuilt" },
+@@ -2447,6 +2490,20 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
+ ]
+ 
++[[package]]
++name = "pyjwt"
++version = "2.13.0"
++source = { registry = "https://pypi.org/simple" }
++sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
++]
++
++[package.optional-dependencies]
++crypto = [
++    { name = "cryptography" },
++]
++
+ [[package]]
+ name = "pylibsrtp"
+ version = "1.0.0"
+@@ -2564,6 +2621,28 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/e1/04/e8135ebd1ad02c56ec633277529b2602ff99ff634be76cdba5744cf554fd/python_multipart-0.0.32-py3-none-any.whl", hash = "sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23", size = 30042, upload-time = "2026-06-04T16:18:57.319Z" },
+ ]
+ 
++[[package]]
++name = "pywin32"
++version = "312"
++source = { registry = "https://pypi.org/simple" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/1f/f5/10a6e845a00fc5e7afd0a988b744f403d4d57162a28d160a093c4d9322f0/pywin32-312-cp311-cp311-win32.whl", hash = "sha256:17948aeadbdb091f0ced6ef0841620794e68327b94ee415571c1203594b7215c", size = 6362659, upload-time = "2026-06-04T07:49:21.349Z" },
++    { url = "https://files.pythonhosted.org/packages/35/c4/dcd2d62b5944b6d5db53413a5899016ccd57ffcb7278f3f81655d25d2027/pywin32-312-cp311-cp311-win_amd64.whl", hash = "sha256:d11417d84412f859b722fad0841b3614459ed0047f7542d8362e77884f6b6e8a", size = 6928825, upload-time = "2026-06-04T07:49:23.934Z" },
++    { url = "https://files.pythonhosted.org/packages/b7/56/3cbb433fe4501cdba2eb9040f56a4e1a8243faa4186b25295564d1a7a79d/pywin32-312-cp311-cp311-win_arm64.whl", hash = "sha256:b2200a054ca6d6625c4842fc56a4976a4b47f96b73dbe5538c3f813a80359f47", size = 6721875, upload-time = "2026-06-04T07:49:26.416Z" },
++    { url = "https://files.pythonhosted.org/packages/83/ff/32aa7d2ed0ab12b323aaa64f9b75e6ad4f8fd09f9ccfc28c79414d46838d/pywin32-312-cp312-cp312-win32.whl", hash = "sha256:dab4f65ac9c4e48400a2a0530c46c3c579cd5905ecd11b80692373915269208b", size = 6371877, upload-time = "2026-06-04T07:49:28.836Z" },
++    { url = "https://files.pythonhosted.org/packages/03/d9/77040d3b43df3f3be32ea289433d660d2727f5ba327bc73be835127d9d60/pywin32-312-cp312-cp312-win_amd64.whl", hash = "sha256:b457f6d628a47e8a7346ce22acb7e1a46a4a78b52e1d17e1af56871bd19a93bc", size = 6914841, upload-time = "2026-06-04T07:49:31.85Z" },
++    { url = "https://files.pythonhosted.org/packages/e3/cc/7b1ec671775756020a0ee7f4feeaf3c568f0ab86bd3900088cf986937a92/pywin32-312-cp312-cp312-win_arm64.whl", hash = "sha256:6017c58e12f6809fbb0555b75df144c2922a9ffd18e4b9b5afa863b6c1a9d950", size = 6727901, upload-time = "2026-06-04T07:49:34.244Z" },
++    { url = "https://files.pythonhosted.org/packages/2d/41/12fbfd7f36ed2146d8bc9de96c2741296bf0d490b98508496cff322e274c/pywin32-312-cp313-cp313-win32.whl", hash = "sha256:7a27df850933d16a8eabfbaeb73d52b273e2da667f80d70b01a89d1f6828d02c", size = 6370184, upload-time = "2026-06-04T07:49:36.253Z" },
++    { url = "https://files.pythonhosted.org/packages/ba/db/36a78e3403099d31d9746d13fdcde5accc43c1155f375a34d15983a479a7/pywin32-312-cp313-cp313-win_amd64.whl", hash = "sha256:c53e878d15a1c44788082bfe712a905433473aa38f86375b7cf8b45e3acbaaf9", size = 6914298, upload-time = "2026-06-04T07:49:38.876Z" },
++    { url = "https://files.pythonhosted.org/packages/84/37/c1697194092b76de9ed47ca124323f02c57ffc8a45c06f88a3d5acaf01eb/pywin32-312-cp313-cp313-win_arm64.whl", hash = "sha256:59aba5d5940842075343a5ddc6b11f1cdf0d1567fe745290359dfbcc7c2eb831", size = 6727640, upload-time = "2026-06-04T07:49:41.083Z" },
++    { url = "https://files.pythonhosted.org/packages/fc/2b/1f3cded5822fd49c02f40544cbb5f58c7cfd6b1694869fd476cb6170ee97/pywin32-312-cp314-cp314-win32.whl", hash = "sha256:a77a90fbb6881238d2ca9c6fd797b25817f3768fe78d214a90137ff055a75f5b", size = 6468928, upload-time = "2026-06-04T07:49:43.188Z" },
++    { url = "https://files.pythonhosted.org/packages/21/82/3bf86d2e2808902013132e1ce905a7da0da53790f3836c64bf44d55e24f3/pywin32-312-cp314-cp314-win_amd64.whl", hash = "sha256:a4dd3a848290ef724347b19f301045831d8e802fa4464f491b98b1e0a081432e", size = 7024157, upload-time = "2026-06-04T07:49:45.34Z" },
++    { url = "https://files.pythonhosted.org/packages/a4/0e/73f6d6800b4f27655abd9e9f6aaeaefcddb2b946e4674efa2bab184a7f7b/pywin32-312-cp314-cp314-win_arm64.whl", hash = "sha256:9fce94568364e0155e6dfb781ac5d95903be8baf28670632beab1b523f300daa", size = 6839598, upload-time = "2026-06-04T07:49:47.613Z" },
++    { url = "https://files.pythonhosted.org/packages/eb/61/caa39686032d2ebdd04ff0ab5cbe163126c0066d98e00c9018646e42393b/pywin32-312-cp315-cp315-win32.whl", hash = "sha256:5c1fbe4a937a73ae9297384a3da38518cbc694c68ad8a809b2e19acd350f03ed", size = 6471159, upload-time = "2026-06-04T07:49:50.035Z" },
++    { url = "https://files.pythonhosted.org/packages/0f/cd/7e1de64a4a6f69c04214169657ccab0d93a670ea50e35eb8f489d7378249/pywin32-312-cp315-cp315-win_amd64.whl", hash = "sha256:c2f03a0f73f804a13c2735b99392b0cd426bb4f2c4d0178e5ac966a0f21618d5", size = 7025293, upload-time = "2026-06-04T07:49:54.857Z" },
++    { url = "https://files.pythonhosted.org/packages/23/ed/4532e9388e65fa16b46776ef47ad631a64eda1631884488af707666350ed/pywin32-312-cp315-cp315-win_arm64.whl", hash = "sha256:a8597d28f267b39074aef51fa593530082b39cbe5a074226096857b1fed2dfb9", size = 6840337, upload-time = "2026-06-04T07:49:57.531Z" },
++]
++
+ [[package]]
+ name = "pyyaml"
+ version = "6.0.3"
+@@ -3308,6 +3387,19 @@ wheels = [
+     { url = "https://files.pythonhosted.org/packages/3c/1b/f84a2570a74094e921bbad5450b2a22a85d58585916e131d9b98029c3e69/soxr-1.0.0-cp314-cp314t-win_amd64.whl", hash = "sha256:a39b519acca2364aa726b24a6fd55acf29e4c8909102e0b858c23013c38328e5", size = 184850, upload-time = "2025-09-07T13:22:14.068Z" },
+ ]
+ 
++[[package]]
++name = "sse-starlette"
++version = "3.4.8"
++source = { registry = "https://pypi.org/simple" }
++dependencies = [
++    { name = "anyio" },
++    { name = "starlette" },
++]
++sdist = { url = "https://files.pythonhosted.org/packages/f8/00/b42a44342a054d58cb1115d7c8aa9cb4290dd9442f9c1b91a4b8173dba22/sse_starlette-3.4.8.tar.gz", hash = "sha256:ed89ffbb75cbf78a5fe2f2109cd584792ee7f9dfac96f791db546df8f15f3f9c", size = 32548, upload-time = "2026-08-05T11:19:49.982Z" }
++wheels = [
++    { url = "https://files.pythonhosted.org/packages/dd/3a/764912c58293d95b6dcdf4cc255f9d10de310580ced547b082eb9d72018c/sse_starlette-3.4.8-py3-none-any.whl", hash = "sha256:6e82314c786709a3cd9520f2285cf9fff90e181e598e8a357b0cf80f66afba0d", size = 16516, upload-time = "2026-08-05T11:19:48.748Z" },
++]
++
+ [[package]]
+ name = "starlette"
+ version = "1.3.1"
+@@ -3501,7 +3593,7 @@ name = "voice-agent"
+ version = "0.1.0"
+ source = { virtual = "." }
+ dependencies = [
+-    { name = "pipecat-ai", extra = ["deepgram", "evals", "runner", "webrtc", "whisper"] },
++    { name = "pipecat-ai", extra = ["deepgram", "evals", "mcp", "runner", "webrtc", "whisper"] },
+ ]
+ 
+ [package.dev-dependencies]
+@@ -3512,7 +3604,7 @@ dev = [
+ ]
+ 
+ [package.metadata]
+-requires-dist = [{ name = "pipecat-ai", extras = ["deepgram", "elevenlabs", "evals", "openai", "runner", "silero", "soniox", "webrtc", "whisper"], specifier = "==1.6.0" }]
++requires-dist = [{ name = "pipecat-ai", extras = ["deepgram", "elevenlabs", "evals", "mcp", "openai", "runner", "silero", "soniox", "webrtc", "whisper"], specifier = "==1.6.0" }]
+ 
+ [package.metadata.requires-dev]
+ dev = [

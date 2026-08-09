@@ -13,7 +13,7 @@ G1 实时语音对话 / G2 慢脑质量升级(快脑先答→慢脑深析→回�
 
 - 开发或行为变更:用户显式点名 `/dev-pipeline` 才起流程,不自行代为发起。
 - 变更产物落 `pipeline/<change-id>/`,债务落 `pipeline/debts.md`。
-- 三门流程与 openspec 已退役;`.claude/commands/opsx/`、`.claude/skills/openspec-*/` 保留待观察,不使用。
+- openspec 已停用;`.claude/commands/opsx/`、`.claude/skills/openspec-*/` 保留待观察,不使用。
 
 ## 事实源指针(按需读,索引优先不整读)
 
@@ -30,6 +30,8 @@ G1 实时语音对话 / G2 慢脑质量升级(快脑先答→慢脑深析→回�
 - **官方脚手架结构不动**:新功能落既有目录(server/、client/、evals/、tests/、scripts/),要动结构须在 dev-pipeline 设计段(S2a)显式批准;
 - 开发/测试/示例一律按 pipecat 官方标准,先查资料地图找官方对应件,不自研官方已有的能力;
 - 索引优先、按需取数,不整读大文档;
+- `codegraph_explore` 查本项目之外的源码时须传 `projectPath` 指向该项目根;
+- 引用外部依赖源码的行号前,先 `diff` 本地副本与本项目实装的那份,不一致以实装为准;
 - 启动 bot.py/pytest 须带 `NLTK_DISABLE_IMPORT_SECURITY=1`;`pipecat` CLI 是全局工具(非项目 venv),factory judge 需 `PYTHONPATH=$(pwd)` + 手动 source .env。
 
 @AGENTS.md

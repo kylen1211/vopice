@@ -1,0 +1,36 @@
+{
+  "pass": true,
+  "reason": "s6 复评(独立验证,不采信提交说明自述):commit b7ea61b 的 diff 范围经 `git show b7ea61b --stat` 核实仅含 server/tests/test_task_dispatch.py(+83/-0),production 代码(server/task_dispatch.py、server/task_dispatch_contract.py)经 `git diff --stat`/`git status --short` 核实零改动。新增 3 条用例(TestBuildTaskView 2 条 + TestQueryTaskViewHit 1 条)读码确认逐一命中上一轮 Important 指出的语义缺口:直接调用 _build_task_view 分别验证『恒在字段带出 + 条件字段缺失时整体不出现在结果 dict(非补 None)』与『全字段存在时全部透传』,TestQueryTaskViewHit 再经 mock _run_openclaw_subprocess(exit_code=0、record JSON 落 stderr,符合 D-1)证明 _query_task_view 命中路径真的落到 _build_task_view 而非仅测试纯函数本身。已跑 `NLTK_DISABLE_IMPORT_SECURITY=1 uv run pytest server/tests/test_task_dispatch.py -q` → 17 passed(含 3 条新用例全绿);另做变异验证——临时把 _build_task_view 的 `if field_name in record: view[field_name] = record[field_name]` 改回 `view[field_name] = record.get(field_name)`(即上一轮描述的缺陷复现),重跑新用例 → test_conditional_fields_absent_when_missing_from_record 按预期失败(AssertionError: 'error' unexpectedly found),证明新测试确实是这条语义的有效回归防线而非空转;已还原改动,`git diff --stat server/task_dispatch.py` 确认工作树干净。原判决判为 Important 的缺口已闭合,pass 翻转为 true。上一轮 1 条 Minor(在途上限竞态措辞建议,D-015/D-018 同根同源)与其余 5 项 pass=true 结论按派单要求维持不变,未重新复核。",
+  "items": [
+    {
+      "name": "correctness — 派活主链路(去程/回程/容量上限/异常路径)",
+      "pass": true,
+      "evidence": "维持 s6 上一轮结论,未重新复核(本轮范围限定 test coverage 一项)。"
+    },
+    {
+      "name": "security — 无硬编码密钥/命令注入/日志敏感信息泄露",
+      "pass": true,
+      "evidence": "维持 s6 上一轮结论,未重新复核(本轮范围限定 test coverage 一项)。"
+    },
+    {
+      "name": "maintainability — 契约常量单一事实源 + D-003 守法",
+      "pass": true,
+      "evidence": "维持 s6 上一轮结论,未重新复核(本轮范围限定 test coverage 一项)。"
+    },
+    {
+      "name": "test coverage — _build_task_view/_query_task_view 命中路径",
+      "pass": true,
+      "evidence": "commit b7ea61b 新增 TestBuildTaskView::test_conditional_fields_absent_when_missing_from_record、TestBuildTaskView::test_all_fields_pass_through_when_present_in_record、TestQueryTaskViewHit::test_query_task_view_hit_matches_build_task_view 三条用例,均针对性覆盖 found=true 分支;`uv run pytest server/tests/test_task_dispatch.py -q` → 17 passed;变异测试(还原 `.get()` 补 None 的写法)确认 test_conditional_fields_absent_when_missing_from_record 会失败并报出具体差异,证明测试对目标语义真实生效,非形式化空测试。"
+    },
+    {
+      "name": "performance — 外部调用超时与非阻塞约束",
+      "pass": true,
+      "evidence": "维持 s6 上一轮结论,未重新复核(本轮范围限定 test coverage 一项)。"
+    },
+    {
+      "name": "契约档位复核(cases)",
+      "pass": true,
+      "evidence": "维持 s6 上一轮结论,未重新复核(本轮范围限定 test coverage 一项);本轮 diff 仅测试文件,不涉及契约档位判断。"
+    }
+  ]
+}
