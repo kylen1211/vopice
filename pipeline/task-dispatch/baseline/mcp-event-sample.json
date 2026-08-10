@@ -1,0 +1,663 @@
+{
+  "_meta": {
+    "purpose": "R-2 / P-06 敞口的实测样本:openclaw MCP bridge `events_wait` 的真实事件负载。contract/cases.md §0.8 条 3 要求本文件落盘后才允许写解析代码。",
+    "captured_at": "2026-08-08",
+    "openclaw_version": "OpenClaw 2026.7.1-2 (0790d9f)",
+    "gateway": "running, 127.0.0.1:18789",
+    "capture_method": "JSON-RPC over stdio 直连 `openclaw mcp serve`;initialize + notifications/initialized 后循环 tools/call events_wait",
+    "payload_fidelity": "captures[].\\_payload 为服务端 JSON-RPC 响应对象原样,未裁剪、未改名、未补默认值;仅外层加了 _ts/_kind/_meta 采集元数据。",
+    "runs": {
+      "run_B1_no_notify": {
+        "session_key": "agent:dev:voice-agent-94935dc26e46",
+        "notify_policy_set_by_us": null,
+        "final_task_record": {
+          "taskId": "888b6b55-4a23-4df4-ad65-114a02f0136b",
+          "runtime": "cli",
+          "sourceId": "5209d2c0-1684-468a-a223-4f353e8c698c",
+          "requesterSessionKey": "agent:dev:voice-agent-94935dc26e46",
+          "ownerKey": "agent:dev:voice-agent-94935dc26e46",
+          "scopeKind": "session",
+          "childSessionKey": "agent:dev:voice-agent-94935dc26e46",
+          "agentId": "dev",
+          "requesterAgentId": "dev",
+          "runId": "5209d2c0-1684-468a-a223-4f353e8c698c",
+          "task": "请写一篇约800字的短文,主题是「水的三态变化」。只输出短文正文,不要调用任何工具,不要读写任何文件,不要联网。结尾单起一行写 PREFLIGHT-OK-B1。",
+          "status": "succeeded",
+          "deliveryStatus": "not_applicable",
+          "notifyPolicy": "silent",
+          "createdAt": 1786181755346,
+          "startedAt": 1786181755525,
+          "endedAt": 1786181763150,
+          "lastEventAt": 1786181763139,
+          "cleanupAfter": 1786786563138,
+          "terminalSummary": "completed"
+        },
+        "note": "对照组:全程未调用 `openclaw tasks notify`。"
+      },
+      "run_C1_notify_done_only": {
+        "session_key": "agent:dev:voice-agent-79296061131d",
+        "notify_policy_set_by_us": "done_only (CLI 报成功,但随后 tasks show 读回仍为 silent,见 preflight-live.md)",
+        "final_task_record": {
+          "taskId": "952f53df-0101-4331-8aea-be266c38e79a",
+          "runtime": "cli",
+          "sourceId": "ba8cd95d-d7d9-4dc3-9d48-e2ed5409d889",
+          "requesterSessionKey": "agent:dev:voice-agent-79296061131d",
+          "ownerKey": "agent:dev:voice-agent-79296061131d",
+          "scopeKind": "session",
+          "childSessionKey": "agent:dev:voice-agent-79296061131d",
+          "agentId": "dev",
+          "requesterAgentId": "dev",
+          "runId": "ba8cd95d-d7d9-4dc3-9d48-e2ed5409d889",
+          "task": "请写一篇约800字的短文,主题是「水的三态变化」。只输出短文正文,不要调用任何工具,不要读写任何文件,不要联网。结尾单起一行写 PREFLIGHT-OK-C1。",
+          "status": "succeeded",
+          "deliveryStatus": "not_applicable",
+          "notifyPolicy": "silent",
+          "createdAt": 1786181860618,
+          "startedAt": 1786181860838,
+          "endedAt": 1786181868726,
+          "lastEventAt": 1786181868708,
+          "cleanupAfter": 1786786668708,
+          "terminalSummary": "completed"
+        },
+        "note": "实验组:派发后 7.9s 调用 `openclaw tasks notify <K> done_only`。事件流与对照组完全同构。"
+      }
+    },
+    "key_findings_pointer": "结论与不符项见 pipeline/task-dispatch/baseline/preflight-live.md"
+  },
+  "captures": [
+    {
+      "_ts": 1786181752.4902256,
+      "_kind": "events_poll.baseline.raw",
+      "_payload": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "events: 0"
+            }
+          ],
+          "structuredContent": {
+            "events": [],
+            "next_cursor": 0
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 2
+      },
+      "_run": "run_B1_no_notify"
+    },
+    {
+      "_ts": 1786181755.6812122,
+      "_kind": "events_wait.raw",
+      "_payload": {
+        "request_args": {
+          "timeout_ms": 20000,
+          "after_cursor": 0
+        },
+        "response": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "event 1"
+              }
+            ],
+            "structuredContent": {
+              "event": {
+                "cursor": 1,
+                "type": "message",
+                "sessionKey": "agent:dev:voice-agent-94935dc26e46",
+                "messageId": "7397f511",
+                "messageSeq": 1,
+                "role": "user",
+                "text": "请写一篇约800字的短文,主题是「水的三态变化」。只输出短文正文,不要调用任何工具,不要读写任何文件,不要联网。结尾单起一行写 PREFLIGHT-OK-B1。",
+                "raw": {
+                  "sessionKey": "agent:dev:voice-agent-94935dc26e46",
+                  "agentId": "dev",
+                  "message": {
+                    "role": "user",
+                    "content": "请写一篇约800字的短文,主题是「水的三态变化」。只输出短文正文,不要调用任何工具,不要读写任何文件,不要联网。结尾单起一行写 PREFLIGHT-OK-B1。",
+                    "timestamp": 1786181755525,
+                    "__openclaw": {
+                      "id": "7397f511",
+                      "seq": 1
+                    }
+                  },
+                  "messageId": "7397f511",
+                  "messageSeq": 1,
+                  "session": {
+                    "key": "agent:dev:voice-agent-94935dc26e46",
+                    "kind": "direct",
+                    "updatedAt": 1786181755511,
+                    "archived": false,
+                    "pinned": false,
+                    "unread": false,
+                    "sessionId": "0084a1b1-64a9-425f-822d-c2bf73706f1e",
+                    "thinkingLevel": null,
+                    "effectiveFastMode": false,
+                    "effectiveFastModeSource": "default",
+                    "fastAutoOnSeconds": 60,
+                    "totalTokensFresh": false,
+                    "effectiveResponseUsage": "off",
+                    "modelProvider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "agentRuntime": {
+                      "id": "auto",
+                      "source": "implicit"
+                    },
+                    "contextTokens": 128000,
+                    "hasActiveRun": true,
+                    "activeRunIds": [
+                      "5209d2c0-1684-468a-a223-4f353e8c698c"
+                    ]
+                  },
+                  "updatedAt": 1786181755511,
+                  "sessionId": "0084a1b1-64a9-425f-822d-c2bf73706f1e",
+                  "kind": "direct",
+                  "archived": false,
+                  "archivedAt": null,
+                  "pinned": false,
+                  "pinnedAt": null,
+                  "unread": false,
+                  "label": null,
+                  "category": null,
+                  "displayName": null,
+                  "thinkingLevel": null,
+                  "totalTokensFresh": false,
+                  "goal": null,
+                  "contextTokens": 128000,
+                  "effectiveResponseUsage": "off",
+                  "modelProvider": "deepseek",
+                  "model": "deepseek-v4-flash",
+                  "agentRuntime": {
+                    "id": "auto",
+                    "source": "implicit"
+                  },
+                  "hasActiveRun": true,
+                  "activeRunIds": [
+                    "5209d2c0-1684-468a-a223-4f353e8c698c"
+                  ]
+                }
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 3
+        }
+      },
+      "_run": "run_B1_no_notify"
+    },
+    {
+      "_ts": 1786181763.093634,
+      "_kind": "events_wait.raw",
+      "_payload": {
+        "request_args": {
+          "timeout_ms": 20000,
+          "after_cursor": 1
+        },
+        "response": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "event 2"
+              }
+            ],
+            "structuredContent": {
+              "event": {
+                "cursor": 2,
+                "type": "message",
+                "sessionKey": "agent:dev:voice-agent-94935dc26e46",
+                "messageId": "c48468d6",
+                "messageSeq": 2,
+                "role": "assistant",
+                "text": "水，是生命最温柔的隐喻，也是自然最朴素的魔术师。它没有固定的形状，却能以三种截然不同的面貌，在天地之间自由流转——液态的水、气态的雾、固态的冰，构成了三态变化的永恒循环。\n\n常温之下，水是流动的液态。它顺山势而下，汇成溪流与江河，最终奔赴大海。这一阶段的水平静而包容，能载舟亦能载舟，滋养万物而不争。\n\n当温度升高，水吸收热量，分子间的束缚被挣脱，液态的水化作无色无形的水蒸气，悄然升腾。这便是气态的水。你看不到它，却能感受到它的存在——它在空中聚集成云，随风飘荡千里，再以雨和雪的形式重回大地。\n\n而当温度降至零度以下，水放出热量，分子缓慢而有序地排列成规则的晶体，凝固成晶莹剔透的冰。固态的水坚硬而凛冽，覆盖山川湖海，封存一个冬天的记忆。\n\n这三态之间，可以相互转化：受热，冰融化为水，水蒸发为汽；遇冷，汽凝结成水，水冻结成冰。每一次转化，都遵循能量守恒的法则——吸收热量的过程如升华、融化、蒸发，显得自由而奔放；放出热量的过程如凝华、凝固、凝结，则显得沉稳而内敛。\n\n水的三态变化，何尝不是人生的三重境界？液态是灵动的青春，气态是蓬勃的理想，固态是沉静的年华。水的智慧在于从不固守一种形态，而是顺应温度与环境的变化，随时调整自己，却始终保持着H₂O不变的初心。\n\n万物皆有定数，而水教会我们变通。此刻也许你是奔流的溪水，下一刻便是飘扬的云雾，再下一刻或许是坚冰。但只要内核不改、本质不变，无论形态如何流转，你始终是你自己。\n\n这正是水的哲学：以不变应万变，于变化中守其本真。\n\nPREFLIGHT-OK-B1",
+                "raw": {
+                  "sessionKey": "agent:dev:voice-agent-94935dc26e46",
+                  "agentId": "dev",
+                  "message": {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "水，是生命最温柔的隐喻，也是自然最朴素的魔术师。它没有固定的形状，却能以三种截然不同的面貌，在天地之间自由流转——液态的水、气态的雾、固态的冰，构成了三态变化的永恒循环。\n\n常温之下，水是流动的液态。它顺山势而下，汇成溪流与江河，最终奔赴大海。这一阶段的水平静而包容，能载舟亦能载舟，滋养万物而不争。\n\n当温度升高，水吸收热量，分子间的束缚被挣脱，液态的水化作无色无形的水蒸气，悄然升腾。这便是气态的水。你看不到它，却能感受到它的存在——它在空中聚集成云，随风飘荡千里，再以雨和雪的形式重回大地。\n\n而当温度降至零度以下，水放出热量，分子缓慢而有序地排列成规则的晶体，凝固成晶莹剔透的冰。固态的水坚硬而凛冽，覆盖山川湖海，封存一个冬天的记忆。\n\n这三态之间，可以相互转化：受热，冰融化为水，水蒸发为汽；遇冷，汽凝结成水，水冻结成冰。每一次转化，都遵循能量守恒的法则——吸收热量的过程如升华、融化、蒸发，显得自由而奔放；放出热量的过程如凝华、凝固、凝结，则显得沉稳而内敛。\n\n水的三态变化，何尝不是人生的三重境界？液态是灵动的青春，气态是蓬勃的理想，固态是沉静的年华。水的智慧在于从不固守一种形态，而是顺应温度与环境的变化，随时调整自己，却始终保持着H₂O不变的初心。\n\n万物皆有定数，而水教会我们变通。此刻也许你是奔流的溪水，下一刻便是飘扬的云雾，再下一刻或许是坚冰。但只要内核不改、本质不变，无论形态如何流转，你始终是你自己。\n\n这正是水的哲学：以不变应万变，于变化中守其本真。\n\nPREFLIGHT-OK-B1"
+                      }
+                    ],
+                    "api": "openai-completions",
+                    "provider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "usage": {
+                      "input": 13310,
+                      "output": 418,
+                      "totalTokens": 15904,
+                      "cacheRead": 2176,
+                      "cacheWrite": 0,
+                      "cost": {
+                        "input": 0,
+                        "output": 0,
+                        "cacheRead": 0,
+                        "cacheWrite": 0,
+                        "total": 0
+                      }
+                    },
+                    "stopReason": "stop",
+                    "timestamp": 1786181755689,
+                    "responseId": "256d5a79-d545-46fa-b131-4a3718e835df",
+                    "__openclaw": {
+                      "id": "c48468d6",
+                      "seq": 2
+                    }
+                  },
+                  "messageId": "c48468d6",
+                  "messageSeq": 2,
+                  "session": {
+                    "key": "agent:dev:voice-agent-94935dc26e46",
+                    "kind": "direct",
+                    "updatedAt": 1786181755677,
+                    "archived": false,
+                    "pinned": false,
+                    "unread": false,
+                    "sessionId": "0084a1b1-64a9-425f-822d-c2bf73706f1e",
+                    "abortedLastRun": false,
+                    "thinkingLevel": null,
+                    "effectiveFastMode": false,
+                    "effectiveFastModeSource": "default",
+                    "fastAutoOnSeconds": 60,
+                    "totalTokens": 15486,
+                    "totalTokensFresh": true,
+                    "estimatedCostUsd": 0,
+                    "status": "running",
+                    "startedAt": 1786181755665,
+                    "effectiveResponseUsage": "off",
+                    "modelProvider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "agentRuntime": {
+                      "id": "auto",
+                      "source": "implicit"
+                    },
+                    "contextTokens": 128000,
+                    "hasActiveRun": true,
+                    "activeRunIds": [
+                      "5209d2c0-1684-468a-a223-4f353e8c698c"
+                    ]
+                  },
+                  "updatedAt": 1786181755677,
+                  "sessionId": "0084a1b1-64a9-425f-822d-c2bf73706f1e",
+                  "kind": "direct",
+                  "archived": false,
+                  "archivedAt": null,
+                  "pinned": false,
+                  "pinnedAt": null,
+                  "unread": false,
+                  "label": null,
+                  "category": null,
+                  "displayName": null,
+                  "thinkingLevel": null,
+                  "abortedLastRun": false,
+                  "totalTokens": 15486,
+                  "totalTokensFresh": true,
+                  "goal": null,
+                  "contextTokens": 128000,
+                  "estimatedCostUsd": 0,
+                  "effectiveResponseUsage": "off",
+                  "modelProvider": "deepseek",
+                  "model": "deepseek-v4-flash",
+                  "agentRuntime": {
+                    "id": "auto",
+                    "source": "implicit"
+                  },
+                  "status": "running",
+                  "hasActiveRun": true,
+                  "activeRunIds": [
+                    "5209d2c0-1684-468a-a223-4f353e8c698c"
+                  ],
+                  "startedAt": 1786181755665
+                }
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 4
+        }
+      },
+      "_run": "run_B1_no_notify"
+    },
+    {
+      "_ts": 1786181783.1014504,
+      "_kind": "events_wait.empty",
+      "_payload": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "timeout"
+            }
+          ],
+          "structuredContent": {
+            "event": null
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 5
+      },
+      "_run": "run_B1_no_notify"
+    },
+    {
+      "_ts": 1786181803.1049144,
+      "_kind": "events_wait.empty",
+      "_payload": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "timeout"
+            }
+          ],
+          "structuredContent": {
+            "event": null
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 6
+      },
+      "_run": "run_B1_no_notify"
+    },
+    {
+      "_ts": 1786181857.7491517,
+      "_kind": "events_poll.baseline.raw",
+      "_payload": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "events: 0"
+            }
+          ],
+          "structuredContent": {
+            "events": [],
+            "next_cursor": 0
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 2
+      },
+      "_run": "run_C1_notify_done_only"
+    },
+    {
+      "_ts": 1786181861.4019563,
+      "_kind": "events_wait.raw",
+      "_payload": {
+        "request_args": {
+          "timeout_ms": 20000,
+          "after_cursor": 0
+        },
+        "response": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "event 1"
+              }
+            ],
+            "structuredContent": {
+              "event": {
+                "cursor": 1,
+                "type": "message",
+                "sessionKey": "agent:dev:voice-agent-79296061131d",
+                "messageId": "8fcf3fbb",
+                "messageSeq": 1,
+                "role": "user",
+                "text": "请写一篇约800字的短文,主题是「水的三态变化」。只输出短文正文,不要调用任何工具,不要读写任何文件,不要联网。结尾单起一行写 PREFLIGHT-OK-C1。",
+                "raw": {
+                  "sessionKey": "agent:dev:voice-agent-79296061131d",
+                  "agentId": "dev",
+                  "message": {
+                    "role": "user",
+                    "content": "请写一篇约800字的短文,主题是「水的三态变化」。只输出短文正文,不要调用任何工具,不要读写任何文件,不要联网。结尾单起一行写 PREFLIGHT-OK-C1。",
+                    "timestamp": 1786181860839,
+                    "__openclaw": {
+                      "id": "8fcf3fbb",
+                      "seq": 1
+                    }
+                  },
+                  "messageId": "8fcf3fbb",
+                  "messageSeq": 1,
+                  "session": {
+                    "key": "agent:dev:voice-agent-79296061131d",
+                    "kind": "direct",
+                    "updatedAt": 1786181860823,
+                    "archived": false,
+                    "pinned": false,
+                    "unread": false,
+                    "sessionId": "fe9052c0-e1db-48e6-a3d8-b206dc3f10db",
+                    "thinkingLevel": null,
+                    "effectiveFastMode": false,
+                    "effectiveFastModeSource": "default",
+                    "fastAutoOnSeconds": 60,
+                    "totalTokensFresh": false,
+                    "effectiveResponseUsage": "off",
+                    "modelProvider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "agentRuntime": {
+                      "id": "auto",
+                      "source": "implicit"
+                    },
+                    "contextTokens": 128000,
+                    "hasActiveRun": true,
+                    "activeRunIds": [
+                      "ba8cd95d-d7d9-4dc3-9d48-e2ed5409d889"
+                    ]
+                  },
+                  "updatedAt": 1786181860823,
+                  "sessionId": "fe9052c0-e1db-48e6-a3d8-b206dc3f10db",
+                  "kind": "direct",
+                  "archived": false,
+                  "archivedAt": null,
+                  "pinned": false,
+                  "pinnedAt": null,
+                  "unread": false,
+                  "label": null,
+                  "category": null,
+                  "displayName": null,
+                  "thinkingLevel": null,
+                  "totalTokensFresh": false,
+                  "goal": null,
+                  "contextTokens": 128000,
+                  "effectiveResponseUsage": "off",
+                  "modelProvider": "deepseek",
+                  "model": "deepseek-v4-flash",
+                  "agentRuntime": {
+                    "id": "auto",
+                    "source": "implicit"
+                  },
+                  "hasActiveRun": true,
+                  "activeRunIds": [
+                    "ba8cd95d-d7d9-4dc3-9d48-e2ed5409d889"
+                  ]
+                }
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 3
+        }
+      },
+      "_run": "run_C1_notify_done_only"
+    },
+    {
+      "_ts": 1786181868.6112452,
+      "_kind": "events_wait.raw",
+      "_payload": {
+        "request_args": {
+          "timeout_ms": 20000,
+          "after_cursor": 1
+        },
+        "response": {
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "event 2"
+              }
+            ],
+            "structuredContent": {
+              "event": {
+                "cursor": 2,
+                "type": "message",
+                "sessionKey": "agent:dev:voice-agent-79296061131d",
+                "messageId": "06b925dd",
+                "messageSeq": 2,
+                "role": "assistant",
+                "text": "水的三态变化\n\n水是天地间最寻常也最奇妙的存在。它从不固定于一个模样,而是随着温度与心境的改变,在固态、液态、气态之间从容往返,仿佛一场永不停歇的变装秀。\n\n当寒意降临,水收敛起奔流的性子,凝成冰。它可以是山巅千年不化的积雪,也可以是屋檐下晶莹的冰凌;可以铺成坦荡的冰面任孩童滑行,也可以冻作窗上的霜花。冰是水的沉默,坚硬、清凉、棱角分明,却也在静静等待一个温暖的契机。\n\n当春阳和煦,冰便融化开来,重新化作流动的液体。它从溪涧潺潺而过,在江河里奔腾不息,汇入湖泊,漫向海洋。液态的水最是温柔包容:它滋养万物,润泽土地,载舟亦可覆舟,柔软却能穿石。它随方就圆,装进什么容器便是什么形状,却始终不改润泽万物的本心。\n\n而当热量升腾,水便挣脱大地的牵绊,化作水汽升入天空。它变得轻盈、无形,聚成云朵随风漂泊,凝为雨滴重新落下,或是化作云雾笼罩山峦。气态的水看似无影无踪,却是构成气候的隐形之手,在天地之间循环往复。一场雨淋漓而下,既是对大地的馈赠,也是一段旅程的圆满。\n\n水的三态,看似截然不同,实则是同一个灵魂的不同面目。冰的坚韧、水的柔韧、汽的飘逸,彼此转化,循环不息。这不仅是自然界的物理法则,更像是一种生命的隐喻——同一本质,因境而变,因时而化,却始终保持着内在的纯净与力量。\n\n从冰到水,从水到汽,再到雨雪重归大地,水用自己的方式讲述着恒常与变化的故事。它提醒我们:真正的生命力,从来不在固守一个姿态,而在于懂得随境流转、仍然不忘初心。水的三态,是自然写给我们的温柔箴言。\n\nPREFLIGHT-OK-C1",
+                "raw": {
+                  "sessionKey": "agent:dev:voice-agent-79296061131d",
+                  "agentId": "dev",
+                  "message": {
+                    "role": "assistant",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "水的三态变化\n\n水是天地间最寻常也最奇妙的存在。它从不固定于一个模样,而是随着温度与心境的改变,在固态、液态、气态之间从容往返,仿佛一场永不停歇的变装秀。\n\n当寒意降临,水收敛起奔流的性子,凝成冰。它可以是山巅千年不化的积雪,也可以是屋檐下晶莹的冰凌;可以铺成坦荡的冰面任孩童滑行,也可以冻作窗上的霜花。冰是水的沉默,坚硬、清凉、棱角分明,却也在静静等待一个温暖的契机。\n\n当春阳和煦,冰便融化开来,重新化作流动的液体。它从溪涧潺潺而过,在江河里奔腾不息,汇入湖泊,漫向海洋。液态的水最是温柔包容:它滋养万物,润泽土地,载舟亦可覆舟,柔软却能穿石。它随方就圆,装进什么容器便是什么形状,却始终不改润泽万物的本心。\n\n而当热量升腾,水便挣脱大地的牵绊,化作水汽升入天空。它变得轻盈、无形,聚成云朵随风漂泊,凝为雨滴重新落下,或是化作云雾笼罩山峦。气态的水看似无影无踪,却是构成气候的隐形之手,在天地之间循环往复。一场雨淋漓而下,既是对大地的馈赠,也是一段旅程的圆满。\n\n水的三态,看似截然不同,实则是同一个灵魂的不同面目。冰的坚韧、水的柔韧、汽的飘逸,彼此转化,循环不息。这不仅是自然界的物理法则,更像是一种生命的隐喻——同一本质,因境而变,因时而化,却始终保持着内在的纯净与力量。\n\n从冰到水,从水到汽,再到雨雪重归大地,水用自己的方式讲述着恒常与变化的故事。它提醒我们:真正的生命力,从来不在固守一个姿态,而在于懂得随境流转、仍然不忘初心。水的三态,是自然写给我们的温柔箴言。\n\nPREFLIGHT-OK-C1"
+                      }
+                    ],
+                    "api": "openai-completions",
+                    "provider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "usage": {
+                      "input": 15425,
+                      "output": 439,
+                      "totalTokens": 15864,
+                      "cacheRead": 0,
+                      "cacheWrite": 0,
+                      "cost": {
+                        "input": 0,
+                        "output": 0,
+                        "cacheRead": 0,
+                        "cacheWrite": 0,
+                        "total": 0
+                      }
+                    },
+                    "stopReason": "stop",
+                    "timestamp": 1786181861416,
+                    "responseId": "22e5534d-19d0-45c2-a97f-99d918ce0ff0",
+                    "__openclaw": {
+                      "id": "06b925dd",
+                      "seq": 2
+                    }
+                  },
+                  "messageId": "06b925dd",
+                  "messageSeq": 2,
+                  "session": {
+                    "key": "agent:dev:voice-agent-79296061131d",
+                    "kind": "direct",
+                    "updatedAt": 1786181861381,
+                    "archived": false,
+                    "pinned": false,
+                    "unread": false,
+                    "sessionId": "fe9052c0-e1db-48e6-a3d8-b206dc3f10db",
+                    "abortedLastRun": false,
+                    "thinkingLevel": null,
+                    "effectiveFastMode": false,
+                    "effectiveFastModeSource": "default",
+                    "fastAutoOnSeconds": 60,
+                    "totalTokens": 15425,
+                    "totalTokensFresh": true,
+                    "estimatedCostUsd": 0,
+                    "status": "running",
+                    "startedAt": 1786181861335,
+                    "effectiveResponseUsage": "off",
+                    "modelProvider": "deepseek",
+                    "model": "deepseek-v4-flash",
+                    "agentRuntime": {
+                      "id": "auto",
+                      "source": "implicit"
+                    },
+                    "contextTokens": 128000,
+                    "hasActiveRun": true,
+                    "activeRunIds": [
+                      "ba8cd95d-d7d9-4dc3-9d48-e2ed5409d889"
+                    ]
+                  },
+                  "updatedAt": 1786181861381,
+                  "sessionId": "fe9052c0-e1db-48e6-a3d8-b206dc3f10db",
+                  "kind": "direct",
+                  "archived": false,
+                  "archivedAt": null,
+                  "pinned": false,
+                  "pinnedAt": null,
+                  "unread": false,
+                  "label": null,
+                  "category": null,
+                  "displayName": null,
+                  "thinkingLevel": null,
+                  "abortedLastRun": false,
+                  "totalTokens": 15425,
+                  "totalTokensFresh": true,
+                  "goal": null,
+                  "contextTokens": 128000,
+                  "estimatedCostUsd": 0,
+                  "effectiveResponseUsage": "off",
+                  "modelProvider": "deepseek",
+                  "model": "deepseek-v4-flash",
+                  "agentRuntime": {
+                    "id": "auto",
+                    "source": "implicit"
+                  },
+                  "status": "running",
+                  "hasActiveRun": true,
+                  "activeRunIds": [
+                    "ba8cd95d-d7d9-4dc3-9d48-e2ed5409d889"
+                  ],
+                  "startedAt": 1786181861335
+                }
+              }
+            }
+          },
+          "jsonrpc": "2.0",
+          "id": 4
+        }
+      },
+      "_run": "run_C1_notify_done_only"
+    },
+    {
+      "_ts": 1786181888.6134052,
+      "_kind": "events_wait.empty",
+      "_payload": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "timeout"
+            }
+          ],
+          "structuredContent": {
+            "event": null
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 5
+      },
+      "_run": "run_C1_notify_done_only"
+    },
+    {
+      "_ts": 1786181908.614788,
+      "_kind": "events_wait.empty",
+      "_payload": {
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "timeout"
+            }
+          ],
+          "structuredContent": {
+            "event": null
+          }
+        },
+        "jsonrpc": "2.0",
+        "id": 6
+      },
+      "_run": "run_C1_notify_done_only"
+    }
+  ]
+}

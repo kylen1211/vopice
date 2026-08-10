@@ -1,0 +1,3110 @@
+{
+ "_meta": {
+  "title": "OpenClaw 派活失败路径实测样本(events_wait 通路)",
+  "date": "2026-08-08",
+  "openclaw_version": "OpenClaw 2026.7.1-2 (0790d9f)",
+  "agent": "dev (workspace /home/ky/openclaw-workspace, model deepseek/deepseek-v4-flash)",
+  "gateway": "127.0.0.1:18789 local mode",
+  "collector": "JSON-RPC over stdio -> `openclaw mcp serve`; events_poll baseline + events_wait loop, cursor advanced from event.cursor; bridge connected BEFORE dispatch in every case",
+  "note_events_raw": "events_raw[].event 为 events_wait 返回的 structuredContent.event 原样对象,未裁剪",
+  "note_tasks_show": "final_tasks_show 取自 `openclaw tasks show <K> --json` 的 stderr(见 preflight-live.md D-1)",
+  "sibling": "结论见 preflight-live.md 第 6 节"
+ },
+ "cases": {
+  "F1": {
+   "form": "任务做不成:agent 执行后如实汇报失败(读一个不存在的文件)",
+   "dispatch_cmd": "openclaw agent --agent dev --session-key $K --message-file message.txt --json",
+   "session_key": "agent:dev:voice-agent-43a1fba2a751",
+   "message": "请读取文件 /home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt 的全部内容,并把内容原样回复给我。\n这个文件是这次任务的唯一交付依据,读不到就没法交付。\n如果读不到,请直接说明失败原因,不要编造内容,不要创建这个文件。\n",
+   "agent_cli_stdout_summary": {
+    "runId": "1713f748-e457-4fbe-9d58-0e99e89dc123",
+    "status": "ok",
+    "summary": "completed",
+    "result.payloads": [
+     {
+      "text": "读取失败。\n\n**原因**:文件 `/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt` 不存在(`ENOENT: no such file or directory`)。\n\n按你的要求,我不会编造内容,也不会创建这个文件。如果你确认这个文件应该存在,可能是路径写错、文件已被移动/删除,或者尚未生成——告诉我实际路径或确认文件来源,我再帮你处理。",
+      "mediaUrl": null
+     }
+    ],
+    "result.meta.aborted": false,
+    "result.meta.durationMs": 4831,
+    "result.meta.stopReason": "stop",
+    "result.meta.livenessState": "working",
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": "读取失败。\n\n**原因**:文件 `/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt` 不存在(`ENOENT: no such file or directory`)。\n\n按你的要求,我不会编造内容,也不会创建这个文件。如果你确认这个文件应该存在,可能是路径写错、文件已被移动/删除,或者尚未生成——告诉我实际路径或确认文件来源,我再帮你处理。"
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "fac9412e-4cbd-477a-9ccd-5ed800486640",
+    "runtime": "cli",
+    "sourceId": "1713f748-e457-4fbe-9d58-0e99e89dc123",
+    "requesterSessionKey": "agent:dev:voice-agent-43a1fba2a751",
+    "ownerKey": "agent:dev:voice-agent-43a1fba2a751",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-43a1fba2a751",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "1713f748-e457-4fbe-9d58-0e99e89dc123",
+    "task": "请读取文件 /home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt 的全部内容,并把内容原样回复给我。\n这个文件是这次任务的唯一交付依据,读不到就没法交付。\n如果读不到,请直接说明失败原因,不要编造内容,不要创建这个文件。",
+    "status": "succeeded",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786184804541,
+    "startedAt": 1786184804742,
+    "endedAt": 1786184809689,
+    "lastEventAt": 1786184809674,
+    "cleanupAfter": 1786789609674,
+    "terminalSummary": "completed"
+   },
+   "store_transitions": [],
+   "events_count": 3,
+   "events_raw": [
+    {
+     "_recv_ts": 1786184805.2081182,
+     "event": {
+      "cursor": 1,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-43a1fba2a751",
+      "messageId": "da2dd04c",
+      "messageSeq": 1,
+      "role": "user",
+      "text": "请读取文件 /home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt 的全部内容,并把内容原样回复给我。\n这个文件是这次任务的唯一交付依据,读不到就没法交付。\n如果读不到,请直接说明失败原因,不要编造内容,不要创建这个文件。",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-43a1fba2a751",
+       "agentId": "dev",
+       "message": {
+        "role": "user",
+        "content": "请读取文件 /home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt 的全部内容,并把内容原样回复给我。\n这个文件是这次任务的唯一交付依据,读不到就没法交付。\n如果读不到,请直接说明失败原因,不要编造内容,不要创建这个文件。",
+        "timestamp": 1786184804743,
+        "__openclaw": {
+         "id": "da2dd04c",
+         "seq": 1
+        }
+       },
+       "messageId": "da2dd04c",
+       "messageSeq": 1,
+       "session": {
+        "key": "agent:dev:voice-agent-43a1fba2a751",
+        "kind": "direct",
+        "updatedAt": 1786184804727,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "ca26e893-831b-499b-9ce1-c873ea217701",
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokensFresh": false,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "1713f748-e457-4fbe-9d58-0e99e89dc123"
+        ]
+       },
+       "updatedAt": 1786184804727,
+       "sessionId": "ca26e893-831b-499b-9ce1-c873ea217701",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "totalTokensFresh": false,
+       "goal": null,
+       "contextTokens": 128000,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "1713f748-e457-4fbe-9d58-0e99e89dc123"
+       ]
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786184807.4456425,
+     "event": {
+      "cursor": 2,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-43a1fba2a751",
+      "messageId": "0ab7e880",
+      "messageSeq": 2,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-43a1fba2a751",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_x3EgpsMoB61bRPYcz6dd0045",
+          "name": "read",
+          "arguments": {
+           "path": "/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt"
+          },
+          "partialArgs": "{\"path\": \"/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt\"}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 15300,
+         "output": 62,
+         "totalTokens": 15362,
+         "cacheRead": 0,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786184805220,
+        "responseId": "9aff0173-ba8f-43be-b10e-c62a3f5f69d4",
+        "__openclaw": {
+         "id": "0ab7e880",
+         "seq": 2
+        }
+       },
+       "messageId": "0ab7e880",
+       "messageSeq": 2,
+       "session": {
+        "key": "agent:dev:voice-agent-43a1fba2a751",
+        "kind": "direct",
+        "updatedAt": 1786184805193,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "ca26e893-831b-499b-9ce1-c873ea217701",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15300,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786184805163,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "1713f748-e457-4fbe-9d58-0e99e89dc123"
+        ]
+       },
+       "updatedAt": 1786184805193,
+       "sessionId": "ca26e893-831b-499b-9ce1-c873ea217701",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15300,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "1713f748-e457-4fbe-9d58-0e99e89dc123"
+       ],
+       "startedAt": 1786184805163
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786184809.5741491,
+     "event": {
+      "cursor": 3,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-43a1fba2a751",
+      "messageId": "a540376f",
+      "messageSeq": 4,
+      "role": "assistant",
+      "text": "读取失败。\n\n**原因**:文件 `/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt` 不存在(`ENOENT: no such file or directory`)。\n\n按你的要求,我不会编造内容,也不会创建这个文件。如果你确认这个文件应该存在,可能是路径写错、文件已被移动/删除,或者尚未生成——告诉我实际路径或确认文件来源,我再帮你处理。",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-43a1fba2a751",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": "读取失败。\n\n**原因**:文件 `/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt` 不存在(`ENOENT: no such file or directory`)。\n\n按你的要求,我不会编造内容,也不会创建这个文件。如果你确认这个文件应该存在,可能是路径写错、文件已被移动/删除,或者尚未生成——告诉我实际路径或确认文件来源,我再帮你处理。"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 68,
+         "output": 91,
+         "totalTokens": 15519,
+         "cacheRead": 15360,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "stop",
+        "timestamp": 1786184807517,
+        "responseId": "23a2ad5a-2ba7-47ea-a91d-4aad2543c3e2",
+        "__openclaw": {
+         "id": "a540376f",
+         "seq": 4
+        }
+       },
+       "messageId": "a540376f",
+       "messageSeq": 4,
+       "session": {
+        "key": "agent:dev:voice-agent-43a1fba2a751",
+        "kind": "direct",
+        "updatedAt": 1786184805193,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "ca26e893-831b-499b-9ce1-c873ea217701",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15428,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786184805163,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "1713f748-e457-4fbe-9d58-0e99e89dc123"
+        ]
+       },
+       "updatedAt": 1786184805193,
+       "sessionId": "ca26e893-831b-499b-9ce1-c873ea217701",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15428,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "1713f748-e457-4fbe-9d58-0e99e89dc123"
+       ],
+       "startedAt": 1786184805163
+      }
+     }
+    }
+   ],
+   "timeline": "[1786184799.473] CASE=F1 SESSION_KEY=agent:dev:voice-agent-43a1fba2a751 EXTRA_ARGS=\n[1786184802.000] COLLECTOR_READY pid=340138 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786184802.011] DISPATCHED pid=340182 t0=1786184802.006433354\n[1786184804.452] probe#1 rc=1 NO_JSON\n[1786184807.757] probe#2 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786184811.061] probe#3 rc=0 status=succeeded deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='completed' error=''\n[1786184811.062] TERMINAL_REACHED at probe#3\n[1786184811.066] AGENT_CLI exit=0 stdout_bytes=21730 stderr_bytes=0\n[1786184811.068] WAITING_COLLECTOR\n[1786184876.780] COLLECTOR_EXIT\n[1786184879.013] FINAL rc=0 out=0 err=1021\n[1786184879.016] EVENTS_SEEN=3\n[1786184805.2] EVENT cursor=1 type=message role=user sessionKey=agent:dev:voice-agent-43a1fba2a751 text='请读取文件 /home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt 的全部内容,并把内容原样回复给我。\\n这个文件是这次任务的唯一交付依据,读不到就没法交付。\\n如果读不到,请直接说明失败原因,不要编造内容,不要创建这个文件。'\n[1786184807.4] EVENT cursor=2 type=message role=assistant sessionKey=agent:dev:voice-agent-43a1fba2a751 text=None\n[1786184809.6] EVENT cursor=3 type=message role=assistant sessionKey=agent:dev:voice-agent-43a1fba2a751 text='读取失败。\\n\\n**原因**:文件 `/home/ky/openclaw-workspace/absolutely-missing-file-20260808.txt` 不存在(`ENOENT: no such file or directory`)。\\n\\n按你的要求,我不会编造内容,也不会创建这个文件。如果你确\n[1786184879.018] CASE_DONE F1\n"
+  },
+  "F2": {
+   "form": "运行超时:--timeout 15 + 一条需要 120s 的 shell 命令",
+   "dispatch_cmd": "openclaw agent ... --json --timeout 15",
+   "session_key": "agent:dev:voice-agent-961ec590257a",
+   "message": "请用 shell 执行命令:sleep 120\n必须真正等待这条命令执行完毕(大约需要两分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F2-DONE\n",
+   "agent_cli_stdout_summary": {
+    "runId": "aa4041cb-0e7a-4a8c-a476-0730319a4284",
+    "status": "timeout",
+    "summary": "aborted",
+    "stopReason": "aborted",
+    "result.payloads": [
+     {
+      "text": "LLM request timed out.",
+      "mediaUrl": null
+     },
+     {
+      "text": "⚠️ 🧰 Process: `delta-prairie` failed",
+      "mediaUrl": null
+     }
+    ],
+    "result.meta.aborted": true,
+    "result.meta.durationMs": 15254,
+    "result.meta.stopReason": "aborted",
+    "result.meta.livenessState": "working",
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": null
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "01e0f5e3-d1ec-4f70-bc5a-7df8b5c75b0c",
+    "runtime": "cli",
+    "sourceId": "aa4041cb-0e7a-4a8c-a476-0730319a4284",
+    "requesterSessionKey": "agent:dev:voice-agent-961ec590257a",
+    "ownerKey": "agent:dev:voice-agent-961ec590257a",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-961ec590257a",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "aa4041cb-0e7a-4a8c-a476-0730319a4284",
+    "task": "请用 shell 执行命令:sleep 120\n必须真正等待这条命令执行完毕(大约需要两分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F2-DONE",
+    "status": "cancelled",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786184913688,
+    "startedAt": 1786184913820,
+    "endedAt": 1786184929100,
+    "lastEventAt": 1786184929100,
+    "cleanupAfter": 1786789729100,
+    "error": "agent run aborted"
+   },
+   "store_transitions": [],
+   "events_count": 4,
+   "events_raw": [
+    {
+     "_recv_ts": 1786184914.0288255,
+     "event": {
+      "cursor": 1,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-961ec590257a",
+      "messageId": "7543ff26",
+      "messageSeq": 1,
+      "role": "user",
+      "text": "请用 shell 执行命令:sleep 120\n必须真正等待这条命令执行完毕(大约需要两分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F2-DONE",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-961ec590257a",
+       "agentId": "dev",
+       "message": {
+        "role": "user",
+        "content": "请用 shell 执行命令:sleep 120\n必须真正等待这条命令执行完毕(大约需要两分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F2-DONE",
+        "timestamp": 1786184913820,
+        "__openclaw": {
+         "id": "7543ff26",
+         "seq": 1
+        }
+       },
+       "messageId": "7543ff26",
+       "messageSeq": 1,
+       "session": {
+        "key": "agent:dev:voice-agent-961ec590257a",
+        "kind": "direct",
+        "updatedAt": 1786184913803,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokensFresh": false,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+        ]
+       },
+       "updatedAt": 1786184913803,
+       "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "totalTokensFresh": false,
+       "goal": null,
+       "contextTokens": 128000,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+       ]
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786184915.5794592,
+     "event": {
+      "cursor": 2,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-961ec590257a",
+      "messageId": "98fbbf01",
+      "messageSeq": 2,
+      "role": "assistant",
+      "text": "I'll execute the sleep command and wait for it to complete.",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-961ec590257a",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": "I'll execute the sleep command and wait for it to complete."
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 12714,
+         "output": 73,
+         "totalTokens": 15347,
+         "cacheRead": 2560,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786184914036,
+        "responseId": "6a644d62-aa20-4bf5-abcf-8ceb47e19a7a",
+        "__openclaw": {
+         "id": "98fbbf01",
+         "seq": 2
+        }
+       },
+       "messageId": "98fbbf01",
+       "messageSeq": 2,
+       "session": {
+        "key": "agent:dev:voice-agent-961ec590257a",
+        "kind": "direct",
+        "updatedAt": 1786184914025,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15274,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786184914013,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+        ]
+       },
+       "updatedAt": 1786184914025,
+       "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15274,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+       ],
+       "startedAt": 1786184914013
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786184927.5747302,
+     "event": {
+      "cursor": 3,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-961ec590257a",
+      "messageId": "2bf518e8",
+      "messageSeq": 4,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-961ec590257a",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_cLzp8tlE8DX4EvJH4z070038",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "delta-prairie",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"delta-prairie\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 169,
+         "output": 80,
+         "totalTokens": 15481,
+         "cacheRead": 15232,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786184925980,
+        "responseId": "080d4334-89ec-4493-b060-e5d56253882f",
+        "__openclaw": {
+         "id": "2bf518e8",
+         "seq": 4
+        }
+       },
+       "messageId": "2bf518e8",
+       "messageSeq": 4,
+       "session": {
+        "key": "agent:dev:voice-agent-961ec590257a",
+        "kind": "direct",
+        "updatedAt": 1786184914025,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15401,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786184914013,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+        ]
+       },
+       "updatedAt": 1786184914025,
+       "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15401,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+       ],
+       "startedAt": 1786184914013
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786184929.0115993,
+     "event": {
+      "cursor": 4,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-961ec590257a",
+      "messageId": "192d602a",
+      "messageSeq": 6,
+      "role": "assistant",
+      "text": "",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-961ec590257a",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": ""
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 0,
+         "output": 0,
+         "totalTokens": 0,
+         "cacheRead": 0,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "aborted",
+        "errorMessage": "This operation was aborted",
+        "timestamp": 1786184929007,
+        "__openclaw": {
+         "id": "192d602a",
+         "seq": 6
+        }
+       },
+       "messageId": "192d602a",
+       "messageSeq": 6,
+       "session": {
+        "key": "agent:dev:voice-agent-961ec590257a",
+        "kind": "direct",
+        "updatedAt": 1786184914025,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15401,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786184914013,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+        ]
+       },
+       "updatedAt": 1786184914025,
+       "sessionId": "1e8d1cf6-4c67-4106-a252-ebd855f968e7",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15401,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "aa4041cb-0e7a-4a8c-a476-0730319a4284"
+       ],
+       "startedAt": 1786184914013
+      }
+     }
+    }
+   ],
+   "timeline": "[1786184908.702] CASE=F2 SESSION_KEY=agent:dev:voice-agent-961ec590257a EXTRA_ARGS=--timeout 15\n[1786184911.226] COLLECTOR_READY pid=340541 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786184911.236] DISPATCHED pid=340584 t0=1786184911.231253208\n[1786184913.726] probe#1 rc=1 NO_JSON\n[1786184917.036] probe#2 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786184920.300] probe#3 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786184923.592] probe#4 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786184926.916] probe#5 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786184930.229] probe#6 rc=0 status=cancelled deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error='agent run aborted'\n[1786184930.231] TERMINAL_REACHED at probe#6\n[1786184930.235] AGENT_CLI exit=0 stdout_bytes=20464 stderr_bytes=0\n[1786184930.238] WAITING_COLLECTOR\n[1786185011.045] COLLECTOR_EXIT\n[1786185013.295] FINAL rc=0 out=0 err=905\n[1786185013.299] EVENTS_SEEN=4\n[1786184914.0] EVENT cursor=1 type=message role=user sessionKey=agent:dev:voice-agent-961ec590257a text='请用 shell 执行命令:sleep 120\\n必须真正等待这条命令执行完毕(大约需要两分钟),不要用后台方式跳过等待。\\n命令正常返回之后,回复一行:F2-DONE'\n[1786184915.6] EVENT cursor=2 type=message role=assistant sessionKey=agent:dev:voice-agent-961ec590257a text=\"I'll execute the sleep command and wait for it to complete.\"\n[1786184927.6] EVENT cursor=3 type=message role=assistant sessionKey=agent:dev:voice-agent-961ec590257a text=None\n[1786184929.0] EVENT cursor=4 type=message role=assistant sessionKey=agent:dev:voice-agent-961ec590257a text=''\n[1786185013.301] CASE_DONE F2\n"
+  },
+  "F7b": {
+   "form": "运行超时复现:--timeout 25 + 一条需要 150s 的 shell 命令",
+   "dispatch_cmd": "openclaw agent ... --json --timeout 25",
+   "session_key": "agent:dev:voice-agent-03c3fc738164",
+   "message": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE\n",
+   "agent_cli_stdout_summary": {
+    "runId": "382ef5dd-86ff-4e40-a235-bee63fc4b810",
+    "status": "timeout",
+    "summary": "aborted",
+    "stopReason": "aborted",
+    "result.payloads": [
+     {
+      "text": "LLM request timed out.",
+      "mediaUrl": null
+     },
+     {
+      "text": "⚠️ 🧰 Process: `brisk-atlas` failed",
+      "mediaUrl": null
+     }
+    ],
+    "result.meta.aborted": true,
+    "result.meta.durationMs": 25211,
+    "result.meta.stopReason": "aborted",
+    "result.meta.livenessState": "working",
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": null
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "a1684de7-64aa-49b1-9c80-604e2e364f2b",
+    "runtime": "cli",
+    "sourceId": "382ef5dd-86ff-4e40-a235-bee63fc4b810",
+    "requesterSessionKey": "agent:dev:voice-agent-03c3fc738164",
+    "ownerKey": "agent:dev:voice-agent-03c3fc738164",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-03c3fc738164",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "382ef5dd-86ff-4e40-a235-bee63fc4b810",
+    "task": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE",
+    "status": "cancelled",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786186103266,
+    "startedAt": 1786186103396,
+    "endedAt": 1786186128632,
+    "lastEventAt": 1786186128632,
+    "cleanupAfter": 1786790928632,
+    "error": "agent run aborted"
+   },
+   "store_transitions": [
+    {
+     "_ts": 1786186100.87,
+     "status": null,
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": null
+    },
+    {
+     "_ts": 1786186103.397,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186103266
+    },
+    {
+     "_ts": 1786186103.72,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186103550
+    },
+    {
+     "_ts": 1786186105.604,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186105491
+    },
+    {
+     "_ts": 1786186105.919,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186105694
+    },
+    {
+     "_ts": 1786186116.015,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186115944
+    },
+    {
+     "_ts": 1786186117.274,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186117160
+    },
+    {
+     "_ts": 1786186117.602,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186117364
+    },
+    {
+     "_ts": 1786186117.915,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786186117602
+    },
+    {
+     "_ts": 1786186128.662,
+     "status": "cancelled",
+     "error": "agent run aborted",
+     "terminal_summary": null,
+     "ended_at": 1786186128632,
+     "last_event_at": 1786186128632
+    }
+   ],
+   "events_count": 4,
+   "events_raw": [
+    {
+     "_recv_ts": 1786186103.567052,
+     "event": {
+      "cursor": 1,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+      "messageId": "b7eb4493",
+      "messageSeq": 1,
+      "role": "user",
+      "text": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+       "agentId": "dev",
+       "message": {
+        "role": "user",
+        "content": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE",
+        "timestamp": 1786186103396,
+        "__openclaw": {
+         "id": "b7eb4493",
+         "seq": 1
+        }
+       },
+       "messageId": "b7eb4493",
+       "messageSeq": 1,
+       "session": {
+        "key": "agent:dev:voice-agent-03c3fc738164",
+        "kind": "direct",
+        "updatedAt": 1786186103383,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokensFresh": false,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+        ]
+       },
+       "updatedAt": 1786186103383,
+       "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "totalTokensFresh": false,
+       "goal": null,
+       "contextTokens": 128000,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+       ]
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786186105.6903439,
+     "event": {
+      "cursor": 2,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+      "messageId": "43213de6",
+      "messageSeq": 2,
+      "role": "assistant",
+      "text": "I'll run the sleep command and wait for it to complete.",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": "I'll run the sleep command and wait for it to complete."
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 7589,
+         "output": 73,
+         "totalTokens": 15342,
+         "cacheRead": 7680,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786186103575,
+        "responseId": "734015b2-85f7-45cc-a404-25812a24a97b",
+        "__openclaw": {
+         "id": "43213de6",
+         "seq": 2
+        }
+       },
+       "messageId": "43213de6",
+       "messageSeq": 2,
+       "session": {
+        "key": "agent:dev:voice-agent-03c3fc738164",
+        "kind": "direct",
+        "updatedAt": 1786186103563,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15269,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786186103550,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+        ]
+       },
+       "updatedAt": 1786186103563,
+       "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15269,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+       ],
+       "startedAt": 1786186103550
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786186117.6003952,
+     "event": {
+      "cursor": 3,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+      "messageId": "fdd94c4c",
+      "messageSeq": 4,
+      "role": "assistant",
+      "text": "The command is still running. Let me poll until it completes.",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": "The command is still running. Let me poll until it completes."
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 163,
+         "output": 92,
+         "totalTokens": 15487,
+         "cacheRead": 15232,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786186115952,
+        "responseId": "b16420eb-7733-4e74-8599-959f6cf8482c",
+        "__openclaw": {
+         "id": "fdd94c4c",
+         "seq": 4
+        }
+       },
+       "messageId": "fdd94c4c",
+       "messageSeq": 4,
+       "session": {
+        "key": "agent:dev:voice-agent-03c3fc738164",
+        "kind": "direct",
+        "updatedAt": 1786186103563,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15395,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786186103550,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+        ]
+       },
+       "updatedAt": 1786186103563,
+       "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15395,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+       ],
+       "startedAt": 1786186103550
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786186128.5483997,
+     "event": {
+      "cursor": 4,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+      "messageId": "e6934549",
+      "messageSeq": 6,
+      "role": "assistant",
+      "text": "",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-03c3fc738164",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": ""
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 0,
+         "output": 0,
+         "totalTokens": 0,
+         "cacheRead": 0,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "aborted",
+        "errorMessage": "This operation was aborted",
+        "timestamp": 1786186128545,
+        "__openclaw": {
+         "id": "e6934549",
+         "seq": 6
+        }
+       },
+       "messageId": "e6934549",
+       "messageSeq": 6,
+       "session": {
+        "key": "agent:dev:voice-agent-03c3fc738164",
+        "kind": "direct",
+        "updatedAt": 1786186103563,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15395,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786186103550,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+        ]
+       },
+       "updatedAt": 1786186103563,
+       "sessionId": "e2c73075-394b-4877-871b-6d99f41acd0b",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15395,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "382ef5dd-86ff-4e40-a235-bee63fc4b810"
+       ],
+       "startedAt": 1786186103550
+      }
+     }
+    }
+   ],
+   "timeline": "[1786186098.302] CASE=F7b SESSION_KEY=agent:dev:voice-agent-03c3fc738164 EXTRA_ARGS=--timeout 25\n[1786186100.822] COLLECTOR_READY pid=346915 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786186100.831] DISPATCHED pid=346959 t0=1786186100.826211975\n[1786186100.838] STOREPOLL_STARTED secs=70\n[1786186103.327] probe#1 rc=1 NO_JSON\n[1786186106.647] probe#2 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186110.021] probe#3 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186113.339] probe#4 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186116.625] probe#5 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186119.945] probe#6 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186123.280] probe#7 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186126.602] probe#8 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786186129.941] probe#9 rc=0 status=cancelled deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error='agent run aborted'\n[1786186129.942] TERMINAL_REACHED at probe#9\n[1786186129.946] AGENT_CLI exit=0 stdout_bytes=20437 stderr_bytes=0\n[1786186129.948] WAITING_COLLECTOR\n[1786186180.634] COLLECTOR_EXIT\n[1786186182.957] FINAL rc=0 out=0 err=882\n[1786186182.960] EVENTS_SEEN=4\n[1786186103.6] EVENT cursor=1 type=message role=user sessionKey=agent:dev:voice-agent-03c3fc738164 text='请用 shell 执行命令:sleep 150\\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\\n命令正常返回之后,回复一行:F7-DONE'\n[1786186105.7] EVENT cursor=2 type=message role=assistant sessionKey=agent:dev:voice-agent-03c3fc738164 text=\"I'll run the sleep command and wait for it to complete.\"\n[1786186117.6] EVENT cursor=3 type=message role=assistant sessionKey=agent:dev:voice-agent-03c3fc738164 text='The command is still running. Let me poll until it completes.'\n[1786186128.5] EVENT cursor=4 type=message role=assistant sessionKey=agent:dev:voice-agent-03c3fc738164 text=''\n[1786186182.963] CASE_DONE F7b\n"
+  },
+  "F3": {
+   "form": "派发被前置校验拒绝:--model 指定了不在 agent 白名单里的模型",
+   "dispatch_cmd": "openclaw agent ... --json --model deepseek/definitely-not-a-real-model-20260808",
+   "session_key": "agent:dev:voice-agent-51aaafe533c7",
+   "message": "请回复一行:F3-PING\n",
+   "agent_cli_stdout_summary": {
+    "_read_error": "JSONDecodeError('Expecting value: line 1 column 1 (char 0)')",
+    "result.payloads": null,
+    "result.meta.aborted": null,
+    "result.meta.durationMs": null,
+    "result.meta.stopReason": null,
+    "result.meta.livenessState": null,
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": null
+   },
+   "agent_cli_stderr": "GatewayClientRequestError: Error: Model override \"deepseek/definitely-not-a-real-model-20260808\" is not allowed for agent \"dev\".\n",
+   "final_tasks_show": {
+    "taskId": "31fecc34-08f9-4035-8381-0fedc41d4633",
+    "runtime": "cli",
+    "sourceId": "eb61cb21-6cd8-4b5f-afe0-8e2542b2491c",
+    "requesterSessionKey": "agent:dev:voice-agent-51aaafe533c7",
+    "ownerKey": "agent:dev:voice-agent-51aaafe533c7",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-51aaafe533c7",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "eb61cb21-6cd8-4b5f-afe0-8e2542b2491c",
+    "task": "请回复一行:F3-PING",
+    "status": "failed",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786185106932,
+    "startedAt": 1786185106932,
+    "endedAt": 1786185107051,
+    "lastEventAt": 1786185106932,
+    "cleanupAfter": 1786789907051,
+    "error": "Error: Model override \"deepseek/definitely-not-a-real-model-20260808\" is not allowed for agent \"dev\".",
+    "terminalSummary": "Error: Model override \"deepseek/definitely-not-a-real-model-20260808\" is not allowed for agent \"dev\"."
+   },
+   "store_transitions": [],
+   "events_count": 0,
+   "events_raw": [],
+   "timeline": "[1786185101.904] CASE=F3 SESSION_KEY=agent:dev:voice-agent-51aaafe533c7 EXTRA_ARGS=--model deepseek/definitely-not-a-real-model-20260808\n[1786185104.427] COLLECTOR_READY pid=341644 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786185104.434] DISPATCHED pid=341711 t0=1786185104.430744990\n[1786185106.939] probe#1 rc=1 NO_JSON\n[1786185110.322] probe#2 rc=0 status=failed deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='Error: Model override \"deepseek/definitely-not-a-real-model-20260808\" is not allowed for agent \"dev\".' error='Error: Model override \"deepseek/definitely-not-a-real-model-20260808\" is not allowed for agent \"dev\".'\n[1786185110.324] TERMINAL_REACHED at probe#2\n[1786185110.328] AGENT_CLI exit=1 stdout_bytes=0 stderr_bytes=129\n[1786185110.329] WAITING_COLLECTOR\n[1786185174.251] COLLECTOR_EXIT\n[1786185176.500] FINAL rc=0 out=0 err=957\n[1786185176.503] EVENTS_SEEN=0\n0\n[1786185176.506] CASE_DONE F3\n"
+  },
+  "F6": {
+   "form": "运行中失败:1MB 消息触发 context_overflow precheck",
+   "dispatch_cmd": "openclaw agent ... --json  (message.txt = 1020109 bytes)",
+   "session_key": "agent:dev:voice-agent-612f39cea561",
+   "message": "请统计下面这段材料里出现了多少次「水」字,只回复数字。材料开始:\n水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化",
+   "agent_cli_stdout_summary": {
+    "runId": "f0552d51-c940-4ca0-8726-72cbd7ce2a65",
+    "status": "ok",
+    "summary": "completed",
+    "result.payloads": [
+     {
+      "text": "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model.",
+      "mediaUrl": null
+     }
+    ],
+    "result.meta.aborted": null,
+    "result.meta.durationMs": 1669,
+    "result.meta.stopReason": null,
+    "result.meta.livenessState": "blocked",
+    "result.meta.error": {
+     "kind": "context_overflow",
+     "message": "Context overflow: prompt too large for the model (precheck)."
+    },
+    "result.meta.finalAssistantVisibleText": "Context overflow: prompt too large for the model. Try /reset (or /new) to start a fresh session, or use a larger-context model."
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "2877a1bb-d009-4c3e-b454-39d1e4404fe2",
+    "runtime": "cli",
+    "sourceId": "f0552d51-c940-4ca0-8726-72cbd7ce2a65",
+    "requesterSessionKey": "agent:dev:voice-agent-612f39cea561",
+    "ownerKey": "agent:dev:voice-agent-612f39cea561",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-612f39cea561",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "f0552d51-c940-4ca0-8726-72cbd7ce2a65",
+    "task": "请统计下面这段材料里出现了多少次「水」字,只回复数字。材料开始:\n水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基础的物理现象。水的三态变化是一个基...[TRUNCATED by sampler]",
+    "status": "failed",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786185795303,
+    "startedAt": 1786185795437,
+    "endedAt": 1786185797144,
+    "lastEventAt": 1786185797144,
+    "cleanupAfter": 1786790597144,
+    "error": "Agent run failed"
+   },
+   "store_transitions": [
+    {
+     "_ts": 1786185792.847,
+     "status": null,
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": null
+    },
+    {
+     "_ts": 1786185795.347,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185795303
+    },
+    {
+     "_ts": 1786185797.411,
+     "status": "failed",
+     "error": "Agent run failed",
+     "terminal_summary": null,
+     "ended_at": 1786185797144,
+     "last_event_at": 1786185797144
+    }
+   ],
+   "events_count": 0,
+   "events_raw": [],
+   "timeline": "[1786185790.265] CASE=F6 SESSION_KEY=agent:dev:voice-agent-612f39cea561 EXTRA_ARGS=\n[1786185792.788] COLLECTOR_READY pid=345911 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786185792.799] DISPATCHED pid=345962 t0=1786185792.794453033\n[1786185792.807] STOREPOLL_STARTED secs=100\n[1786185795.311] probe#1 rc=1 NO_JSON\n[1786185798.844] probe#2 rc=0 status=failed deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error='Agent run failed'\n[1786185798.846] TERMINAL_REACHED at probe#2\n[1786185798.852] AGENT_CLI exit=0 stdout_bytes=18899 stderr_bytes=0\n[1786185798.856] WAITING_COLLECTOR\n[1786185902.577] COLLECTOR_EXIT\n[1786185905.036] FINAL rc=0 out=0 err=1020826\n[1786185905.039] EVENTS_SEEN=0\n0\n[1786185905.041] CASE_DONE F6\n"
+  },
+  "F4": {
+   "form": "显式取消(第一次):running 期间 openclaw tasks cancel <K>",
+   "dispatch_cmd": "openclaw agent ... --json ;  t+14s: openclaw tasks cancel $K",
+   "session_key": "agent:dev:voice-agent-5fede2425215",
+   "message": "请用 shell 执行命令:sleep 180\n必须真正等待这条命令执行完毕(大约需要三分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4-DONE\n",
+   "agent_cli_stdout_summary": {
+    "runId": "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9",
+    "status": "ok",
+    "summary": "completed",
+    "result.payloads": [
+     {
+      "text": "F4-DONE",
+      "mediaUrl": null
+     }
+    ],
+    "result.meta.aborted": false,
+    "result.meta.durationMs": 184093,
+    "result.meta.stopReason": "stop",
+    "result.meta.livenessState": "working",
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": "F4-DONE"
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "7133d3e0-fbc6-4f63-9178-db836ff8b051",
+    "runtime": "cli",
+    "sourceId": "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9",
+    "requesterSessionKey": "agent:dev:voice-agent-5fede2425215",
+    "ownerKey": "agent:dev:voice-agent-5fede2425215",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-5fede2425215",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9",
+    "task": "请用 shell 执行命令:sleep 180\n必须真正等待这条命令执行完毕(大约需要三分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4-DONE",
+    "status": "succeeded",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786185218590,
+    "startedAt": 1786185218715,
+    "endedAt": 1786185402855,
+    "lastEventAt": 1786185402838,
+    "cleanupAfter": 1786790202838,
+    "terminalSummary": "completed"
+   },
+   "store_transitions": [],
+   "events_count": 6,
+   "events_raw": [
+    {
+     "_recv_ts": 1786185218.9028249,
+     "event": {
+      "cursor": 1,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-5fede2425215",
+      "messageId": "2fe17c67",
+      "messageSeq": 1,
+      "role": "user",
+      "text": "请用 shell 执行命令:sleep 180\n必须真正等待这条命令执行完毕(大约需要三分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4-DONE",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-5fede2425215",
+       "agentId": "dev",
+       "message": {
+        "role": "user",
+        "content": "请用 shell 执行命令:sleep 180\n必须真正等待这条命令执行完毕(大约需要三分钟),不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4-DONE",
+        "timestamp": 1786185218715,
+        "__openclaw": {
+         "id": "2fe17c67",
+         "seq": 1
+        }
+       },
+       "messageId": "2fe17c67",
+       "messageSeq": 1,
+       "session": {
+        "key": "agent:dev:voice-agent-5fede2425215",
+        "kind": "direct",
+        "updatedAt": 1786185218697,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokensFresh": false,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+        ]
+       },
+       "updatedAt": 1786185218697,
+       "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "totalTokensFresh": false,
+       "goal": null,
+       "contextTokens": 128000,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+       ]
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185220.9396636,
+     "event": {
+      "cursor": 2,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-5fede2425215",
+      "messageId": "6b42013e",
+      "messageSeq": 2,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-5fede2425215",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_xgD8J308diUY9pNRpBj76090",
+          "name": "exec",
+          "arguments": {
+           "command": "sleep 180",
+           "timeout": 200
+          },
+          "partialArgs": "{\"command\": \"sleep 180\", \"timeout\": 200}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 7594,
+         "output": 61,
+         "totalTokens": 15335,
+         "cacheRead": 7680,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185218910,
+        "responseId": "649ade5f-6791-44e3-a331-6defa448d856",
+        "__openclaw": {
+         "id": "6b42013e",
+         "seq": 2
+        }
+       },
+       "messageId": "6b42013e",
+       "messageSeq": 2,
+       "session": {
+        "key": "agent:dev:voice-agent-5fede2425215",
+        "kind": "direct",
+        "updatedAt": 1786185218896,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15274,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185218885,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+        ]
+       },
+       "updatedAt": 1786185218896,
+       "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15274,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+       ],
+       "startedAt": 1786185218885
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185233.0779042,
+     "event": {
+      "cursor": 3,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-5fede2425215",
+      "messageId": "9a2b1fd5",
+      "messageSeq": 4,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-5fede2425215",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_kWxWYI8Xb40J2aim7yxb4792",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "good-lobster",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"good-lobster\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 157,
+         "output": 80,
+         "totalTokens": 15469,
+         "cacheRead": 15232,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185231203,
+        "responseId": "b53ce05a-1e09-4409-8de8-f54d3d6d7b57",
+        "__openclaw": {
+         "id": "9a2b1fd5",
+         "seq": 4
+        }
+       },
+       "messageId": "9a2b1fd5",
+       "messageSeq": 4,
+       "session": {
+        "key": "agent:dev:voice-agent-5fede2425215",
+        "kind": "direct",
+        "updatedAt": 1786185218896,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15389,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185218885,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+        ]
+       },
+       "updatedAt": 1786185218896,
+       "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15389,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+       ],
+       "startedAt": 1786185218885
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185264.9623523,
+     "event": {
+      "cursor": 4,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-5fede2425215",
+      "messageId": "e1b4a0d4",
+      "messageSeq": 6,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-5fede2425215",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_7d2ZAkBpo0BBLL3NGO3I1881",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "good-lobster",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"good-lobster\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 128,
+         "output": 80,
+         "totalTokens": 15568,
+         "cacheRead": 15360,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185263105,
+        "responseId": "b65e7b9d-7a60-4173-abbe-81f16c9f7d10",
+        "__openclaw": {
+         "id": "e1b4a0d4",
+         "seq": 6
+        }
+       },
+       "messageId": "e1b4a0d4",
+       "messageSeq": 6,
+       "session": {
+        "key": "agent:dev:voice-agent-5fede2425215",
+        "kind": "direct",
+        "updatedAt": 1786185218896,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15488,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185218885,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+        ]
+       },
+       "updatedAt": 1786185218896,
+       "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15488,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+       ],
+       "startedAt": 1786185218885
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185297.374453,
+     "event": {
+      "cursor": 5,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-5fede2425215",
+      "messageId": "b6520f9b",
+      "messageSeq": 8,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-5fede2425215",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_eybfW6g41zmsKFpX7gRa0344",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "good-lobster",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"good-lobster\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 227,
+         "output": 80,
+         "totalTokens": 15667,
+         "cacheRead": 15360,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185295009,
+        "responseId": "723f1109-f93f-4767-a236-b305d63a8966",
+        "__openclaw": {
+         "id": "b6520f9b",
+         "seq": 8
+        }
+       },
+       "messageId": "b6520f9b",
+       "messageSeq": 8,
+       "session": {
+        "key": "agent:dev:voice-agent-5fede2425215",
+        "kind": "direct",
+        "updatedAt": 1786185218896,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15587,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185218885,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+        ]
+       },
+       "updatedAt": 1786185218896,
+       "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15587,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+       ],
+       "startedAt": 1786185218885
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185328.9829838,
+     "event": {
+      "cursor": 6,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-5fede2425215",
+      "messageId": "ef47d131",
+      "messageSeq": 10,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-5fede2425215",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_YZbEpU5PflCRT98TPq218696",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "good-lobster",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"good-lobster\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 70,
+         "output": 80,
+         "totalTokens": 15766,
+         "cacheRead": 15616,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185327422,
+        "responseId": "07b86cfe-6388-48bd-a9bc-290c373c90c0",
+        "__openclaw": {
+         "id": "ef47d131",
+         "seq": 10
+        }
+       },
+       "messageId": "ef47d131",
+       "messageSeq": 10,
+       "session": {
+        "key": "agent:dev:voice-agent-5fede2425215",
+        "kind": "direct",
+        "updatedAt": 1786185218896,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15686,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185218885,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+        ]
+       },
+       "updatedAt": 1786185218896,
+       "sessionId": "417ec5d6-61fe-4a59-a23e-26bc7e43becd",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15686,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9"
+       ],
+       "startedAt": 1786185218885
+      }
+     }
+    }
+   ],
+   "timeline": "[1786185213.595] CASE=F4 SESSION_KEY=agent:dev:voice-agent-5fede2425215 EXTRA_ARGS=\n[1786185216.121] COLLECTOR_READY pid=342061 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786185216.132] DISPATCHED pid=342104 t0=1786185216.126967784\n[1786185218.601] probe#1 rc=1 NO_JSON\n[1786185221.928] probe#2 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185225.208] probe#3 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185228.486] probe#4 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185230.139] HOOK_START openclaw tasks cancel \"$K\"\n[1786185231.935] probe#5 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185232.543] HOOK_EXIT rc=0 out=Cancelled 7133d3e0-fbc6-4f63-9178-db836ff8b051 (cli) run 53a3a3a7-4fe1-4f4a-9a20-e7bc39e1f7b9.  err=\n[1786185235.203] probe#6 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185238.514] probe#7 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185241.831] probe#8 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185245.113] probe#9 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185248.397] probe#10 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185251.665] probe#11 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185254.931] probe#12 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185258.211] probe#13 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185261.470] probe#14 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185264.776] probe#15 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185268.081] probe#16 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185271.369] probe#17 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185274.648] probe#18 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185277.933] probe#19 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185281.206] probe#20 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185284.455] probe#21 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185287.753] probe#22 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185290.980] probe#23 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185294.287] probe#24 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185297.571] probe#25 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185300.884] probe#26 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185304.180] probe#27 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185307.469] probe#28 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185310.699] probe#29 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185314.023] probe#30 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185317.300] probe#31 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185320.592] probe#32 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185323.859] probe#33 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185327.145] probe#34 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185330.458] probe#35 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185402.896] AGENT_CLI exit=0 stdout_bytes=20449 stderr_bytes=0\n[1786185402.898] WAITING_COLLECTOR\n[1786185402.899] COLLECTOR_EXIT\n[1786185405.141] FINAL rc=0 out=0 err=907\n[1786185405.144] EVENTS_SEEN=6\n[1786185218.9] EVENT cursor=1 type=message role=user sessionKey=agent:dev:voice-agent-5fede2425215 text='请用 shell 执行命令:sleep 180\\n必须真正等待这条命令执行完毕(大约需要三分钟),不要用后台方式跳过等待。\\n命令正常返回之后,回复一行:F4-DONE'\n[1786185220.9] EVENT cursor=2 type=message role=assistant sessionKey=agent:dev:voice-agent-5fede2425215 text=None\n[1786185233.1] EVENT cursor=3 type=message role=assistant sessionKey=agent:dev:voice-agent-5fede2425215 text=None\n[1786185265.0] EVENT cursor=4 type=message role=assistant sessionKey=agent:dev:voice-agent-5fede2425215 text=None\n[1786185297.4] EVENT cursor=5 type=message role=assistant sessionKey=agent:dev:voice-agent-5fede2425215 text=None\n[1786185329.0] EVENT cursor=6 type=message role=assistant sessionKey=agent:dev:voice-agent-5fede2425215 text=None\n[1786185405.146] CASE_DONE F4\n"
+  },
+  "F4b": {
+   "form": "显式取消(复现 + 高分辨率观测):running 期间 openclaw tasks cancel <K>",
+   "dispatch_cmd": "openclaw agent ... --json ;  t+15s: openclaw tasks cancel $K",
+   "session_key": "agent:dev:voice-agent-2bb4b77b8c2c",
+   "message": "请用 shell 执行命令:sleep 45\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4B-DONE\n",
+   "agent_cli_stdout_summary": {
+    "runId": "395c36cb-8fbe-431e-b6f4-3a8b2db0b500",
+    "status": "ok",
+    "summary": "completed",
+    "result.payloads": [
+     {
+      "text": "F4B-DONE",
+      "mediaUrl": null
+     }
+    ],
+    "result.meta.aborted": false,
+    "result.meta.durationMs": 49259,
+    "result.meta.stopReason": "stop",
+    "result.meta.livenessState": "working",
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": "F4B-DONE"
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "58613462-7593-4252-98d7-571a3bd314f8",
+    "runtime": "cli",
+    "sourceId": "395c36cb-8fbe-431e-b6f4-3a8b2db0b500",
+    "requesterSessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+    "ownerKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "395c36cb-8fbe-431e-b6f4-3a8b2db0b500",
+    "task": "请用 shell 执行命令:sleep 45\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4B-DONE",
+    "status": "succeeded",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786185521469,
+    "startedAt": 1786185521610,
+    "endedAt": 1786185570911,
+    "lastEventAt": 1786185570899,
+    "cleanupAfter": 1786790370899,
+    "terminalSummary": "completed"
+   },
+   "store_transitions": [
+    {
+     "_ts": 1786185519.008,
+     "status": null,
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": null
+    },
+    {
+     "_ts": 1786185521.527,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185521469
+    },
+    {
+     "_ts": 1786185521.844,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185521773
+    },
+    {
+     "_ts": 1786185524.066,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185523907
+    },
+    {
+     "_ts": 1786185534.294,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185534169
+    },
+    {
+     "_ts": 1786185535.861,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185535696
+    },
+    {
+     "_ts": 1786185536.483,
+     "status": "cancelled",
+     "error": "Cancelled by operator.",
+     "terminal_summary": null,
+     "ended_at": 1786185536303,
+     "last_event_at": 1786185536303
+    },
+    {
+     "_ts": 1786185565.912,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185565717
+    },
+    {
+     "_ts": 1786185567.845,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185567530
+    },
+    {
+     "_ts": 1786185569.444,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185569297
+    },
+    {
+     "_ts": 1786185570.718,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185570641
+    },
+    {
+     "_ts": 1786185571.034,
+     "status": "succeeded",
+     "error": null,
+     "terminal_summary": "completed",
+     "ended_at": 1786185570911,
+     "last_event_at": 1786185570899
+    }
+   ],
+   "events_count": 5,
+   "events_raw": [
+    {
+     "_recv_ts": 1786185521.7915945,
+     "event": {
+      "cursor": 1,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+      "messageId": "baf1cbd5",
+      "messageSeq": 1,
+      "role": "user",
+      "text": "请用 shell 执行命令:sleep 45\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4B-DONE",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+       "agentId": "dev",
+       "message": {
+        "role": "user",
+        "content": "请用 shell 执行命令:sleep 45\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F4B-DONE",
+        "timestamp": 1786185521610,
+        "__openclaw": {
+         "id": "baf1cbd5",
+         "seq": 1
+        }
+       },
+       "messageId": "baf1cbd5",
+       "messageSeq": 1,
+       "session": {
+        "key": "agent:dev:voice-agent-2bb4b77b8c2c",
+        "kind": "direct",
+        "updatedAt": 1786185521596,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokensFresh": false,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+        ]
+       },
+       "updatedAt": 1786185521596,
+       "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "totalTokensFresh": false,
+       "goal": null,
+       "contextTokens": 128000,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+       ]
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185523.9042826,
+     "event": {
+      "cursor": 2,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+      "messageId": "43e1903d",
+      "messageSeq": 2,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_XrRHcUmKiVTdm08gntFQ4696",
+          "name": "exec",
+          "arguments": {
+           "command": "sleep 45",
+           "timeout": 60
+          },
+          "partialArgs": "{\"command\": \"sleep 45\", \"timeout\": 60}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 7595,
+         "output": 61,
+         "totalTokens": 15336,
+         "cacheRead": 7680,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185521800,
+        "responseId": "6a22ccc2-9f4c-47e5-bdb7-165979288da2",
+        "__openclaw": {
+         "id": "43e1903d",
+         "seq": 2
+        }
+       },
+       "messageId": "43e1903d",
+       "messageSeq": 2,
+       "session": {
+        "key": "agent:dev:voice-agent-2bb4b77b8c2c",
+        "kind": "direct",
+        "updatedAt": 1786185521787,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15275,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185521773,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+        ]
+       },
+       "updatedAt": 1786185521787,
+       "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15275,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+       ],
+       "startedAt": 1786185521773
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185535.6952896,
+     "event": {
+      "cursor": 3,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+      "messageId": "69a72da2",
+      "messageSeq": 4,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_rnxHBvhym2FThLztb7xL6601",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "quiet-summit",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"quiet-summit\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 157,
+         "output": 79,
+         "totalTokens": 15468,
+         "cacheRead": 15232,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185534181,
+        "responseId": "f0ca35da-43da-4f40-bc32-842b21d14a20",
+        "__openclaw": {
+         "id": "69a72da2",
+         "seq": 4
+        }
+       },
+       "messageId": "69a72da2",
+       "messageSeq": 4,
+       "session": {
+        "key": "agent:dev:voice-agent-2bb4b77b8c2c",
+        "kind": "direct",
+        "updatedAt": 1786185521787,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15389,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185521773,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+        ]
+       },
+       "updatedAt": 1786185521787,
+       "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15389,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+       ],
+       "startedAt": 1786185521773
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185567.5296361,
+     "event": {
+      "cursor": 4,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+      "messageId": "54b339d8",
+      "messageSeq": 6,
+      "role": "assistant",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "toolCall",
+          "id": "call_00_KbgS7g8cyri1X5ldrR8H4806",
+          "name": "process",
+          "arguments": {
+           "action": "poll",
+           "sessionId": "quiet-summit",
+           "timeout": 30000
+          },
+          "partialArgs": "{\"action\": \"poll\", \"sessionId\": \"quiet-summit\", \"timeout\": 30000}"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 127,
+         "output": 79,
+         "totalTokens": 15566,
+         "cacheRead": 15360,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "toolUse",
+        "timestamp": 1786185565750,
+        "responseId": "17b71041-b168-4d19-b81a-46a5b5d7192b",
+        "__openclaw": {
+         "id": "54b339d8",
+         "seq": 6
+        }
+       },
+       "messageId": "54b339d8",
+       "messageSeq": 6,
+       "session": {
+        "key": "agent:dev:voice-agent-2bb4b77b8c2c",
+        "kind": "direct",
+        "updatedAt": 1786185521787,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15487,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185521773,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+        ]
+       },
+       "updatedAt": 1786185521787,
+       "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15487,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+       ],
+       "startedAt": 1786185521773
+      }
+     }
+    },
+    {
+     "_recv_ts": 1786185570.8213177,
+     "event": {
+      "cursor": 5,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+      "messageId": "fbd8f1a0",
+      "messageSeq": 8,
+      "role": "assistant",
+      "text": "F4B-DONE",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-2bb4b77b8c2c",
+       "agentId": "dev",
+       "message": {
+        "role": "assistant",
+        "content": [
+         {
+          "type": "text",
+          "text": "F4B-DONE"
+         }
+        ],
+        "api": "openai-completions",
+        "provider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "usage": {
+         "input": 100,
+         "output": 5,
+         "totalTokens": 15593,
+         "cacheRead": 15488,
+         "cacheWrite": 0,
+         "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+         }
+        },
+        "stopReason": "stop",
+        "timestamp": 1786185569322,
+        "responseId": "d9af7a3f-eba3-46e9-b1ad-b27d5672dd5e",
+        "__openclaw": {
+         "id": "fbd8f1a0",
+         "seq": 8
+        }
+       },
+       "messageId": "fbd8f1a0",
+       "messageSeq": 8,
+       "session": {
+        "key": "agent:dev:voice-agent-2bb4b77b8c2c",
+        "kind": "direct",
+        "updatedAt": 1786185521787,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+        "abortedLastRun": false,
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokens": 15588,
+        "totalTokensFresh": true,
+        "estimatedCostUsd": 0,
+        "status": "running",
+        "startedAt": 1786185521773,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+        ]
+       },
+       "updatedAt": 1786185521787,
+       "sessionId": "468f268d-8c74-402c-a924-04f7e0f5f8fa",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "abortedLastRun": false,
+       "totalTokens": 15588,
+       "totalTokensFresh": true,
+       "goal": null,
+       "contextTokens": 128000,
+       "estimatedCostUsd": 0,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "status": "running",
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "395c36cb-8fbe-431e-b6f4-3a8b2db0b500"
+       ],
+       "startedAt": 1786185521773
+      }
+     }
+    }
+   ],
+   "timeline": "[1786185516.435] CASE=F4b SESSION_KEY=agent:dev:voice-agent-2bb4b77b8c2c EXTRA_ARGS=\n[1786185518.961] COLLECTOR_READY pid=344219 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786185518.968] DISPATCHED pid=344263 t0=1786185518.963949764\n[1786185518.974] STOREPOLL_STARTED secs=110\n[1786185521.498] probe#1 rc=1 NO_JSON\n[1786185524.832] probe#2 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185528.242] probe#3 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185531.581] probe#4 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185533.973] HOOK_START openclaw tasks cancel \"$K\"\n[1786185535.046] probe#5 rc=0 status=running deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error=''\n[1786185536.384] HOOK_EXIT rc=0 out=Cancelled 58613462-7593-4252-98d7-571a3bd314f8 (cli) run 395c36cb-8fbe-431e-b6f4-3a8b2db0b500.  err=\n[1786185538.414] probe#6 rc=0 status=cancelled deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='' error='Cancelled by operator.'\n[1786185538.416] TERMINAL_REACHED at probe#6\n[1786185570.961] AGENT_CLI exit=0 stdout_bytes=20427 stderr_bytes=0\n[1786185570.962] WAITING_COLLECTOR\n[1786185648.768] COLLECTOR_EXIT\n[1786185651.042] FINAL rc=0 out=0 err=884\n[1786185651.045] EVENTS_SEEN=5\n[1786185521.8] EVENT cursor=1 type=message role=user sessionKey=agent:dev:voice-agent-2bb4b77b8c2c text='请用 shell 执行命令:sleep 45\\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\\n命令正常返回之后,回复一行:F4B-DONE'\n[1786185523.9] EVENT cursor=2 type=message role=assistant sessionKey=agent:dev:voice-agent-2bb4b77b8c2c text=None\n[1786185535.7] EVENT cursor=3 type=message role=assistant sessionKey=agent:dev:voice-agent-2bb4b77b8c2c text=None\n[1786185567.5] EVENT cursor=4 type=message role=assistant sessionKey=agent:dev:voice-agent-2bb4b77b8c2c text=None\n[1786185570.8] EVENT cursor=5 type=message role=assistant sessionKey=agent:dev:voice-agent-2bb4b77b8c2c text='F4B-DONE'\n[1786185651.048] CASE_DONE F4b\n"
+  },
+  "F7": {
+   "form": "静默成功:agent 回了 NO_REPLY 静默哨兵,活没干、也没有任何 assistant 消息",
+   "dispatch_cmd": "openclaw agent ... --json --timeout 25",
+   "session_key": "agent:dev:voice-agent-b7373139a5b8",
+   "message": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE\n",
+   "agent_cli_stdout_summary": {
+    "runId": "fa17d07a-f528-4b89-a9e6-28bb3ad82a8a",
+    "status": "ok",
+    "summary": "completed",
+    "result.payloads": [],
+    "result.meta.aborted": false,
+    "result.meta.durationMs": 1729,
+    "result.meta.stopReason": "stop",
+    "result.meta.livenessState": "working",
+    "result.meta.error": null,
+    "result.meta.finalAssistantVisibleText": "NO_REPLY"
+   },
+   "agent_cli_stderr": "",
+   "final_tasks_show": {
+    "taskId": "6ac1257f-f64c-404d-825f-c67ec52d53d0",
+    "runtime": "cli",
+    "sourceId": "fa17d07a-f528-4b89-a9e6-28bb3ad82a8a",
+    "requesterSessionKey": "agent:dev:voice-agent-b7373139a5b8",
+    "ownerKey": "agent:dev:voice-agent-b7373139a5b8",
+    "scopeKind": "session",
+    "childSessionKey": "agent:dev:voice-agent-b7373139a5b8",
+    "agentId": "dev",
+    "requesterAgentId": "dev",
+    "runId": "fa17d07a-f528-4b89-a9e6-28bb3ad82a8a",
+    "task": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE",
+    "status": "succeeded",
+    "deliveryStatus": "not_applicable",
+    "notifyPolicy": "silent",
+    "createdAt": 1786185949573,
+    "startedAt": 1786185949697,
+    "endedAt": 1786185951461,
+    "lastEventAt": 1786185951450,
+    "cleanupAfter": 1786790751450,
+    "terminalSummary": "completed"
+   },
+   "store_transitions": [
+    {
+     "_ts": 1786185947.087,
+     "status": null,
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": null
+    },
+    {
+     "_ts": 1786185949.714,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185949573
+    },
+    {
+     "_ts": 1786185950.038,
+     "status": "running",
+     "error": null,
+     "terminal_summary": null,
+     "ended_at": null,
+     "last_event_at": 1786185949884
+    },
+    {
+     "_ts": 1786185951.619,
+     "status": "succeeded",
+     "error": null,
+     "terminal_summary": "completed",
+     "ended_at": 1786185951461,
+     "last_event_at": 1786185951450
+    }
+   ],
+   "events_count": 1,
+   "events_raw": [
+    {
+     "_recv_ts": 1786185949.89949,
+     "event": {
+      "cursor": 1,
+      "type": "message",
+      "sessionKey": "agent:dev:voice-agent-b7373139a5b8",
+      "messageId": "004e498e",
+      "messageSeq": 1,
+      "role": "user",
+      "text": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE",
+      "raw": {
+       "sessionKey": "agent:dev:voice-agent-b7373139a5b8",
+       "agentId": "dev",
+       "message": {
+        "role": "user",
+        "content": "请用 shell 执行命令:sleep 150\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\n命令正常返回之后,回复一行:F7-DONE",
+        "timestamp": 1786185949697,
+        "__openclaw": {
+         "id": "004e498e",
+         "seq": 1
+        }
+       },
+       "messageId": "004e498e",
+       "messageSeq": 1,
+       "session": {
+        "key": "agent:dev:voice-agent-b7373139a5b8",
+        "kind": "direct",
+        "updatedAt": 1786185949677,
+        "archived": false,
+        "pinned": false,
+        "unread": false,
+        "sessionId": "c4158a21-ec6f-4c6f-83b9-dc17f27c65eb",
+        "thinkingLevel": null,
+        "effectiveFastMode": false,
+        "effectiveFastModeSource": "default",
+        "fastAutoOnSeconds": 60,
+        "totalTokensFresh": false,
+        "effectiveResponseUsage": "off",
+        "modelProvider": "deepseek",
+        "model": "deepseek-v4-flash",
+        "agentRuntime": {
+         "id": "auto",
+         "source": "implicit"
+        },
+        "contextTokens": 128000,
+        "hasActiveRun": true,
+        "activeRunIds": [
+         "fa17d07a-f528-4b89-a9e6-28bb3ad82a8a"
+        ]
+       },
+       "updatedAt": 1786185949677,
+       "sessionId": "c4158a21-ec6f-4c6f-83b9-dc17f27c65eb",
+       "kind": "direct",
+       "archived": false,
+       "archivedAt": null,
+       "pinned": false,
+       "pinnedAt": null,
+       "unread": false,
+       "label": null,
+       "category": null,
+       "displayName": null,
+       "thinkingLevel": null,
+       "totalTokensFresh": false,
+       "goal": null,
+       "contextTokens": 128000,
+       "effectiveResponseUsage": "off",
+       "modelProvider": "deepseek",
+       "model": "deepseek-v4-flash",
+       "agentRuntime": {
+        "id": "auto",
+        "source": "implicit"
+       },
+       "hasActiveRun": true,
+       "activeRunIds": [
+        "fa17d07a-f528-4b89-a9e6-28bb3ad82a8a"
+       ]
+      }
+     }
+    }
+   ],
+   "timeline": "[1786185944.517] CASE=F7 SESSION_KEY=agent:dev:voice-agent-b7373139a5b8 EXTRA_ARGS=--timeout 25\n[1786185947.039] COLLECTOR_READY pid=346369 :: BASELINE_CURSOR=0 baseline_events=0 COLLECTOR_READY \n[1786185947.049] DISPATCHED pid=346413 t0=1786185947.043710009\n[1786185947.055] STOREPOLL_STARTED secs=90\n[1786185949.592] probe#1 rc=1 NO_JSON\n[1786185952.929] probe#2 rc=0 status=succeeded deliveryStatus=not_applicable notifyPolicy=silent terminalSummary='completed' error=''\n[1786185952.930] TERMINAL_REACHED at probe#2\n[1786185952.934] AGENT_CLI exit=0 stdout_bytes=20208 stderr_bytes=0\n[1786185952.936] WAITING_COLLECTOR\n[1786185965.055] HOOK_START openclaw tasks audit --json\n[1786185967.271] HOOK_EXIT rc=0 out={   \"count\": 2,   \"filteredCount\": 2,   \"displayed\": 2,   \"filters\": {     \"severity\": null,     \"code\": null,     \"limit\": null   },   \"summary\": {     \"total\": 0,     \"warnings\": 0,     \"errors\": 0,     \"byCode\": {       \"stale_queued\": 0,       \"stale_running\": 0,       \"lost\": 0,       \"delivery err=\n[1786186046.891] COLLECTOR_EXIT\n[1786186049.190] FINAL rc=0 out=0 err=884\n[1786186049.193] EVENTS_SEEN=1\n[1786185949.9] EVENT cursor=1 type=message role=user sessionKey=agent:dev:voice-agent-b7373139a5b8 text='请用 shell 执行命令:sleep 150\\n必须真正等待这条命令执行完毕,不要用后台方式跳过等待。\\n命令正常返回之后,回复一行:F7-DONE'\n[1786186049.195] CASE_DONE F7\n"
+  }
+ }
+}

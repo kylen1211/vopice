@@ -232,6 +232,8 @@ client/*.tsbuildinfo
 
 # Local tools & eval run outputs
 .codegraph/
+graphify-out/
+.obsidian/
 server/eval-runs/
 .ua/
 check.py
