@@ -2,12 +2,12 @@
 change_id: scenario-assembly
 grade: L3
 contract_tier: cases
-stage: s4
+stage: s4m
 stage_status: running
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
 loop_counts:
-  implement: 0
+  implement: 1
   integrate: 0
   review: 0
 rollback_count: 0
@@ -88,12 +88,12 @@ uncovered:
   sa: SA-18
   fr: FR-4/FR-9
   reason: 契约外
-  status: open
+  status: resolved
 - id: U-002
   sa: SA-19
   fr: FR-10
   reason: 契约外
-  status: open
+  status: resolved
 - id: U-003
   sa: SA-20
   fr: FR-3/FR-8
@@ -103,7 +103,7 @@ uncovered:
   sa: SA-21
   fr: FR-7
   reason: 契约外
-  status: open
+  status: resolved
 parked: []
 budget:
   limit_tokens: null
@@ -209,3 +209,24 @@ budget:
 2026-08-10T17:47:09 set stage_status=done
 2026-08-10T17:47:09 set stage=s4
 2026-08-10T17:47:09 set stage_status=running
+2026-08-10T17:48:30 stage=s4 dispatch backend-dev T-1
+2026-08-10T17:59:18 T-1 DONE commits e4931a3(feat: scenario template registry + prompt segmentation with overridable language section);全量pytest 100 passed(基线70+新增30无新增失败);RISKS三条均判无需上浮(①scenarios.py/config.py各自维护独立白名单=design.md线40/188既定分工非冲突;②私有符号读取为任务卡显式授权口径;③陪练文案取final.md已按用户2026-08-10确认执行,非二次代批)
+2026-08-10T17:59:24 stage=s4 dispatch backend-dev T-2
+2026-08-10T18:14:02 T-2 DONE commits ed69da8(feat: config.py模板合并/生效值计算/DUAL_BRAIN_ENABLED);test_config+test_scenarios 72 passed;server全量125 passed 4 failed(均test_bot.py缺Config新字段,任务卡明文授权交接态待T-3修复);uv.lock仅1行元数据变化零新包(E-8兑现);RISKS(.env.example ASSEMBLYAI_API_KEY注释态风格判断)判无需上浮,与既有DEEPGRAM/CARTESIA先例一致
+2026-08-10T18:14:02 stage=s4 dispatch backend-dev T-3
+2026-08-10T18:30:50 T-3 DONE commits 69b0e85(feat: 装配层——模板驱动装配+双脑开关两态+assemblyai STT builder);全量pytest 136 passed 0 fail;SA-01..17/23机检绿,SA-20(manual真机换模板)如实标未跑=已登记uncovered U-003,非本轮虚报;RISKS核实无需上浮
+2026-08-10T18:30:50 stage=s4 dispatch backend-dev T-4
+2026-08-10T19:00:10 set uncovered[0].status=resolved
+2026-08-10T19:00:11 set uncovered[1].status=resolved
+2026-08-10T19:00:11 set uncovered[3].status=resolved
+2026-08-10T19:00:28 T-4 DONE_WITH_CONCERNS commits 89a9190(test: T-4 regression + persona behavior baseline);SA-17全量136 passed;SA-18开启态复跑9/10(dual_brain_inject 6000ms时序阈值失败=已知既存债务D-012同类,与本变更无因果,R8故障场景slow-failed确认3次)U-001 resolved;SA-19两模板text对照+陪练英语audio真机跑通(AssemblyAI转写逐字一致)U-002 resolved;SA-21人设文案用户已确认U-004 resolved;SA-20真机换模板本机无凭证未跑维持U-003 open;RISKS遗留一项design R-14 TTS听感证据按项目'付费round-trip仅用户本人跑'惯例未代跑,待呈用户
+2026-08-10T19:00:28 set stage_status=waiting_human
+2026-08-10T19:00:28 set pending=s4收尾前疑点确认:①R-14 TTS朗读陪练英语素材的听感是否需用户现在实测(命令已备于baseline/persona-samples.md §⑤)抑或推迟到后续独立验证;②dual_brain_inject.yaml 6000ms时序阈值flaky已确认与本变更无关且系既存债务D-012同类,是否原样放行进s4m
+2026-08-10T19:03:44 set pending=用户拍板:①R-14 TTS听感验证——用户自跑,需要时我方通知配合;②SA-18 dual_brain_inject.yaml 6000ms时序阈值——用户拍板放宽解决(非既存债务放行),已派修复
+2026-08-10T19:03:44 loop implement -> 1
+2026-08-10T19:12:17 SA-18时序flaky修复完成 commits 5f4c26d(fix: dual_brain_inject within_ms 6000→800,10次实测最快完成1312ms/800ms留39%边际);修改前5次复现5次失败,修改后连续3次PASS;T-4疑点全部消解
+2026-08-10T19:12:17 s4全卡DONE:T-1(e4931a3)T-2(ed69da8)T-3(69b0e85)T-4(89a9190+5f4c26d);全量pytest 136 passed 0 fail;uncovered U-001/U-002/U-004 resolved,U-003(SA-20真机换模板)维持open待s5/s6或用户真机验证;R-14 TTS听感验证推迟用户自跑
+2026-08-10T19:12:17 set stage_status=done
+2026-08-10T19:12:17 set stage=s4m
+2026-08-10T19:12:18 set stage_status=running
+2026-08-10T19:12:23 set pending=
