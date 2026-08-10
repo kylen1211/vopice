@@ -4,6 +4,7 @@
 > 上游:`prd.md`(冻结,12 条 FR)、`research/{codebase-survey,facts,external-research,tutor-persona-references}.md`。无 ui-spec(本次无 UI)。
 > 下游:backend-dev(照本文 + `contract/cases.md` 实现)、qa-tester(照 `contract/cases.md` 验收)、code-reviewer。
 > 接口契约唯一事实源 = `pipeline/scenario-assembly/contract/cases.md`;本文不复写其中任何定义。
+> **修订 R1(2026-08-10,用户追加拍板)**:`LANGUAGE_SECTION` 本轮由"模板不可覆盖"改为**模板可覆盖**(起因:`research/tutor-persona-draft.md` 开放问题① —— 语言段写死 `Always reply in Chinese` 与英语陪练模板字面矛盾)。落地即走本文原先预留的升级路径,见 ADR-4;护栏段与 `CONCISENESS_SECTION` 锁定不变。
 
 ---
 
@@ -19,6 +20,9 @@
 | E-4 | **同进程内二次 `load_dotenv(override=True)` 能读到 `.env` 的最新内容**(会话级重读成立) | 同一进程内写 `.env`→load→改写 `.env`→再 load | `session1 TPLVAL = session_A` / `session2 TPLVAL = session_B` |
 | E-5 | 语音安全护栏句(`"...spoken aloud, so avoid emojis, bullet points..."`)**只存在于 `OFFICIAL_SECTION` 内**,不在 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` | `grep -rn "spoken aloud" --include=*.py server` | 唯一命中 `server/prompts.py:13` |
 | E-6 | 测试基线 = 70 passed(FR-9 起点) | `cd server && NLTK_DISABLE_IMPORT_SECURITY=1 uv run pytest -q` | `70 passed, 37 warnings in 5.13s` |
+| E-7 | **本地实装 pipecat 1.6.0 已带 AssemblyAI STT,且"零配置 = 不发送任何语言参数"**:类 `pipecat.services.assemblyai.stt.AssemblyAISTTService`,构造 `AssemblyAISTTService(api_key=…, settings=Settings(...))`,默认 `model="universal-3-5-pro"`;基类字段 `language`(默认 `Language.EN`)**不进 wire**——`_build_ws_url()` 只发 `language_code`/`language_detection`,两者默认 `None` ⇒ 不发 ⇒ 无语言锁 | `uv run python -c "from pipecat.services.assemblyai.stt import AssemblyAISTTService as S; svc=S(api_key='CHANGE_ME_TEST'); print(svc._settings.model, svc._settings.language, svc._settings.language_code, svc._settings.language_detection); svc._sample_rate=16000; print(svc._build_ws_url())"` | `universal-3-5-pro en None None`;`wss://streaming.assemblyai.com/v3/ws?sample_rate=…&encoding=pcm_s16le&speech_model=universal-3-5-pro&formatted_finals=true&min_turn_silence=100&max_turn_silence=100&format_turns=true&continuous_partials=true`(**无任何 language 参数**) |
+| E-8 | env key = `ASSEMBLYAI_API_KEY`,包 = `pipecat-ai[assemblyai]`,且该 extra **不带任何第三方包**(与 soniox/cartesia 同,走已装的 `websockets` 17.0.1)⇒ **零新增 Python 依赖**,新增的是外部服务(密钥 + 计费 + 网络) | 读 `.venv/…/pipecat/cli/registry/service_metadata.py` 的 `SERVICE_CONFIGS` 条目;解析 `pipecat_ai-1.6.0.dist-info/METADATA` 的 `Requires-Dist … extra == "<name>"` | `value="assemblyai_stt", package="pipecat-ai[assemblyai]", class_name=["AssemblyAISTTService"], env_prefix="ASSEMBLYAI"`;`extra assemblyai: []` / `soniox: []` / `cartesia: []` / `deepgram: ['deepgram-sdk<8,>=6.1.1']` |
+| E-9 | `universal-3-5-pro` **原生跨语言 code-switch**,`language_detection` 只决定回包里带不带 `language_code`/`language_confidence`,不是开关 code-switch 的钥匙;该模型要求 pipecat ≥1.4.0(实装 1.6.0 ✓);符号未废弃 | `curl -sSL https://www.assemblyai.com/docs/voice-agents/pipecat-universal-3-5-pro` 抽文;`uvx pipecat-ai-context-hub check-deprecation AssemblyAISTTService` | 文档原文 `Universal 3.5 Pro Realtime code-switches natively between supported languages. This parameter controls whether language_code and language_confidence are included in turn messages.`;能力表 `Multilingual code switching ✅`;`{"deprecated": false, "status": "current"}` |
 
 > E-1/E-2 合并回答 PRD 开放问题①:**部署拓扑就是"一个长驻进程服务多个会话"**,不是"每会话一进程"。裁决见 ADR-1。
 
@@ -35,11 +39,11 @@
 | 符号/文件 | 生产调用方 | 测试调用方 | 本次触达 |
 |---|---|---|---|
 | `assemble_pipeline` | `run_bot` ×1 | `test_dual_brain.py` ×6(全部 `bot_module.cfg`) | 函数体改造;签名不变 |
-| `STT_BUILDERS`/`TTS_BUILDERS` | `assemble_pipeline` | `test_bot.py` ×4 | 不改(模板经 Config 生效字段驱动) |
+| `STT_BUILDERS`/`TTS_BUILDERS` | `assemble_pipeline` | `test_bot.py` ×4 | **STT 加一行 `assemblyai`**(修订 R2,ADR-8);TTS 不改;两张 dict 的既有条目与调用形态不变 |
 | `Config`/`load_config` | `bot.py`、`judge_factory.py`、`evals/fault_run/bot.py`(符号链接,同一文件) | `test_config.py` ×13、`test_bot.py::_make_config` | 新增字段 + 条件必需 + 模板合并 |
 | `prompts.SYSTEM_PROMPT` | `assemble_pipeline` ×1 | `test_prompts.py` ×6 | 生产改走组合函数;常量保留为派生兼容别名 |
 | `prompts.INJECT_*` | `dual_brain`/`task_dispatch` | eval 负向锚 | **不动** |
-| `evals/r4_*.yaml`、`dual_brain_*.yaml`、`dispatch_*.yaml` | — | — | 文件不改,只改运行画像(见 §测试策略) |
+| `evals/r4_*.yaml`、`dual_brain_*.yaml`、`dispatch_*.yaml` | — | — | 文件不改,只改运行画像(见 §任务拆分 G4 与 `contract/cases.md` SA-18/SA-19) |
 
 ---
 
@@ -82,16 +86,25 @@ bot.py(装配层)   bot() → 会话级 load_config() → assemble_pipeline(cfg,
 - **背景(E-5 实测)**:PRD FR-4 的产品决策写"语音安全护栏句就位于 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 两段之一",据此把这两段划为不可覆盖。**实测:护栏句在 `OFFICIAL_SECTION` 里**,而 `OFFICIAL_SECTION` 恰恰是 FR-4 允许模板整段替换的身份段。照 PRD 字面实现 ⇒ 模板作者写新人设时护栏句直接消失,FR-4 想防的事故反而必然发生(AGENTS.md §4 明写"重写 prompt 时必须把这句带过去")。
 - **决定**:把 `OFFICIAL_SECTION` 拆成两段常量——`IDENTITY_DEFAULT_SECTION`(人设,模板可覆盖)与 `VOICE_SAFETY_SECTION`(护栏句,**模板不可覆盖**,由组合函数无条件注入,位置紧随身份段之后)。组合结果的段序:`身份 → 语音安全 → 能力边界 → 语言 → 简洁 → [双脑]`。
 - **兼容处置(把 FR-9 的代价压到零)**:`prompts.py` 保留两个**派生**常量——`OFFICIAL_SECTION = f"{IDENTITY_DEFAULT_SECTION}\n\n{VOICE_SAFETY_SECTION}"`、`SYSTEM_PROMPT`(默认模板 + 双脑开启态的组合快照)。因为两段在默认组合里相邻,`test_prompts.py` 的五段顺序断言与其余 5 个用例**逐字不改即通过**。另加一条防漂移断言:`SYSTEM_PROMPT == scenarios.build_system_prompt(TEMPLATES["voice_chat"], dual_brain_enabled=True)`(P36:两处同值不许各自硬编码,必须由测试绑死)。
-- **代价**:默认 system_instruction 的文本发生**语义中性但非逐字**的变化(护栏句由"身份段第 2 句"变成"独立第 2 段",段间多一个 `\n\n`)。因此 FR-9 的"行为等价"必须由 `r4_*`/`dual_brain_*` eval 复跑来证明,不能只靠单测(判据见 `contract/cases.md` SA-15)。
+- **代价**:默认 system_instruction 的文本发生**语义中性但非逐字**的变化(护栏句由"身份段第 2 句"变成"独立第 2 段",段间多一个 `\n\n`)。因此 FR-9 的"行为等价"必须由 `r4_*`/`dual_brain_*` eval 复跑来证明,不能只靠单测(判据见 `contract/cases.md` SA-18)。
 - **被否**:护栏句留在身份段内,靠"文案评审清单"保证模板作者不漏。否因:纯纪律型防护,正是坑库 P7(规则存在≠规则被执行);而模板数量会随路线图增长(同传/面试),每加一个都要人肉复核一次。
 
-### ADR-4 · FR-4 的可寻址结构与"未来升级改动面"自证
+### ADR-4 · FR-4 的可寻址结构;语言段本轮开放为模板可覆盖(修订 R1)
 
 - 组合函数落 `scenarios.py`(不落 `prompts.py`,否则 `prompts` 要 import `scenarios` 形成环):
-  `build_system_prompt(template: ScenarioTemplate, *, dual_brain_enabled: bool) -> str`,内部按段列表拼接,每段取值都是一次独立的"模板值优先、否则默认常量"判断。
-- **FR-4 设计约束自证**(把 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 升级为"模板可覆盖但强制保留护栏句"时的改动面):
-  ① `ServiceChoice` 同级新增可选字段 `language_section`/`conciseness_section`(注册表);② `build_system_prompt` 里这两段的取值改成 `template.language_section or LANGUAGE_SECTION`(组合函数,护栏句因为是独立段、无条件注入,天然被保留);③ `tests/test_scenarios.py` 加校验用例。
-  **不触达**:`bot.py`(调用点签名不变,模板对象整体传入)、管线装配顺序、STT/TTS/LLM 服务选择这条正交轴。—— 满足 PRD FR-4 的三处收敛判据。
+  `build_system_prompt(template: ScenarioTemplate, *, dual_brain_enabled: bool) -> str`,内部按段列表拼接,每段取值都是一次独立的"模板值优先、否则默认常量"判断。**模板对象整体传入**,所以新增可覆盖段时调用点(`bot.py`)签名不变。
+
+**修订 R1 决定(用户 2026-08-10 追加拍板)**
+
+- **背景(契约冲突,PM 起草陪练文案时暴露)**:`LANGUAGE_SECTION` 现文本为 `"Always reply in Chinese (Mandarin), regardless of the language of the input text."`。按原契约它对所有模板不可覆盖 ⇒ 英语陪练模板的 `system_instruction` 会出现"身份段要求教英语/鼓励说英语"与紧随其后的协议段"永远用中文回复"两条**字面互斥**的指令。坑库 P44 正是这个形状:多条并列指令冲突时,措辞更具体/更靠后的那条会赢,原则性约束被静默架空,行为不可预期。
+- **决定**:`ScenarioTemplate` 新增可选字段 `language_section: str | None = None`;`build_system_prompt` 中该段取值 = `template.language_section or prompts.LANGUAGE_SECTION`。默认模板不声明该字段 ⇒ 取值与文本**逐字不变**。段的**位置与顺序不变**(仍是第 4 段)。
+- **本轮不动的**:`VOICE_SAFETY_SECTION`(护栏,独立不可覆盖段,ADR-3)、`CAPABILITY_BOUNDARY_SECTION`、`CONCISENESS_SECTION`、`DUAL_BRAIN_SECTION` 全部维持不可覆盖。
+- **代价**:①"语言"这条轴从此有两个模板可写的位置(身份段可能又写一遍语言策略),模板作者需自律不重复——由 `contract/cases.md` §0.2 的文案约束与 INV 兜底,不加运行期校验(过度);②PRD FR-4 的第一条判据("`LANGUAGE_SECTION` … 四段文本与顺序位置和变更前完全一致")在**非默认模板**下不再成立,须按"默认模板下四段逐字一致;任意模板下护栏/能力边界/简洁/双脑四段逐字一致 + 语言段位置不变"重新表述(交 PM,见风险 R-11)。
+- **为什么不是"给陪练模板做条件分支"**:被否——在组合函数里按 `template.id` 判 `if id == "english_tutor"` 是把模板差异写回装配层,正是本变更要消灭的硬编码形状(表层 why),且下一个模板还要再加一个分支。可选字段 + 缺省回落是同一件事的可扩展写法,改动面还更小。
+
+**FR-4 设计约束自证(剩余升级路径:`CONCISENESS_SECTION`)**
+
+若未来 `CONCISENESS_SECTION` 也要开放,改动面收敛在:① `ScenarioTemplate` 新增可选字段 `conciseness_section`;② `build_system_prompt` 里该段取值改成 `template.conciseness_section or CONCISENESS_SECTION`;③ `tests/test_scenarios.py` 加校验用例。**不触达**:`bot.py`(模板对象整体传入,调用点签名不变)、管线装配顺序、其余段落、STT/TTS/LLM 服务选择这条正交轴。—— 本轮 `language_section` 的落地即为该路径的一次实证:改动确实只落在这三处。
 
 ### ADR-5 · 模板与环境变量的优先级:模板 > 环境变量 > 内置默认
 
@@ -119,6 +132,19 @@ bot.py(装配层)   bot() → 会话级 load_config() → assemble_pipeline(cfg,
 - **决定**:选择 PRD 给的"忽略"分支,并且用**结构性**方式实现:`bot.py` 不注册 `rtvi.event_handler("on_client_message")`(今天也没有),因此运行期任何"切模板"性质的客户端消息在服务端没有接收端,连"部分字段已切"的中间状态都无从产生。会话内的模板/配置全部是 frozen 快照。
 - **可机械核对**:`grep -q "on_client_message" server/bot.py` 必须无命中(`contract/cases.md` SA-08a)。
 - **代价**:客户端发这类消息不会收到"不支持"的显式反馈。PRD 允许二选一,选忽略是零代码零风险;未来做客户端模板选择器时(ADR-1 被否 C 的通道),再补显式反馈。
+
+### ADR-8 · STT provider 扩展 AssemblyAI:模板级换 STT,解语言轴(修订 R2)
+
+- **背景**:R-12 上浮的正交缺口——`STT_BUILDERS`/`TTS_BUILDERS` 把 `Language.ZH` 写死在构造器里,模板只改得动 prompt,改不动识别语言;陪练要用户开口说英语,soniox 的 `language_hints=[ZH]` 直接与之相悖。用户拍板引入 AssemblyAI(自述已亲测中英识别均可)。
+- **决定**:
+  1. STT provider 白名单扩为 `{soniox, deepgram, assemblyai}`;`STT_BUILDERS` 按既有约定**加一行** `_build_assemblyai_stt`(惰性 import,同 deepgram/cartesia 先例),`config.py` 的 `_STT_PROVIDER_REQUIRED_ENV` 加一项 `assemblyai: {"ASSEMBLYAI_API_KEY": "stt_api_key"}`,`.env.example` + `conftest._FAKE_REQUIRED_ENV` 同步。**管线不动**——这正是既有 provider 层设计换来的东西(D-008 那层地基第一次被真正复用)。
+  2. builder **不传任何语言参数**(不传 `language`、不传 `language_code`、不传 `language_detection`),靠 `universal-3-5-pro` 的原生 code-switch(E-7 证明零配置就是不发;E-9 证明这是官方语义)。这与 soniox/deepgram builder 硬锁 `Language.ZH` 的写法**故意不同**,理由写进 builder 注释,防后人"照抄邻居"把 ZH 锁加回来。
+  3. builder **不读 `c.stt_model`**(该字段默认值 `stt-rt-v5` 是 Soniox 档位名,混用会错——deepgram builder 已有同款先例),显式传 `model="universal-3-5-pro"` 常量,与官方文档页对齐并防 SDK 默认漂移。
+  4. `vad_force_turn_endpoint` 用默认 `True`:该模式下 AssemblyAI 不发 `UserStarted/StoppedSpeakingFrame`、尽快给 final,交由本仓公共 `VADProcessor`/`UserTurnProcessor` 段决定轮次——与既有 `ExternalUserTurnStrategies()` 约定一致。**不得**改成 `False`(那是让 AssemblyAI 自己管轮次,会和本仓轮次段打架)。
+  5. 模板落地:`english_tutor.services.stt_provider = "assemblyai"`;`voice_chat` 不声明,继续 soniox。
+- **代价**:①新增一个外部服务依赖——密钥、网络、**计费**,以及"陪练模板可用性依赖 AssemblyAI 账号"这一新前提(未配 key 时按 FR-11 在会话装配期 fail-fast,不静默回退 soniox);②TTS 侧仍锁 `Language.ZH`(陪练的英语**练习素材由 TTS 用中文引擎念**),本轮不动,见 R-14;③本期不提供"模板级换 AssemblyAI 模型"的旋钮(见 R-15)。
+- **被否 A**:给 soniox builder 加 `language_hints=[ZH, EN]` 之类双语提示。否因:改的是**共享** builder,默认模板跟着变(P50:新能力必须收窄到自己的路径),且 soniox 双语混说效果无任何实测证据,而 AssemblyAI 有用户亲测。
+- **被否 B**:把 `stt_language` 提进 `ServiceChoice`、让模板声明识别语言。否因:本轮真正的需求是"陪练要一个能中英混说的 STT",AssemblyAI 零配置即满足;加一条语言轴参数等于给每个 provider 都要维护一张语言映射表,是没有需求支撑的抽象(hard rule 2)。留作未来 TTS 侧要动语言时一并评估。
 
 ---
 
@@ -157,6 +183,17 @@ bot.py(装配层)   bot() → 会话级 load_config() → assemble_pipeline(cfg,
 
 `fast_llm_model: str`(生效快脑模型)、`dual_brain_enabled: bool`、`template: ScenarioTemplate`。`__repr__` 脱敏规则不变(新字段无密钥;`template` 内也不含密钥)。
 
+### M-6 STT provider 扩展 `assemblyai`(修订 R2)
+
+- expand:`_STT_PROVIDER_WHITELIST` 加 `assemblyai`;`_STT_PROVIDER_REQUIRED_ENV` 加 `{"assemblyai": {"ASSEMBLYAI_API_KEY": "stt_api_key"}}`(落既有中立字段 `stt_api_key`,builder 不感知厂商);`server/pyproject.toml` 的 extras 加 `assemblyai`(E-8:该 extra 为空,**装不进任何新包**,声明它只为记录意图与对齐官方约定)。
+- 兼容性:未选中 `assemblyai` 的用户**不必**配 `ASSEMBLYAI_API_KEY`(既有条件必需机制原样生效);默认模板行为零变化。
+- contract:无删除动作;`.env.example` 与 `tests/conftest.py::_FAKE_REQUIRED_ENV` 两处镜像按既有纪律同步(陪练用例需要哪一处补 key,由 G2 决定并在两处同时体现)。
+
+### M-5 `ScenarioTemplate.language_section`(修订 R1 新增可选字段)
+
+- expand:注册表新增 `language_section: str | None = None`,缺省 `None` ⇒ 回落 `prompts.LANGUAGE_SECTION` 原文。默认模板 `voice_chat` 不声明 ⇒ 默认 system_instruction **逐字不变**(与修订前设计的默认组合完全一致,`SYSTEM_PROMPT` 防漂移断言不受影响)。
+- contract:无删除动作;`prompts.LANGUAGE_SECTION` 常量保持不变,仍是默认值的唯一事实源(禁止在注册表里内联一份中文指令副本)。
+
 ### M-4 `AssembledPipeline` 字段变更
 
 `slow_llm`/`slow_context`/`sentence_aggregator`/`producer`/`consumer` 改 Optional;新增 `stt`(FR-8 要断言 STT 实例的构造参数,今天没有句柄)、`template`(装配实际用的那一份,P55 的端到端锚点);`tts` 的类型标注从具体厂商类放宽为 TTS 基类(模板可选 cartesia 后原标注即失真)。该 dataclass 的存在理由就是给结构性测试断言,扩字段属其设计意图内。
@@ -170,9 +207,9 @@ bot.py(装配层)   bot() → 会话级 load_config() → assemble_pipeline(cfg,
 | 组 | 内容 | 主要产出 | 依赖 |
 |---|---|---|---|
 | G0 | 陪练人设文案定稿(起草 → 呈用户确认,含中英文配比策略与"严格教师"定位一致性检查) | 文案文本(交 G1 落常量) | 无(用户拍板) |
-| G1 | `prompts.py` 分段拆分 + 派生兼容常量;新增 `scenarios.py`(注册表 + `build_system_prompt`);`tests/test_scenarios.py` | FR-1/FR-4/FR-7 结构面 | G0(仅陪练文案字段) |
-| G2 | `config.py`:模板合并、生效值计算、条件必需、`DUAL_BRAIN_ENABLED` 解析、import 期不变式自检;`.env.example` + `conftest._FAKE_REQUIRED_ENV` 同步;`test_config.py` 增改 | FR-5/FR-6/FR-11/FR-12(配置面) | G1 |
-| G3 | `bot.py`:会话级 config 解析、`assemble_pipeline` 模板驱动、慢脑开关两态装配、错误归因放宽、观测日志行、`AssembledPipeline` 扩字段;`tests/test_scenario_assembly.py`(经 `load_config` 走真实装配链路) | FR-2/FR-3/FR-8/FR-12(装配面) | G2 |
+| G1 | `prompts.py` 分段拆分 + 派生兼容常量;新增 `scenarios.py`(注册表含 `language_section` 可选字段 + `build_system_prompt` 的模板值优先/缺省回落取值);`tests/test_scenarios.py` | FR-1/FR-4/FR-7 结构面 | G0(陪练身份段文案 + 语言策略文本) |
+| G2 | `config.py`:模板合并、生效值计算、条件必需(**含 `assemblyai` 白名单 + `ASSEMBLYAI_API_KEY` 条件必需**)、`DUAL_BRAIN_ENABLED` 解析、INV-2/INV-3 自检;`.env.example` + `conftest._FAKE_REQUIRED_ENV` + `pyproject` extras 同步;`test_config.py` 增改 | FR-5/FR-6/FR-11/FR-12(配置面) | G1 |
+| G3 | `bot.py`:**`STT_BUILDERS` 加 `_build_assemblyai_stt`(ADR-8 四条约束)**、会话级 config 解析、`assemble_pipeline` 模板驱动、慢脑开关两态装配、错误归因放宽、观测日志行、`AssembledPipeline` 扩字段;`tests/test_scenario_assembly.py`(经 `load_config` 走真实装配链路) | FR-2/FR-3/FR-8/FR-12(装配面) | G2 |
 | G4 | 回归与行为基线:全量 pytest;`test_dual_brain.py` 6 处切开启态 fixture;`r4_*`/`dual_brain_*`/`dispatch_*` eval 按新运行画像复跑;新增 2 个模板对照 eval 场景并留存输出样本 | FR-9/FR-10 + FR-4 回归判据 | G3 |
 
 **授权修改的既有测试清单**(白名单,清单外的既有用例不许改,防止"改测试凑绿"):
@@ -189,7 +226,7 @@ bot.py(装配层)   bot() → 会话级 load_config() → assemble_pipeline(cfg,
 | # | 项 | 性质 | 处置 |
 |---|---|---|---|
 | R-1 | **PRD FR-4 的事实前提有误**(护栏句实际在 `OFFICIAL_SECTION`,不在 LANGUAGE/CONCISENESS) | 契约缺口 | 已按 ADR-3 裁决(提取为独立不可覆盖段),PRD 该句需回改;交主会话/PM 确认 |
-| R-2 | 默认 system_instruction 文本发生语义中性变化(护栏句位置) | 可逆(单文件常量) | 必须以 `r4_*`/`dual_brain_*` eval 复跑作为等价证据(SA-15),不接受单测代替 |
+| R-2 | 默认 system_instruction 文本发生语义中性变化(护栏句位置) | 可逆(单文件常量) | 必须以 `r4_*`/`dual_brain_*` eval 复跑作为等价证据(SA-18),不接受单测代替 |
 | R-3 | 会话级 `load_dotenv(override=True)` 改进程级 `os.environ` | 可逆;**并发下有理论串台窗口** | 硬约束:两行之间不得有 `await`(ADR-1);超出个人单会话用途前须重评 |
 | R-4 | 模板 id 一旦写进用户 `.env`,改名要动用户配置 | 弱难逆 | v1 只定 `voice_chat`/`english_tutor` 两个,命名一次定死;新增走注册表 |
 | R-5 | `evals/fault.env`(gitignored,本机真实密钥明文)需人工加 `DUAL_BRAIN_ENABLED=true`,否则 R8 故障 eval 在关闭态下无慢脑可失败,场景静默失去意义 | 运维步骤 | 写进 G4 的运行画像;`dual_brain_fault.manifest.yaml` 注释同步 |
@@ -198,5 +235,9 @@ bot.py(装配层)   bot() → 会话级 load_config() → assemble_pipeline(cfg,
 | R-8 | `CAPABILITY_BOUNDARY_SECTION` 首句 `"If the user asks you to do one of these things…"` 指代悬空(枚举句已在 commit `e94b874` 随派活迁移删除) | 既有缺陷,非本次引入 | 不修(范围外);但陪练身份段文案**不得**假设协议段会承接自己的枚举;建议记债务 |
 | R-9 | 模板声明 provider 后,环境变量 `STT_PROVIDER`/`TTS_PROVIDER` 被静默忽略 | 设计取舍 | 装配起点 INFO 行打印生效组合;`.env.example` 注释写明优先级 |
 | R-10 | 陪练文案未定稿即开工 | 流程阻塞 | G0 为 G1 的硬前置;实现节点不得自行拟定文案上线(FR-7) |
-
+| R-11 | 修订 R1 使 PRD FR-4 第一条判据在非默认模板下不成立(语言段文本会随模板变) | 契约缺口 | 判据须改为"默认模板下四段逐字一致;任意模板下护栏/能力边界/简洁/双脑逐字一致 + 语言段位置不变";交 PM 随本轮重冻结一并回改 |
+| R-12 | ~~语言轴只放开 prompt、STT 侧仍锁 ZH~~ **已由修订 R2 解决**:陪练模板 STT 换 AssemblyAI `universal-3-5-pro`(原生中英 code-switch,E-7/E-9),builder 不发任何语言参数 | 已闭环 | 仍要求 SA-19 行为样本**保留至少一轮英语输入**作真机实证(用户亲测=自述证据,本项目尚无端到端运行日志) |
+| R-13 | 新增**外部服务**依赖 AssemblyAI:密钥、网络、计费,且陪练模板可用性从此绑定该账号 | 新依赖(L3 触发器) | 零新增 Python 包(E-8);未配 key 时按 FR-11 会话装配期 fail-fast、禁止静默回退 soniox(SA-09 覆盖);账号与额度由用户持有,不在本流水线内申请 |
+| R-14 | TTS 侧仍锁 `Language.ZH`:陪练的英语练习素材会由中文 TTS 引擎朗读,发音质量未知 | 已知限制,本轮范围外 | 本轮不动(派单只授权 STT);SA-19 的英语轮次同时听 TTS 表现,若不可接受另起变更(TTS provider/语言同样走 `ServiceChoice`,改动面已铺好) |
+| R-15 | 本期不提供"模板级换 AssemblyAI 模型"的旋钮(builder 写死 `universal-3-5-pro`),因 `Config.stt_model` 的默认值是 Soniox 档位名、无法区分"用户显式声明"与"默认值" | 已知限制 | 真要换模型时,把 `stt_model` 默认值改成 per-provider 表(一处集中改动),不影响本轮契约 |
 **难逆决策标注**:本设计**无**难以回退的决策。最"重"的一项是 `Config.scenario → template` 字段替换(M-2),因零外部消费者(grep 实测)而可一次性完成,回退 = revert 单个 commit。ADR-1 的会话级解析是新增路径、模块级路径原样保留,回退成本 = 删两行 + 改一处实参。

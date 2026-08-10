@@ -1,6 +1,6 @@
 # scenario-assembly · PRD
 
-> 变更:scenario-assembly(L2)。s1b 产出,时间基准 2026-08-10,base_commit 8d11dd2。
+> 变更:scenario-assembly(**L3**,原 L2,因引入外部服务依赖 AssemblyAI 于 2026-08-10 升级,见 FR-5 变更留痕)。s1b 产出,时间基准 2026-08-10,base_commit 8d11dd2。
 > 消费方:ui-designer(本次预期无 UI 改动,见「非目标」)、tech-architect(S2a 设计)。
 
 ---
@@ -53,20 +53,28 @@
 
 ### FR-4(P0)身份段/协议段分层契约
 
-模板**只能**替换身份段中的人设描述文本(`OFFICIAL_SECTION`)。协议段(`CAPABILITY_BOUNDARY_SECTION` 能力边界;`DUAL_BRAIN_SECTION` 慢脑素材消化协议——**仅当慢脑开关开启时才注入(见 FR-12),关闭时该段不出现在 system_instruction 中;注入时同样不可被模板覆盖**)、语言/简洁风格段(`LANGUAGE_SECTION`、`CONCISENESS_SECTION`),以及**从身份段中独立提取出来的语音安全护栏段**(原句"避免 emoji/项目符号等无法朗读的格式"——**实测位于 `OFFICIAL_SECTION` 身份段内,而非语言/简洁段**;已按设计裁决提取为独立不可覆盖段,紧随身份段之后,详见 `design.md` ADR-3),在任意模板下都必须**原样保留、顺序不变**,不可被模板覆盖。
+模板**可以**替换身份段中的人设描述文本(`OFFICIAL_SECTION`)与**语言段**(`LANGUAGE_SECTION`,本期新开放,见下方起因留痕)。协议段(`CAPABILITY_BOUNDARY_SECTION` 能力边界;`DUAL_BRAIN_SECTION` 慢脑素材消化协议——**仅当慢脑开关开启时才注入(见 FR-12),关闭时该段不出现在 system_instruction 中;注入时同样不可被模板覆盖**)、简洁风格段(`CONCISENESS_SECTION`),以及**从身份段中独立提取出来的语音安全护栏段**(原句"避免 emoji/项目符号等无法朗读的格式"——**实测位于 `OFFICIAL_SECTION` 身份段内,而非语言/简洁段**;已按设计裁决提取为独立不可覆盖段,紧随身份段之后,详见 `design.md` ADR-3),在任意模板下都必须**原样保留、顺序不变**,不可被模板覆盖。`LANGUAGE_SECTION` 未被模板显式覆盖时,取**现有默认值**(现行中文指令原文),默认模板行为因此不变。
 
-> 产品决策(置信 70%):把 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 与协议段一起划为"模板不可覆盖",比现状盘点里"身份语义=OFFICIAL+LANGUAGE+CONCISENESS"的分类更严格——理由(原依据有误,已按设计裁决订正):护栏句**实测位于身份段 `OFFICIAL_SECTION` 内,而非 `LANGUAGE_SECTION`/`CONCISENESS_SECTION`**,已提取为独立不可覆盖段(见上方护栏段说明),不再依赖这两段"兜底"护栏句;`LANGUAGE_SECTION`/`CONCISENESS_SECTION` 维持模板不可覆盖,是出于语气/简洁风格一致性的独立考虑。**反证条件(已被用户预告为后期必做,非假设)**:用户已拍板"后期需要按模板改变语气与风格",该升级——"`LANGUAGE_SECTION`/`CONCISENESS_SECTION` 允许模板覆盖但强制保留语音安全护栏句"——是确定会来的后续变更,不是"若未来需要"的或然场景;本次先做强制不可覆盖,是为该升级预留改动面小的落地路径(见下方设计约束),不是关死这条路。
+> **起因留痕(PM 实测冲突 + 用户拍板,2026-08-10)**:PM 起草陪练模板人设文案时发现,`LANGUAGE_SECTION` 现有文本("Always reply in Chinese (Mandarin), regardless of the language of the input text.")与英语陪练模板的教学定位(需要用英语讲解/示范/练习)存在**字面指令冲突**(详见 `research/tutor-persona-draft.md` 原开放问题①)。用户拍板:原定"后期"才做的"`LANGUAGE_SECTION`/`CONCISENESS_SECTION` 允许模板覆盖"升级,**提前到本期**,但只提前 `LANGUAGE_SECTION` 一项,走的正是下方设计约束原本就预留的升级路径;`CONCISENESS_SECTION` 与独立护栏段维持不可覆盖,仍是后期候选。
 
-**设计约束(交 S2a,非本次实现范围,但装配层结构须为其预留)**:prompt 组合必须做成分段结构——每段(身份/协议/语言/简洁风格)在注册表/组合函数层面是独立可寻址的字段与拼接单元,而不是把五段现拼成一个不透明字符串常量后再整体处理。这样未来把 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 从"模板不可覆盖"升级为"模板可覆盖但强制保留护栏句"时,改动范围应能收敛在:①注册表新增可选字段、②组合函数里该段的取值逻辑(模板值优先、护栏句始终追加)、③对应校验测试三处,不触达管线装配顺序、不触达其余段落、不触达 STT/TTS/LLM 服务选择这条正交轴。S2a 方案是否满足该约束,是本条的验收依据之一。
+> 产品决策(置信 70%,范围收窄为仅 `CONCISENESS_SECTION`):把 `CONCISENESS_SECTION` 与协议段一起划为"模板不可覆盖",理由是简洁风格一致性暂无按模板区分的实证需求;独立护栏段不可覆盖的理由见上方起因留痕(与"兜底"护栏句无关,是设计裁决的直接结果)。`LANGUAGE_SECTION` 已按用户拍板于本期提前开放模板覆盖(见上方起因留痕),不再适用本条"不可覆盖"决策范围。**反证条件**:若未来某模板确有正当理由需要不同简洁度/详略(如面试场景需要更正式详细的追问),该项应比照 `LANGUAGE_SECTION` 本次的先例开放覆盖,走下方设计约束预留的升级路径。
 
-- **Given** 任意已注册模板且慢脑开关**开启**,**When** 装配出该模板的 `fast_llm.system_instruction`,**Then** 协议段(`CAPABILITY_BOUNDARY_SECTION`、`DUAL_BRAIN_SECTION`)+ 语言/简洁段(`LANGUAGE_SECTION`、`CONCISENESS_SECTION`)+ 独立护栏段(语音安全护栏句)均不可被模板覆盖,文本与顺序位置和变更前完全一致;且现有 `evals/r4_*.yaml`、`evals/dual_brain_*.yaml` 在开启态、任意模板下都能通过(回归判据,不因模板切换而失效)。慢脑开关**关闭**态下的 `DUAL_BRAIN_SECTION` 行为见 FR-12,不在本条判据范围内。
+**设计约束(交 S2a)**:prompt 组合必须做成分段结构——每段在注册表/组合函数层面是独立可寻址的字段与拼接单元,而不是把整体拼成一个不透明字符串常量后再处理。`LANGUAGE_SECTION` 本期从"模板不可覆盖"升级为"模板可覆盖"(见上方起因留痕),正是对这条设计约束的**第一次实证**——该升级的改动应收敛在:①注册表新增可选字段(如 `language_section`,不填则用现有默认值)、②组合函数里该段的取值逻辑(模板值优先、未覆盖则用默认常量)、③对应校验测试三处,不触达管线装配顺序、不触达其余段落、不触达 STT/TTS/LLM 服务选择这条正交轴。**`CONCISENESS_SECTION` 仍维持本约束描述的"未来可能升级"状态**,本期不做,升级时应比照 `LANGUAGE_SECTION` 这次的同一改动面收敛路径。S2a 方案是否满足该约束(尤其 `LANGUAGE_SECTION` 本次改动是否真的收敛在上述三处),是本条的验收依据之一。
+
+- **Given** 默认模板且慢脑开关**开启**,**When** 装配出该模板的 `fast_llm.system_instruction`,**Then** `CAPABILITY_BOUNDARY_SECTION`、`DUAL_BRAIN_SECTION`、`LANGUAGE_SECTION`、`CONCISENESS_SECTION`、独立护栏段五段文本与顺序位置和变更前**逐字**一致。
+- **Given** 任意已注册模板(含覆盖了 `LANGUAGE_SECTION` 的模板)且慢脑开关**开启**,**When** 装配出该模板的 `fast_llm.system_instruction`,**Then** 独立护栏段、`CAPABILITY_BOUNDARY_SECTION`、`CONCISENESS_SECTION`、`DUAL_BRAIN_SECTION`(注入时)四段文本**逐字**一致、不因模板而变;`LANGUAGE_SECTION` 的**位置顺序**保持不变(即便其内容因模板覆盖而不同于默认值);且现有 `evals/r4_*.yaml`、`evals/dual_brain_*.yaml` 在开启态下都能通过(回归判据,不因模板切换而失效)。慢脑开关**关闭**态下的 `DUAL_BRAIN_SECTION` 行为见 FR-12,不在本条判据范围内。
+- **Given** 模板未显式声明 `LANGUAGE_SECTION`(如默认模板),**When** 装配该模板,**Then** `LANGUAGE_SECTION` 取现有默认值(中文指令原文),行为与变更前完全等价,不因新增的"模板可覆盖"能力而意外改变默认模板输出。
+- **Given** 模板显式声明了不同的 `LANGUAGE_SECTION`(如陪练模板,教学阶段语言策略,见 FR-7),**When** 装配该模板,**Then** `fast_llm.system_instruction` 中的语言段文本采用模板声明值而非默认中文指令,该差异须能被 FR-10 的行为级样本观察到。
 - **Given** S2a 输出的 prompt 组合设计,**When** 检视其数据结构与组合函数,**Then** 五段(身份/能力边界/语言/简洁风格/双脑协议)必须是各自独立的字段/组合单元,不存在"整段常量字符串、无法单独寻址某一段"的实现方式(呼应上方设计约束,防止未来升级时被迫重写整个 prompt 组合层)。
 
 ### FR-5(P0)服务选择限定既有云端 provider 白名单
 
-模板中的 STT/TTS provider 取值必须来自现有云端 provider 白名单(STT: soniox/deepgram;TTS: elevenlabs/cartesia),不引入本地模型/本地 provider(用户已澄清"STT 跟 TTS 都是云端的")。
+模板中的 STT/TTS provider 取值必须来自现有云端 provider 白名单(STT: soniox/deepgram/**assemblyai**;TTS: elevenlabs/cartesia),不引入本地模型/本地 provider(用户已澄清"STT 跟 TTS 都是云端的")。
+
+> **变更留痕(用户拍板引入 AssemblyAI,2026-08-10;变更升级为 L3)**:用户亲测 AssemblyAI 中英识别可用,拍板加入 STT 白名单,解决陪练模板"soniox 硬锁中文识别语言提示与英语陪练冲突"的正交缺口。架构已在本地 pipecat 1.6.0 现场核实(证据见 `design.md` preflight E-7/E-8/E-9):`AssemblyAISTTService` 类存在、`pipecat-ai[assemblyai]` extra 为空(**零新增 Python 包**)、条件必需环境变量 `ASSEMBLYAI_API_KEY`、默认模型 `universal-3-5-pro` **原生中英 code-switch**、零配置即不发送任何语言锁参数。**新增的是外部服务依赖**(账号、密钥、计费),不是代码依赖——这是本变更从 L2 升级为 **L3** 的触发点。
 
 - **Given** 一个模板定义声明的 STT/TTS provider 不在现有白名单内,**When** 装配层加载该模板,**Then** 必须 fail-fast 报出清晰错误(复用现状 `config.py` 白名单校验机制),不得进入运行时才暴露。
+- **Given** 陪练模板声明 `stt_provider = "assemblyai"` 且当前环境未配置 `ASSEMBLYAI_API_KEY`,**When** 装配该模板,**Then** 按 FR-11 fail-fast 报出缺失项,不静默回退到 soniox/deepgram(呼应"新增外部服务依赖"这条代价,账号与配额由用户自行持有,不在本流水线内代为申请)。
 
 ### FR-6(P0,关联坑库 P25)模板 id 枚举与注册表实现一一对应
 
@@ -77,7 +85,7 @@
 
 ### FR-7(P0)v1 落地模板集合:默认 + 陪练
 
-至少落地两个模板:①**默认模板**——迁移现有 `voice_chat` 行为原样成为一个模板(身份段 = 现有 `OFFICIAL_SECTION` 原文,服务选择 = 现有 provider 默认值);②**陪练模板**——语义钉为**英语陪练(英语教师人设)**(用户澄清,访谈),新身份段人设文本,可选择不同的快脑 LLM model 和/或不同的 STT/TTS 服务组合。
+至少落地两个模板:①**默认模板**——迁移现有 `voice_chat` 行为原样成为一个模板(身份段 = 现有 `OFFICIAL_SECTION` 原文,`LANGUAGE_SECTION` = 现有默认值,服务选择 = 现有 provider 默认值,STT = soniox);②**陪练模板**——语义钉为**英语陪练(英语教师人设)**(用户澄清,访谈),新身份段人设文本 + 新 `LANGUAGE_SECTION` 覆盖值(教学阶段语言策略,见下)+ **STT = assemblyai**(FR-5 新增白名单项,解中英识别语言锁冲突),可选择不同的快脑 LLM model 和/或不同的 TTS 服务组合。
 
 **人设文案来源约定**:具体文案内容仍不在本 PRD 给出。已核实旧库 `~/git/voice-translate-v2` 的 `va/scenarios/` 无现成陪练/英语教师人设可复用(该目录只有 `butler`/`interview`/`translate`/`voice_chat` 四个配方,均非教师/陪练语义)。文案将由外部检索参考(纪要落 `pipeline/scenario-assembly/research/tutor-persona-references.md`)后起草,最终文案在实现前须呈用户确认,不由实现节点自行拍板发挥。
 
@@ -85,8 +93,12 @@
 
 **角色定位已拍板(访谈,2026-08-10)**:采用**严格定义的英语教师人设**,不采用业界"陪练伙伴/教练"式倾向(用户原话大意:"业界回避严格教师是商业做法、担心客户留存率;我自己是个人使用,需要严格定义的[教师]")。业界对比信息(Speak/ELSA Speak/Loora/Duolingo Max/Call Annie 五款主流产品中四款明确回避严格教师形象,`research/tutor-persona-references.md` §1.1)仅作决策背景留痕,不代表本项目采纳该倾向;这一项**不再是待用户确认的设计假设**。
 
-- **Given** 系统内置模板注册表,**When** 列出全部已注册模板,**Then** 至少包含"默认"与"陪练"两个 id,陪练模板的身份段人设定位为**严格的**英语教师(英语陪练),且与默认模板的身份段文本不同。
-- **Given** 陪练模板人设文案已起草,**When** 提交实现之前,**Then** 该文案已经过用户确认,且确认范围**必须显式包含以下业界无公开范例、属本项目自行设计的假设**:**中英文配比策略**——对话中中英混用/中文求助的触发规则(业界五款指定产品均未公开该机制,无可参照范例,纯设计假设,不能声称"参照某产品")。角色定位一项已拍板(见上),无需再作为待确认假设呈批,但文案措辞须体现"严格教师"定位、不得滑向陪练/教练式软化表达,该一致性检查纳入本条确认范围。上述内容未经用户确认,文案不得视为已确认,不接受实现节点直接杜撰文案后上线。
+**人设文案版本已拍板(访谈,2026-08-10)**:草案(`research/tutor-persona-draft.md` §①)"版本 A——严格教师·标准版"已获用户确认,作为陪练模板身份段(`IDENTITY_ENGLISH_TUTOR_SECTION`)的**终版基底**;"版本 B——高强度版"不采用,标记废弃。
+
+**语言策略改为"教学阶段模式",取代原三个中英配比候选(访谈,2026-08-10)**:用户自述为英语初级学习者、尚无法用英语交流,原 `research/tutor-persona-draft.md` §② 三个中英配比候选(全英文沉浸/默认英文卡壳兜底/英文为主语法中文讲解)均不适配该实际水平,**一律不采纳、标记废弃**。改为**教学阶段模式**:中文主导讲解与引导,英语用于练习素材/示范/跟读,随学生表现渐进提高英语占比。具体策略文本由 PM 基于该原则起草(草案见 `research/tutor-persona-draft.md` 新增节),纳入陪练模板的 `LANGUAGE_SECTION` 覆盖值——该段本期已由 FR-4 改为模板可覆盖,起因正是本文案与原锁定的中文指令字面冲突(见 FR-4 起因留痕)。
+
+- **Given** 系统内置模板注册表,**When** 列出全部已注册模板,**Then** 至少包含"默认"与"陪练"两个 id,陪练模板的身份段人设定位为**严格的**英语教师(英语陪练)、语言段体现教学阶段模式,均与默认模板不同。
+- **Given** 陪练模板**终版合成文案**(版本 A 身份段 + 教学阶段语言策略,分别对应 `IDENTITY_ENGLISH_TUTOR_SECTION` 与 `LANGUAGE_SECTION` 覆盖值)已起草,**When** 提交实现之前,**Then** 该终版合成文案已经过用户**最终确认**——角色定位(严格教师)与人设版本(版本 A)已分别拍板,无需重复呈批;教学阶段语言策略的具体措辞是新起草内容,必须呈批。未经此最终确认,文案不得视为已确认,不接受实现节点直接杜撰或对已拍板内容二次改写后不再复核。
 - **Given** 任意版本的陪练模板人设文案,**When** 检查其纠错相关措辞,**Then** 不出现"纠正发音"/"帮你改善发音准确度"一类承诺,纠错范围表述限定在语法、句式、用词层面(呼应上方硬约束)。
 
 ### FR-8(P0,关联坑库 P55)端到端装配链路一致性
