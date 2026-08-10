@@ -1,0 +1,36 @@
+{
+  "pass": true,
+  "reason": "第 1 轮修复复评:2 条 Important 全部 ADDRESSED(观测行改用 per-provider 生效模型表,ADR-5 四条合并表达式补上模板覆盖用例并钉住 P50 防线);修复 diff 内无新增 Critical/Important 破坏,全量 138 passed + ruff 全过。",
+  "items": [
+    {
+      "name": "Important-1 · [scenario] 观测行的 STT 模型段不是生效模型 —— ADDRESSED",
+      "pass": true,
+      "evidence": "server/bot.py:155-163 新增 _STT_EFFECTIVE_MODEL_OVERRIDES + _effective_stt_model();server/bot.py:300 日志行改用该函数;表值经核实为真:server/.venv/lib/python3.11/site-packages/pipecat/services/deepgram/stt.py:352 默认 model=\"nova-3-general\"、server/bot.py:138 assemblyai 写死 universal-3-5-pro;三家 builder(bot.py:91-141)构造行为一字未动;回归用例 server/tests/test_scenario_assembly.py:248-278 断言真实日志行含 stt=deepgram/nova-3-general"
+    },
+    {
+      "name": "Important-2 · ADR-5 生效值合并四条路径零覆盖、fast_llm_model 全项目无断言 —— ADDRESSED",
+      "pass": true,
+      "evidence": "server/tests/test_config.py:470-501 用 monkeypatch.setitem 替换 voice_chat 模板并显式声明四个 services 覆盖值,断言 cfg.stt_model/tts_voice/tts_model/fast_llm_model 全等于覆盖值(走到 server/config.py:261-267 四条合并的模板分支),并断言 cfg.llm_model 仍等于环境变量值(P50 越界副作用防线);server/tests/test_scenario_assembly.py:117-118 补断言生效 fast_llm_model 真的进了构造对象"
+    },
+    {
+      "name": "修复 diff 新破坏扫描(Critical/Important)",
+      "pass": true,
+      "evidence": "adc523b 仅动 server/bot.py + 两个测试文件;新增符号为 log-only 私有函数,未进入任何 Service 构造路径;server 全量 NLTK_DISABLE_IMPORT_SECURITY=1 uv run python -m pytest -q → 138 passed;uv run ruff check → All checks passed"
+    },
+    {
+      "name": "Minor(本轮新增)· 生效模型表的两个字面值与真实来源无机械绑定",
+      "pass": true,
+      "evidence": "server/bot.py:156-157 的 nova-3-general 依赖 pipecat DeepgramSTTService 默认值(.venv/.../deepgram/stt.py:352)、universal-3-5-pro 与 server/bot.py:138 各写一遍;server/tests/test_scenario_assembly.py:262/271 断言的是同一份字面值,来源漂移不会变红——非阻断,交派单方定夺"
+    },
+    {
+      "name": "上轮 5 条 Minor + 3 处 ⚠️(TDD 无独立 RED commit / SA-19 音频留痕半完成 / dual_brain_inject.yaml 与 design 不一致)",
+      "pass": true,
+      "evidence": "本轮 diff(adc523b)未触及,按派单不重新裁定;仍为非阻断遗留项,见 review.md 第三节"
+    },
+    {
+      "name": "契约档位复核",
+      "pass": true,
+      "evidence": "design.md 声明 cases;本轮修复零对外接口面变化(仅日志文本 + 测试),无降档"
+    }
+  ]
+}

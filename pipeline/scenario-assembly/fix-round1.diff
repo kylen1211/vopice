@@ -1,0 +1,155 @@
+ server/bot.py                          | 21 ++++++++++++++++-
+ server/tests/test_config.py            | 38 ++++++++++++++++++++++++++++++
+ server/tests/test_scenario_assembly.py | 43 ++++++++++++++++++++++++++++++++++
+ 3 files changed, 101 insertions(+), 1 deletion(-)
+diff --git a/server/bot.py b/server/bot.py
+index 72cc301..07d1fac 100644
+--- a/server/bot.py
++++ b/server/bot.py
+@@ -144,6 +144,25 @@ STT_BUILDERS = {
+     "deepgram": _build_deepgram_stt,
+     "assemblyai": _build_assemblyai_stt,
+ }
++
++
++# scenario-assembly s6 review Important-1：`c.stt_model` 只被 `_build_soniox_stt`
++# 消费（deepgram/assemblyai 各自硬编码自己的模型档位，B-3 硬约束不读
++# `c.stt_model`，此表不改变那条约束、也不传进任何 Service 构造器）——
++# `[scenario]` 观测行若直接打 `cfg.stt_model` 会在非 soniox provider 下打出
++# 一个根本没被使用的档位名，误导后续排查（如 debts.md D-020）。这张表把三家
++# 各自实际生效的模型值集中成一个事实源，只供日志使用。
++_STT_EFFECTIVE_MODEL_OVERRIDES = {
++    "deepgram": "nova-3-general",
++    "assemblyai": "universal-3-5-pro",
++}
++
++
++def _effective_stt_model(cfg: Config) -> str:
++    """Log-only：返回 `cfg.stt_provider` 下真实生效的 STT 模型名。"""
++    return _STT_EFFECTIVE_MODEL_OVERRIDES.get(cfg.stt_provider, cfg.stt_model)
++
++
+ def _build_elevenlabs_tts(c: Config):
+     return ElevenLabsTTSService(
+         api_key=c.tts_api_key,
+@@ -278,7 +297,7 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
+     # scenario-assembly ADR-1 第 3 点(契约 §0.4)：装配起点打一行 INFO，作为
+     # "这次会话到底用了哪个模板/生效组合"的现场证据(FR-3/FR-8 的运行期可观测锚)。
+     logger.info(
+-        f"[scenario] template={cfg.template.id} stt={cfg.stt_provider}/{cfg.stt_model} "
++        f"[scenario] template={cfg.template.id} stt={cfg.stt_provider}/{_effective_stt_model(cfg)} "
+         f"tts={cfg.tts_provider}/{cfg.tts_voice} fast_model={cfg.fast_llm_model} "
+         f"dual_brain={'on' if dual_brain_enabled else 'off'}"
+     )
+diff --git a/server/tests/test_config.py b/server/tests/test_config.py
+index af512e6..7118579 100644
+--- a/server/tests/test_config.py
++++ b/server/tests/test_config.py
+@@ -5,7 +5,10 @@ import re
+ 
+ import pytest
+ 
++import prompts
++import scenarios
+ from config import ConfigError, load_config
++from scenarios import ScenarioTemplate, ServiceChoice
+ 
+ REQUIRED_ENV = {
+     "LLM_BASE_URL": "http://127.0.0.1:8045/v1",
+@@ -461,3 +464,38 @@ def test_template_provider_override_wins_over_env_var(monkeypatch):
+     cfg = load_config()
+ 
+     assert cfg.stt_provider == "assemblyai"
++
++
++def test_template_override_merges_stt_model_tts_voice_tts_model_fast_llm_model(monkeypatch):
++    """s6 review Important-2（ADR-5 生效值合并，P50 防线）：`stt_model`/
++    `tts_voice`/`tts_model`/`fast_llm_model` 四条"模板覆盖 > 环境变量 > 内置
++    默认"合并表达式（config.py:265-274）此前从未被任何用例走到模板覆盖
++    分支——v1 两个模板都只声明了 `stt_provider` 覆盖。这里显式声明四个
++    services 覆盖值，钉死合并结果等于模板覆盖值；同时断言 `cfg.llm_model`
++    仍等于环境变量值——这半句正是 ADR-5 单列 `fast_llm_model` 的唯一理由：
++    防"换个陪练模板静默把派活委派轮模型（cfg.llm_model）也换掉"这个越界
++    副作用（P50）的机械保障。"""
++    _set_new_required_env(monkeypatch)
++    override_template = ScenarioTemplate(
++        id="voice_chat",
++        label="覆盖测试模板",
++        identity_section=prompts.IDENTITY_DEFAULT_SECTION,
++        services=ServiceChoice(
++            stt_model="m1",
++            tts_voice="v1",
++            tts_model="m2",
++            fast_llm_model="fast-1",
++        ),
++    )
++    monkeypatch.setitem(scenarios.TEMPLATES, "voice_chat", override_template)
++
++    cfg = load_config()
++
++    assert cfg.stt_model == "m1"
++    assert cfg.tts_voice == "v1"
++    assert cfg.tts_model == "m2"
++    assert cfg.fast_llm_model == "fast-1"
++    assert cfg.llm_model == NEW_REQUIRED_ENV["LLM_MODEL"], (
++        "fast_llm_model 的模板覆盖不得连带改变 llm_model"
++        "（派活委派轮模型，P50 越界副作用防线）"
++    )
+diff --git a/server/tests/test_scenario_assembly.py b/server/tests/test_scenario_assembly.py
+index ae9aefa..289899d 100644
+--- a/server/tests/test_scenario_assembly.py
++++ b/server/tests/test_scenario_assembly.py
+@@ -112,6 +112,11 @@ def test_template_drives_prompt_and_service_construction(bot_module, monkeypatch
+         "english_tutor 声明 stt_provider=assemblyai，装出的 stt 必须是 AssemblyAISTTService"
+     )
+ 
++    # s6 review Important-2 可选加固：生效的 fast_llm_model 真的传进了构造
++    # 对象（不只是 Config 上的一个字段），钉死 ADR-5 合并结果的落地那一步。
++    assert assembled_voice.fast_llm._settings.model == cfg_voice.fast_llm_model
++    assert assembled_tutor.fast_llm._settings.model == cfg_tutor.fast_llm_model
++
+ 
+ def test_dual_brain_off_degrades_pipeline_to_single_chain(bot_module):
+     """SA-05(FR-12)：关闭态（`bot_module` 默认 `DUAL_BRAIN_ENABLED` 未设置）
+@@ -233,3 +238,41 @@ def test_dispatch_unaffected_by_dual_brain_off(bot_module):
+ 
+     assert assembled.dispatch_worker is not None
+     assert assembled.exec_worker is not None
++
++
++def test_scenario_log_line_uses_effective_stt_model_per_provider(bot_module, monkeypatch):
++    """s6 review Important-1：`[scenario]` 观测行的 `stt=<provider>/<model>`
++    段必须打各 provider 真实生效的模型名。`cfg.stt_model` 只被 soniox
++    builder 消费——deepgram/assemblyai builder 各自硬编码自己的模型
++    （B-3 硬约束不变，`_build_assemblyai_stt` 依旧不读 `cfg.stt_model`），
++    `_effective_stt_model()` 只是给日志用的事实源，不传进任何 Service
++    构造器。三种 provider 逐一核对，并在 deepgram 上核对真实打出的日志行。
++    """
++    cfg_soniox = bot_module.load_config()
++    assert cfg_soniox.stt_provider == "soniox"
++    assert bot_module._effective_stt_model(cfg_soniox) == cfg_soniox.stt_model, (
++        "soniox 的生效模型就是 cfg.stt_model 本身"
++    )
++
++    monkeypatch.setenv("STT_PROVIDER", "deepgram")
++    monkeypatch.setenv("DEEPGRAM_API_KEY", "deepgram-test-key")
++    cfg_deepgram = bot_module.load_config()
++    assert bot_module._effective_stt_model(cfg_deepgram) == "nova-3-general"
++    assert bot_module._effective_stt_model(cfg_deepgram) != cfg_deepgram.stt_model, (
++        "deepgram builder 不读 cfg.stt_model，生效模型必须与它不同"
++    )
++
++    monkeypatch.setenv("SCENARIO", "english_tutor")
++    monkeypatch.delenv("STT_PROVIDER", raising=False)
++    cfg_tutor = bot_module.load_config()
++    assert cfg_tutor.stt_provider == "assemblyai"
++    assert bot_module._effective_stt_model(cfg_tutor) == "universal-3-5-pro"
++    assert bot_module._effective_stt_model(cfg_tutor) != cfg_tutor.stt_model, (
++        "assemblyai builder 不读 cfg.stt_model，生效模型必须与它不同"
++    )
++
++    with _capture_logs() as captured:
++        bot_module.assemble_pipeline(cfg_deepgram, _FakeTransport())
++    assert any("stt=deepgram/nova-3-general" in line for line in captured), (
++        "观测行必须打 deepgram 真实生效模型 nova-3-general，而不是 cfg.stt_model 的 soniox 档位名"
++    )

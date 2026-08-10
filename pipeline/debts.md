@@ -56,7 +56,14 @@ debts:
     ttl: 2026-09-30
     source: task-dispatch
   - id: D-012
-    desc: dual_brain_inject/dual_brain_interrupt 两个 eval 场景为已知双脑注入时序 flaky 用例(同一份代码两次运行结果可能不同,已实测复现两侧皆失败/皆通过),给 C-03 类回归判定带来噪音,建议排查断言的时序窗口是否需放宽或改用更鲁棒的判据
+    desc: >-
+      dual_brain_inject/dual_brain_interrupt 两个 eval 场景为已知双脑注入时序 flaky 用例(同一份代码两次
+      运行结果可能不同),给 C-03 类回归判定带来噪音。2026-08-10(scenario-assembly T-4)`dual_brain_inject`
+      的 `within_ms` 已从过时的 6000ms 实测下调为 800ms(commit 5f4c26d,10 次真实耗时采样最快 1312ms,留
+      39% 安全边际),该场景本身已不再 flaky;但断言仍是固定毫秒数而非事件锚定,`dual_brain_interrupt` 未同
+      步处理,且 s6 评审(review.md Minor-1)指出 800ms 相对 1312-2191ms 的实测区间余量已偏紧——建议后续把
+      两个场景的断言方式统一改成事件锚定(如"done=false 注入到 done=true 之间无 llm_response"),而不是继续
+      靠调数值续命
     module: server/evals
     ttl: 2026-09-30
     source: task-dispatch
@@ -183,6 +190,47 @@ debts:
       2026-08-10 用户真机验证 SA-20 时口头发现,未要求本轮更换 STT provider 或重新设计,留债后续
       观察/评估(例如引导用户放慢语速、提示词层面减少专有名词依赖,或后续换模型/参数,design R-15
       已铺好"per-provider 模型旋钮"的改动面)。
+  - id: D-021
+    desc: >-
+      s6 全量评审(review.md Minor-2)指出:关闭态装配的单链结构测试
+      (test_scenario_assembly.py::test_dual_brain_off_degrades_pipeline_to_single_chain)只断言了五个
+      句柄为 None、无 ParallelPipeline、无 DUAL_BRAIN_SECTION、ignored_sources==[]、user_llm_enabled
+      is False,未断言 `sentinel_filter` 仍在链上、也未逐件核对契约 §0.4 给出的完整段序,若后人把关闭态
+      "看似冗余"的 sentinel_filter 顺手删掉,没有任何用例会变红。建议后续把关闭态 pipeline.processors
+      的类型序列与契约表整体比对一次。
+    module: server/tests/test_scenario_assembly.py
+    ttl: 2026-09-30
+    source: scenario-assembly
+  - id: D-022
+    desc: >-
+      s6 全量评审(review.md Minor-3)指出:`server/evals/dual_brain_inject.yaml` 的 `within_ms` 阈值
+      改动(commit 5f4c26d,用户拍板)落在 `design.md` 影响面表明写"文件不改,只改运行画像"的清单内
+      (`tasks/T-4.md:18` 同款措辞),design.md 冻结文档未随该例外同步修订,留下"文档说不改、仓库已改"
+      的不一致。design.md 已冻结(frozen hash 校验),本轮不重开设计重冻结去修一行影响面表述,留债后续
+      设计文档维护窗口一并补一行例外记录说明出处(ledger.md 2026-08-10 审计行已有拍板留痕,可作为该例外
+      的依据引用)。
+    module: pipeline/scenario-assembly/design.md
+    ttl: 2026-09-30
+    source: scenario-assembly
+  - id: D-023
+    desc: >-
+      s6 复评(review.md 复评第1轮 Minor)指出:`server/bot.py` 新增的 `_STT_EFFECTIVE_MODEL_OVERRIDES`
+      日志用模型表(deepgram="nova-3-general"、assemblyai="universal-3-5-pro")是字面硬编码值,与真实来源
+      (pipecat SDK 的 Deepgram 默认设置、`_build_assemblyai_stt` 里的写死值)之间没有机械绑定——若 pipecat
+      升级更换默认模型或有人改了 builder 却忘了同步这张表,`[scenario]` 观测行会重新失真且现有测试全绿不会
+      提示。建议后续把 assemblyai 侧断言改成 `assembled.stt._settings.model == _effective_stt_model(cfg)`
+      这类读真实构造对象的形式,或探索让日志直接读构造后的 service 实例属性而非维护平行表。
+    module: server/bot.py
+    ttl: 2026-09-30
+    source: scenario-assembly
+  - id: D-024
+    desc: >-
+      s6 全量评审(review.md Minor-5,nit)指出:`server/.env.example` 里 AssemblyAI 占位符写的是
+      `CHANGE_ME_assemblyai_api_key`(小写),与同文件其余占位符一律 `CHANGE_ME_大写`(如
+      `CHANGE_ME_SONIOX_API_KEY`)的风格不一致。`_is_missing()` 只判前缀,功能无影响,纯风格统一项。
+    module: server/.env.example
+    ttl: 2026-12-31
+    source: scenario-assembly
 ---
 
 # voice-agent · 项目债务簿

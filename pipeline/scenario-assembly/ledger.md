@@ -2,14 +2,14 @@
 change_id: scenario-assembly
 grade: L3
 contract_tier: cases
-stage: s6
-stage_status: running
+stage: done
+stage_status: done
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
 loop_counts:
   implement: 1
   integrate: 0
-  review: 0
+  review: 1
 rollback_count: 0
 frozen:
   prd:
@@ -88,22 +88,26 @@ uncovered:
   sa: SA-18
   fr: FR-4/FR-9
   reason: 契约外
-  status: resolved
+  status: accepted
+  acceptance_note: SA-18开启态复跑9/10+R8故障场景1/1(slow-failed命中3次);1个flaky(dual_brain_inject)已用户拍板放宽阈值(commit 5f4c26d)后连续3次全绿,与本变更无因果
 - id: U-002
   sa: SA-19
   fr: FR-10
   reason: 契约外
-  status: resolved
+  status: accepted
+  acceptance_note: SA-19两模板text对照+陪练英语audio真机跑通,AssemblyAI转写逐字一致;TTS听感(design R-14)用户拍板推迟自跑,不影响本条契约判据
 - id: U-003
   sa: SA-20
   fr: FR-3/FR-8
   reason: 契约外
-  status: resolved
+  status: accepted
+  acceptance_note: SA-20由主会话+用户本人真机两次WebRTC连接补验,[scenario]日志确认模板切换与会话级重读生效,详见baseline/regression-run.md
 - id: U-004
   sa: SA-21
   fr: FR-7
   reason: 契约外
-  status: resolved
+  status: accepted
+  acceptance_note: SA-21用户已于2026-08-10确认research/tutor-persona-final.md,确认范围显式覆盖C-2/C-3
 parked: []
 budget:
   limit_tokens: null
@@ -243,3 +247,19 @@ budget:
 2026-08-10T19:35:42 set stage_status=done
 2026-08-10T19:35:42 set stage=s6
 2026-08-10T19:35:42 set stage_status=running
+2026-08-10T19:36:36 s6评审:评审包落盘pipeline/scenario-assembly/review-package.diff(base 8d11dd2..HEAD);派code-reviewer全量评审
+2026-08-10T19:48:46 s6评审裁定BLOCK(pass=false):0 Critical/2 Important(①[scenario]日志stt模型段对deepgram/assemblyai失真,会带偏D-020排查 ②ADR-5生效值合并四路径zero覆盖+fast_llm_model全项目零断言,P50防线无机械保障)/5 Minor/3⚠️;派回修复
+2026-08-10T19:48:46 loop review -> 1
+2026-08-10T20:00:30 set uncovered[0].status=accepted
+2026-08-10T20:00:30 set uncovered[0].acceptance_note=SA-18开启态复跑9/10+R8故障场景1/1(slow-failed命中3次);1个flaky(dual_brain_inject)已用户拍板放宽阈值(commit 5f4c26d)后连续3次全绿,与本变更无因果
+2026-08-10T20:00:30 set uncovered[1].status=accepted
+2026-08-10T20:00:30 set uncovered[1].acceptance_note=SA-19两模板text对照+陪练英语audio真机跑通,AssemblyAI转写逐字一致;TTS听感(design R-14)用户拍板推迟自跑,不影响本条契约判据
+2026-08-10T20:00:30 set uncovered[2].status=accepted
+2026-08-10T20:00:31 set uncovered[2].acceptance_note=SA-20由主会话+用户本人真机两次WebRTC连接补验,[scenario]日志确认模板切换与会话级重读生效,详见baseline/regression-run.md
+2026-08-10T20:00:31 set uncovered[3].status=accepted
+2026-08-10T20:00:31 set uncovered[3].acceptance_note=SA-21用户已于2026-08-10确认research/tutor-persona-final.md,确认范围显式覆盖C-2/C-3
+2026-08-10T20:01:13 s6复评round1裁定pass=true(review.md追加复评节),两条Important均ADDRESSED;新增1条Minor(D-023)+沿用上轮5 Minor/3⚠️均转debts.md(D-012更新+D-021/D-022/D-023/D-024新增);closeout通过(4条uncovered全accepted);stats.sh: loops(i/n/r)=1/0/1 rollback=0 gatefail=1 wait=4 uncov=4 park=0
+2026-08-10T20:01:13 retro cost=9个子代理约128万tokens(T1-T4实现4轮+SA-18flaky修复1轮+qa-tester1轮+code-review 2轮+Important修复1轮)+主会话真机验证(SA-20)耗时约1.5小时人机协作 user_found_ratio=1/5(仅AssemblyAI中英混说识别准确度/Kylen误转写一项由用户真机实测发现,其余s2b占位符lint/dual_brain_inject时序flaky/两条Important均由gate/eval/code-review机制自动捕获) mechanism=流水线机制有效——结构性/回归类缺陷绝大多数被自动化闸门拦下,仅真机体验层UX问题需人工补位,机制建议保留不变
+2026-08-10T20:01:53 复盘完成,memory_save mem_msn6l8zx_6f67aa37b667;s6收尾完成
+2026-08-10T20:01:53 set stage_status=done
+2026-08-10T20:01:53 set stage=done
