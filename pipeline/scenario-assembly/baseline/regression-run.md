@@ -81,6 +81,30 @@ grep 'slow-failed' eval-runs/dual_brain_fault-20260810_184504/logs/*.log
 
 **SA-18 结论**:11 个复跑场景中 10 个通过（含 R8 故障场景），`dual_brain_inject` 1 个失败，根因是模型响应速度与硬编码时序阈值的匹配问题（环境/配置层面），与本次护栏句位置变更（R-2）及模板/装配改动均无因果关系，已如实记录，不代为改测试凑绿。
 
+## 补充:`dual_brain_inject` 阈值修复与复跑(2026-08-10,用户拍板顺手解决,不留债务)
+
+上述失败被用户拍板确认为"时序断言假设过时"（非本次装配变更引入的回归），要求直接放宽 `within_ms` 阈值解决。修复过程与依据:
+
+启动同一开启态 bot(命令同 SA-18 上方"启动命令"),用
+```bash
+set -a && source .env && set +a
+export NLTK_DISABLE_IMPORT_SECURITY=1 PYTHONPATH="$(pwd)"
+pipecat eval run evals/dual_brain_inject.yaml -v
+```
+连续复跑 10 次采集真实耗时,grep bot 日志 `[dual-brain] dispatch turn=` 与 `[dual-brain] inject turn=.* done=true` 的时间差(问题派发到完成标记触发合法第二轮的间隔):
+
+```
+1529ms, 2151ms, 2191ms, 1383ms, 1783ms, 1519ms, 1756ms, 1402ms, 1784ms, 1312ms
+```
+
+最快观测完成时间 = 1312ms(当前 `SLOW_LLM_MODEL=gemini-3.6-flash-high`),远低于原 6000ms 安全窗口,证实根因确系阈值假设过时,与本次场景装配改动(护栏句位置/模板/装配逻辑)无关。
+
+**处置**:`server/evals/dual_brain_inject.yaml` 的 `within_ms` 由 `6000` 改为 `800`(留出约 39% 安全边际,明显低于 10 次实测最快完成时间 1312ms),同步更新文件顶部注释以反映新的实测依据,不再是设计期的手工估算值。
+
+**复跑验证**:改后连续复跑 3 次,均 `1/1 passed`(退出码 0),`turn 2` 断言显示 `no 'llm_response' for 800ms`,不再 flaky。
+
+若后续 `SLOW_LLM_MODEL` 更换为更快的模型,该阈值需重新实测下调,而非直接调大掩盖问题(已在 yaml 注释中留言提醒)。
+
 ## 附:`dual_brain_fault.manifest.yaml` 注释同步(R-5)
 
 已在该文件注释里补充"前提条件":慢脑默认停用，`evals/fault.env` 必须显式含 `DUAL_BRAIN_ENABLED=true`（本机由用户手工加，未改真实内容，只改了注释）；顺带修正该文件注释里一处过期命令（`eval suite` 不接受 `-v`，去掉了这个已确认会报错的旧参数）。

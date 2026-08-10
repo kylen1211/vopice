@@ -4,10 +4,18 @@ name: dual_brain_inject
 # mid-analysis, its progressively injected material (`inject … done=false`,
 # dual_brain.py:198) must NOT make the fast brain speak again immediately —
 # only the completion marker (`done=true`, run_llm=True) may trigger a
-# second turn, and that happens only much later (§13.3: 10-50s). This
-# structural check picks a within_ms window that's clearly inside the
-# "still analyzing" period (well under the slow brain's fastest observed
-# completion) and asserts the second `response` is absent within it.
+# second turn, and that happens only much later (§13.3: 10-50s design intent;
+# in practice with the current SLOW_LLM_MODEL it lands well under a second).
+# This structural check picks a within_ms window that's clearly inside the
+# "still analyzing" period — well under the slow brain's fastest observed
+# completion — and asserts the second `response` is absent within it.
+#
+# within_ms=800 (was 6000, revised 2026-08-10 after T-4 real-machine reruns
+# hit a false failure): 10 live runs against the real SLOW_LLM_MODEL
+# (dispatch -> `done=true`, grepped from bot.log) measured 1312-2191ms,
+# fastest 1312ms. 800ms leaves a ~39% safety margin below that fastest
+# observed completion. If SLOW_LLM_MODEL is swapped for something faster
+# again, re-measure and lower further rather than re-inflating this value.
 #
 # Side evidence (optional, does not gate PASS): grep bot.log for
 # `[dual-brain] inject turn=.* done=false` — should appear at least once
@@ -27,4 +35,4 @@ turns:
   - expect:
       - event: response
         absent: true
-        within_ms: 6000
+        within_ms: 800
