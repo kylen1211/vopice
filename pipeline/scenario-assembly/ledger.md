@@ -2,7 +2,7 @@
 change_id: scenario-assembly
 grade: L3
 contract_tier: cases
-stage: s4m
+stage: s5
 stage_status: running
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
@@ -230,3 +230,7 @@ budget:
 2026-08-10T19:12:17 set stage=s4m
 2026-08-10T19:12:18 set stage_status=running
 2026-08-10T19:12:23 set pending=
+2026-08-10T19:13:16 s4m无worktree卡,跳过合并步骤;首轮gate exit=11因GATE_TEST_CMD未设(fail-closed非代码问题),补设后重跑绿:generated-hash 20个一致/typecheck跳过(无配置)/tests全绿;merged_green
+2026-08-10T19:13:16 set stage_status=done
+2026-08-10T19:13:16 set stage=s5
+2026-08-10T19:13:16 set stage_status=running
