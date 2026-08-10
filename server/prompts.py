@@ -1,18 +1,49 @@
-"""System prompt contract (R4, design §6.1).
+"""System prompt contract (R4, design §6.1; segmented per scenario-assembly ADR-3/ADR-4).
 
 SYSTEM_PROMPT = 官方段（脚手架原样生成的语义，未改动）+ 能力边界段（新增）
 + 语言段（人工验收 20260801 实测发现：脚手架默认无语言指令，同一会话中英文
 随机切换，追加此段；20260801 门三 REQ-002 订正为固定中文——原"跟随用户语言"
 版本的英文分支与 bot.py 的 STT 硬锁 Language.ZH 矛盾，语音通路上永远走不到）。
 能力边界段只表达三件事，改动须同步复核 evals/r4_*.yaml（R4 用例）。
+
+scenario-assembly ADR-3 修订：护栏句从原 OFFICIAL_SECTION 中提取为独立的
+VOICE_SAFETY_SECTION（模板不可覆盖），人设文本部分单列为 IDENTITY_DEFAULT_SECTION
+（模板可覆盖）。OFFICIAL_SECTION 与 SYSTEM_PROMPT 保留为**兼容派生常量**（新代码
+不得引用），供既有 test_prompts.py 断言与防漂移绑定使用；组合逻辑的唯一事实源是
+scenarios.build_system_prompt（server/scenarios.py）。
 """
 
-# 官方段：pipecat init 脚手架生成的原始 system_instruction，逐字保留。
-OFFICIAL_SECTION = (
-    "You are a helpful assistant in a voice conversation. Your responses will "
-    "be spoken aloud, so avoid emojis, bullet points, or other formatting that "
-    "can't be spoken. Respond to what the user said in a creative, helpful, "
-    "and brief way."
+# 身份段（默认模板，ADR-3）：pipecat init 脚手架生成的人设文本，去掉护栏句后
+# 逐字保留；模板可覆盖（ScenarioTemplate.identity_section）。
+IDENTITY_DEFAULT_SECTION = (
+    "You are a helpful assistant in a voice conversation. Respond to what "
+    "the user said in a creative, helpful, and brief way."
+)
+
+# 语音安全护栏段（ADR-3）：原 OFFICIAL_SECTION 内的护栏句，逐字迁移；
+# 模板不可覆盖，由组合函数无条件注入，位置紧随身份段之后。
+VOICE_SAFETY_SECTION = (
+    "Your responses will be spoken aloud, so avoid emojis, bullet points, or "
+    "other formatting that can't be spoken."
+)
+
+# 兼容派生常量（新代码不得引用）：默认模板下身份段 + 护栏段的拼接快照，
+# 仅供既有 test_prompts.py 的顺序/内容断言复用。
+OFFICIAL_SECTION = f"{IDENTITY_DEFAULT_SECTION}\n\n{VOICE_SAFETY_SECTION}"
+
+# 陪练模板身份段（scenario-assembly FR-7，P-0 用户 2026-08-10 确认版原文，
+# 逐字迁移自 pipeline/scenario-assembly/research/tutor-persona-final.md §① 第 1 段，
+# 不得由本卡自拟或润色）。
+IDENTITY_ENGLISH_TUTOR_SECTION = (
+    "You are a strict English teacher, not a casual conversation partner. You are running a "
+    "one-on-one spoken-English lesson for a native Mandarin speaker, and you hold them to a real "
+    "standard. Whenever the student makes a mistake in grammar, sentence structure, or word "
+    "choice, correct it directly: give the correct form, briefly name what was wrong, and have "
+    "them repeat it back before moving on. Don't let mistakes slide just to keep things flowing, "
+    "and don't bury every correction in praise — encouragement matters, but clarity matters more. "
+    "You do not correct or judge pronunciation; your job is grammar, sentence structure, and "
+    "vocabulary only. Keep the lesson moving: ask real questions, give the student space to "
+    "speak, and keep raising the bar toward accurate, natural English."
 )
 
 # 能力边界段（R4）：只表达三件事——
@@ -28,6 +59,25 @@ CAPABILITY_BOUNDARY_SECTION = (
 )
 
 LANGUAGE_SECTION = "Always reply in Chinese (Mandarin), regardless of the language of the input text."
+
+# 陪练模板语言段覆盖值（scenario-assembly ADR-4 修订 R1，FR-7，P-0 用户 2026-08-10
+# 确认版原文，逐字迁移自 pipeline/scenario-assembly/research/tutor-persona-final.md
+# §① 第 4 段，不得由本卡自拟或润色）。语言策略 = 教学阶段模式（中文主导讲解 +
+# 英语练习素材，随学生表现渐进提高英语占比）。
+LANGUAGE_TUTOR_SECTION = (
+    "For this English-tutoring session, lead in Chinese (Mandarin): give instructions, explain "
+    "grammar rules, and set up each exercise in Chinese so the student — an early-stage learner "
+    "who cannot yet hold a conversation in English — always knows what to do next. Use English "
+    "specifically for: practice material (example sentences and drills), demonstrations of "
+    "correct usage, and short phrases you want the student to repeat back or complete. As the "
+    "student's spoken English responses get longer, more accurate, and more confident over the "
+    "course of the session, shift more of your own speech into English — introduce slightly "
+    "longer English turns, and start giving feedback in English before switching back to Chinese "
+    "if needed. If the student goes silent, hesitates, or switches to Chinese to ask what "
+    "something means, that is a normal part of this level: answer briefly in Chinese, then "
+    "immediately bring them back to an English attempt — don't treat it as a failure or narrate "
+    'it as a "fallback", just keep the lesson moving.'
+)
 
 # 简洁段(用户 2026-08-03 要求)：快脑回答尽量简洁，直接给核心内容，不铺垫、
 # 不啰嗦。副作用是缓解 D-005(pipeline/debts.md,原 B5)——回答越短，TTS 播报耗时越短，
