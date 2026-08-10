@@ -50,6 +50,8 @@ from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.stt_service import STTService
+from pipecat.services.tts_service import TTSService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
 from pipecat.turns.user_turn_processor import UserTurnProcessor
@@ -58,6 +60,7 @@ from pipecat.workers.runner import WorkerRunner
 
 import dual_brain
 import prompts
+import scenarios
 import sentinel
 import task_dispatch
 import task_dispatch_contract
@@ -66,6 +69,13 @@ from config import Config, load_config
 load_dotenv(override=True)
 
 # R5: validate all required config at startup, fail fast with the full list.
+# scenario-assembly ADR-1: this module-level snapshot's job is now narrowed to
+# "process can't even start" fail-fast + the existing tests' Config access
+# point. It is NOT consumed on the production path any more — every real
+# session re-resolves its own `session_cfg` inside `bot()` (see below), so
+# that changing `SCENARIO`/`.env` between sessions in the same long-running
+# process actually takes effect (ADR-1 rationale: one process serves many
+# sessions).
 cfg = load_config()
 
 # bot.py —— provider 名 → 构造器。
@@ -102,9 +112,37 @@ def _build_deepgram_stt(c: Config):
     )
 
 
+def _build_assemblyai_stt(c: Config):
+    # scenario-assembly ADR-8(契约 §0.3 B-1…B-4):english_tutor 模板专用，靠
+    # universal-3-5-pro 的原生中英 code-switch 解开"陪练要说英语，但 STT 被
+    # 写死中文"这条语言轴（R-12）。
+    #
+    # B-2 不传任何语言参数（不传 language / language_code / language_detection）：
+    # 与 soniox/deepgram builder 硬锁 Language.ZH 的写法故意不同——传
+    # language_code="zh" 就退化成中文锁，陪练英语轮直接失效，那正是本轮引入
+    # 它要解的问题。
+    #
+    # B-3 不读 c.stt_model：其默认值 stt-rt-v5 是 Soniox 档位名，混用会连接
+    # 失败（同 deepgram builder 先例）；显式写死 universal-3-5-pro，与官方
+    # 文档页对齐，防 SDK 默认漂移。
+    #
+    # B-4 vad_force_turn_endpoint 用默认 True（不显式传，不得设 False）：该
+    # 模式下 AssemblyAI 不发 UserStarted/StoppedSpeakingFrame、尽快给
+    # final，轮次仍由本仓公共 VADProcessor/UserTurnProcessor 段驱动，与既有
+    # ExternalUserTurnStrategies() 一致；设 False 会让 AssemblyAI 自己管
+    # 轮次，与本仓轮次段打架。
+    from pipecat.services.assemblyai.stt import AssemblyAISTTService
+
+    return AssemblyAISTTService(
+        api_key=c.stt_api_key,
+        settings=AssemblyAISTTService.Settings(model="universal-3-5-pro"),
+    )
+
+
 STT_BUILDERS = {
     "soniox": _build_soniox_stt,
     "deepgram": _build_deepgram_stt,
+    "assemblyai": _build_assemblyai_stt,
 }
 def _build_elevenlabs_tts(c: Config):
     return ElevenLabsTTSService(
@@ -146,15 +184,23 @@ class AssembledPipeline:
     pipeline: Pipeline
     worker: PipelineWorker
     fast_context: LLMContext
-    slow_context: LLMContext
+    # scenario-assembly M-4：关闭态不构造慢脑分支，以下五个字段随之变
+    # Optional（design §5.1 关闭态表）。
+    slow_context: LLMContext | None
     fast_llm: OpenAILLMService
-    slow_llm: OpenAILLMService
-    tts: ElevenLabsTTSService
+    slow_llm: OpenAILLMService | None
+    # scenario-assembly M-4：新增——FR-8 要断言 STT 实例的真实构造参数（目前
+    # 没有句柄可读）；`tts` 的类型标注从具体厂商类放宽为 TTS 基类（模板可选
+    # cartesia 后原标注即失真）。
+    stt: STTService
+    tts: TTSService
     fast_user_aggregator: LLMUserAggregator
-    sentence_aggregator: SentenceAggregator
-    producer: ProducerProcessor
-    consumer: ConsumerProcessor
+    sentence_aggregator: SentenceAggregator | None
+    producer: ProducerProcessor | None
+    consumer: ConsumerProcessor | None
     rtvi_observer_params: RTVIObserverParams
+    # scenario-assembly M-4：本次装配实际使用的模板对象（P55 的端到端锚点）。
+    template: scenarios.ScenarioTemplate
     # task-dispatch (C4 派活) design.md 方案 C 步骤4⑤ / 契约 §0.1: four
     # structural-assertion handles for T-6's L2 tests — same "expose every
     # object the structural tests need" rationale as the fields above.
@@ -165,7 +211,8 @@ class AssembledPipeline:
 
 
 def make_pipeline_error_handler(
-    slow_llm: OpenAILLMService, slow_material_filter: dual_brain._SlowMaterialFilter
+    slow_llm: OpenAILLMService | None,
+    slow_material_filter: dual_brain._SlowMaterialFilter | None,
 ):
     """Build a session-scoped `on_pipeline_error` handler (design §5.2/§6.4/§6.5).
 
@@ -188,10 +235,17 @@ def make_pipeline_error_handler(
     counter, so `slow-failed` lines stay correlated with the rest of a
     turn's log lines (组末评审 MEDIUM,2026-08-03: an earlier version kept
     its own counter that only advanced on error and drifted out of sync).
+
+    scenario-assembly ADR-6(关闭态,`slow_llm`/`slow_material_filter` 均为
+    `None`):判断式必须以 `slow_llm is not None` 打头——漏了这半句，
+    `ErrorFrame(processor=None)`（框架内部无法归因来源时的样子）会被
+    `None is None` 误判成来自慢脑，把一次真实的"用户完全听不到声音"故障
+    误报成"慢脑降级正常工作"（design §6.4/contract §0.4，SA-14 专测此点）。
     """
 
     async def handle_pipeline_error(worker, frame: ErrorFrame) -> None:
-        if frame.processor is slow_llm:
+        if slow_llm is not None and frame.processor is slow_llm:
+            assert slow_material_filter is not None
             turn = slow_material_filter.turn
             logger.info(f"[dual-brain] slow-failed turn={turn} error={frame.error}")
             await worker.queue_frames(
@@ -204,37 +258,109 @@ def make_pipeline_error_handler(
 
 
 def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipeline:
-    """Build the dual-brain `ParallelPipeline` worker for one session (design §5.1).
+    """Build the pipeline worker for one session (design §5.1, scenario-assembly ADR-6).
 
     Split out from `run_bot` so tests can construct it against a fake
     transport (only `.input()`/`.output()` are called) and assert on its
     shape without driving a real `WorkerRunner` loop (design §8.2 U3/U5).
+
+    Template-driven (FR-2): `cfg.template` picks the identity/language prompt
+    segments (`scenarios.build_system_prompt`) and, via the already-merged
+    neutral fields (`cfg.stt_provider`/`cfg.tts_provider`/...), which
+    provider builders run — this function itself stays provider-agnostic.
+
+    Dual-brain switch (FR-12, scenario-assembly ADR-6): `cfg.dual_brain_enabled`
+    picks between two pipeline shapes — see the `if cfg.dual_brain_enabled`
+    branch below for the closed-state single-chain degradation.
     """
+    dual_brain_enabled = cfg.dual_brain_enabled
+
+    # scenario-assembly ADR-1 第 3 点(契约 §0.4)：装配起点打一行 INFO，作为
+    # "这次会话到底用了哪个模板/生效组合"的现场证据(FR-3/FR-8 的运行期可观测锚)。
+    logger.info(
+        f"[scenario] template={cfg.template.id} stt={cfg.stt_provider}/{cfg.stt_model} "
+        f"tts={cfg.tts_provider}/{cfg.tts_voice} fast_model={cfg.fast_llm_model} "
+        f"dual_brain={'on' if dual_brain_enabled else 'off'}"
+    )
+
     # Speech-to-Text / Text-to-Speech services — built via provider builders
-    # (design §6.3): only the in-use provider is registered per map.
+    # (design §6.3): only the in-use provider is registered per map. Which
+    # provider runs is decided upstream by `cfg` (template override > env >
+    # default, config.py); this function doesn't know or care which template
+    # picked which provider.
     stt = STT_BUILDERS[cfg.stt_provider](cfg)
     tts = TTS_BUILDERS[cfg.tts_provider](cfg)
 
-    # Fast brain — the only branch that talks to the user.
+    # Fast brain — the only branch that talks to the user. Identity/language
+    # prompt segments come from the session's template (scenario-assembly
+    # ADR-3/ADR-4); the model is the template-or-env-resolved fast model,
+    # never the dispatch-delegate model below.
     fast_llm = OpenAILLMService(
         api_key=cfg.llm_api_key,
         base_url=cfg.llm_base_url,
         settings=OpenAILLMService.Settings(
-            model=cfg.llm_model,
-            system_instruction=prompts.SYSTEM_PROMPT,
+            model=cfg.fast_llm_model,
+            system_instruction=scenarios.build_system_prompt(
+                cfg.template, dual_brain_enabled=dual_brain_enabled
+            ),
         ),
     )
-    # Slow brain — silent deep-dive, feeds material into the fast brain via
-    # Producer/Consumer (design §5.2). Same gateway, different model + prompt.
-    slow_llm = OpenAILLMService(
-        api_key=cfg.llm_api_key,
-        base_url=cfg.llm_base_url,
-        name="SlowBrainLLM",
-        settings=OpenAILLMService.Settings(
-            model=cfg.slow_llm_model,
-            system_instruction=prompts.SLOW_BRAIN_PROMPT,
-        ),
-    )
+
+    # scenario-assembly ADR-6：慢脑分支只在开关开启时构造。关闭态下以下这组
+    # 变量全部留 None，对应 AssembledPipeline 字段与管线形状随之变化（见下）。
+    slow_llm: OpenAILLMService | None = None
+    slow_context: LLMContext | None = None
+    slow_pair: LLMContextAggregatorPair | None = None
+    slow_material_filter: dual_brain._SlowMaterialFilter | None = None
+    fast_answer_tap: dual_brain._FastAnswerTap | None = None
+    sentence_aggregator: SentenceAggregator | None = None
+    producer: ProducerProcessor | None = None
+    consumer: ConsumerProcessor | None = None
+
+    if dual_brain_enabled:
+        assert cfg.slow_llm_model is not None, (
+            "config.py 已保证 DUAL_BRAIN_ENABLED=true 时 SLOW_LLM_MODEL 条件必需"
+        )
+        # Slow brain — silent deep-dive, feeds material into the fast brain
+        # via Producer/Consumer (design §5.2). Same gateway, different model
+        # + prompt (慢脑 prompt 不随模板变化，唯一事实源仍是 prompts.py)。
+        slow_llm = OpenAILLMService(
+            api_key=cfg.llm_api_key,
+            base_url=cfg.llm_base_url,
+            name="SlowBrainLLM",
+            settings=OpenAILLMService.Settings(
+                model=cfg.slow_llm_model,
+                system_instruction=prompts.SLOW_BRAIN_PROMPT,
+            ),
+        )
+        slow_context = LLMContext()
+        slow_pair = LLMContextAggregatorPair(
+            slow_context,
+            user_params=LLMUserAggregatorParams(
+                user_turn_strategies=ExternalUserTurnStrategies()
+            ),
+        )
+
+        # Session-scoped filter instance (T5.2) — never the module-level test
+        # singleton, see `dual_brain.build_slow_material_filter` docstring.
+        slow_material_filter = dual_brain.build_slow_material_filter()
+        slow_material_filter.bind_context(slow_context)
+
+        # D-005 修法(pipeline/debts.md,原 B5)：旁听快脑原始文本，不经 TTS 排队，供慢脑的
+        # 完成注入消息在触发重新生成前提醒快脑"你刚才已经这样回答过"，避免快脑
+        # 因看不到自己已答内容而把问题从头重答一遍。会话隔离，同一 rationale
+        # 见 `dual_brain.build_fast_answer_tap` docstring。这套机制只为双脑
+        # 现象存在（design §6.2 R-1），关闭态下没有慢脑补充可言，不构造。
+        fast_answer_tap = dual_brain.build_fast_answer_tap()
+
+        sentence_aggregator = SentenceAggregator()
+        producer = ProducerProcessor(
+            filter=slow_material_filter,
+            transformer=dual_brain.build_slow_material_transformer(fast_answer_tap),
+            passthrough=True,
+        )
+        consumer = ConsumerProcessor(producer=producer)
+
     # Task-dispatch (C4 派活) design.md 方案 C 步骤4②/7 · TaskDispatchWorker's
     # delegate LLM — a third, independent LLMService instance, built the same
     # way as fast_llm/slow_llm above (`build_dispatch_stack`'s `llm` kwarg
@@ -258,7 +384,6 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
     # ① K1 缺口在此被填 (design.md 方案 C 步骤4①): the two fast-brain tools
     # (T-4/contract §0.2) go on fast_context.tools.
     fast_context = LLMContext(tools=[task_dispatch.dispatch_task, task_dispatch.get_task_status])
-    slow_context = LLMContext()
 
     # ② design.md 方案 C 步骤4②: session-scoped stack (R5 工厂约定). Reads
     # TASK_DISPATCH_CLI here, inside the function body, not at module scope
@@ -278,79 +403,78 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
         fast_context,
         user_params=LLMUserAggregatorParams(user_turn_strategies=ExternalUserTurnStrategies()),
     )
-    slow_pair = LLMContextAggregatorPair(
-        slow_context,
-        user_params=LLMUserAggregatorParams(user_turn_strategies=ExternalUserTurnStrategies()),
-    )
-
-    # Session-scoped filter instance (T5.2) — never the module-level test
-    # singleton, see `dual_brain.build_slow_material_filter` docstring.
-    slow_material_filter = dual_brain.build_slow_material_filter()
-    slow_material_filter.bind_context(slow_context)
-
-    # D-005 修法(pipeline/debts.md,原 B5)：旁听快脑原始文本，不经 TTS 排队，供慢脑的
-    # 完成注入消息在触发重新生成前提醒快脑"你刚才已经这样回答过"，避免快脑
-    # 因看不到自己已答内容而把问题从头重答一遍。会话隔离，同一 rationale
-    # 见 `dual_brain.build_fast_answer_tap` docstring。
-    fast_answer_tap = dual_brain.build_fast_answer_tap()
-
-    sentence_aggregator = SentenceAggregator()
-    producer = ProducerProcessor(
-        filter=slow_material_filter,
-        transformer=dual_brain.build_slow_material_transformer(fast_answer_tap),
-        passthrough=True,
-    )
-    consumer = ConsumerProcessor(producer=producer)
 
     # Session-scoped sentinel gate (T4.3) — same one-instance-per-session
-    # rationale as the slow-material filter above.
+    # rationale as the slow-material filter above. Kept unconditionally
+    # (scenario-assembly ADR-6): it's a defensive gate that closed-state
+    # fast_llm output structurally never trips (no ∅-prefixed instruction in
+    # its prompt), so keeping it costs nothing and keeps the fast branch's
+    # shape identical across both dual-brain states minus the dual-brain-only
+    # components.
     sentinel_filter = sentinel.build_sentinel_filter()
 
     vad_processor = VADProcessor(vad_analyzer=SileroVADAnalyzer())
     user_turn_processor = UserTurnProcessor()
 
-    pipeline = Pipeline(
-        [
-            transport.input(),
-            stt,
-            vad_processor,
-            user_turn_processor,
-            ParallelPipeline(
-                [
-                    # Fast brain — the pipeline's only external output.
-                    # design.md 方案 C 步骤4②: injector goes at the branch
-                    # head, before the existing `consumer` (task-dispatch
-                    # terminal-report material, same slot rationale as the
-                    # slow-brain material consumer right after it).
-                    injector,
-                    consumer,
-                    fast_pair.user(),
-                    fast_llm,
-                    fast_answer_tap,
-                    sentinel_filter,
-                    tts,
-                    transport.output(),
-                    fast_pair.assistant(),
-                ],
-                [
-                    # Slow brain — no output component in this branch.
-                    slow_pair.user(),
-                    slow_llm,
-                    sentence_aggregator,
-                    producer,
-                    slow_pair.assistant(),
-                ],
-            ),
-        ]
-    )
+    # scenario-assembly ADR-6：快脑分支本体两态共用（injector/consumer 顺序、
+    # fast_answer_tap 插槽位置与 2026-08-10 基线逐件等价），只在 consumer/
+    # fast_answer_tap 是否存在上分叉。
+    fast_branch: list = [
+        # design.md 方案 C 步骤4②: injector goes at the branch head, before
+        # the existing `consumer` (task-dispatch terminal-report material,
+        # same slot rationale as the slow-brain material consumer right
+        # after it).
+        injector,
+    ]
+    if consumer is not None:
+        fast_branch.append(consumer)
+    fast_branch.extend([fast_pair.user(), fast_llm])
+    if fast_answer_tap is not None:
+        fast_branch.append(fast_answer_tap)
+    fast_branch.extend([sentinel_filter, tts, transport.output(), fast_pair.assistant()])
+
+    if dual_brain_enabled:
+        assert slow_pair is not None
+        assert slow_llm is not None
+        assert sentence_aggregator is not None
+        assert producer is not None
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                stt,
+                vad_processor,
+                user_turn_processor,
+                ParallelPipeline(
+                    fast_branch,
+                    [
+                        # Slow brain — no output component in this branch.
+                        slow_pair.user(),
+                        slow_llm,
+                        sentence_aggregator,
+                        producer,
+                        slow_pair.assistant(),
+                    ],
+                ),
+            ]
+        )
+        ignored_sources = [slow_llm, sentence_aggregator, producer]
+    else:
+        # 关闭态(contract §0.4)：单链，无 ParallelPipeline，无慢脑分支。
+        pipeline = Pipeline(
+            [transport.input(), stt, vad_processor, user_turn_processor, *fast_branch]
+        )
+        ignored_sources = []
 
     rtvi_observer_params = RTVIObserverParams(
         # Slow-brain branch only — the fast LLM must never be ignored
-        # (design §5.1.1 R2): its RTVI events drive the client panel.
-        ignored_sources=[slow_llm, sentence_aggregator, producer],
+        # (design §5.1.1 R2): its RTVI events drive the client panel. Empty
+        # in the closed state — there's no slow branch to ignore.
+        ignored_sources=ignored_sources,
         # Second leak path (design §5.1.1): the injection template reaches
         # `messages[-1]` on the fast context and would otherwise surface via
-        # `user-llm-text`. `ignored_sources` alone can't catch this.
+        # `user-llm-text`. `ignored_sources` alone can't catch this. Kept
+        # unconditionally (design §6.2 R-1): it guards the dispatch-material
+        # leak path, unrelated to the dual-brain switch.
         user_llm_enabled=False,
     )
 
@@ -381,12 +505,14 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
         slow_context=slow_context,
         fast_llm=fast_llm,
         slow_llm=slow_llm,
+        stt=stt,
         tts=tts,
         fast_user_aggregator=fast_pair.user(),
         sentence_aggregator=sentence_aggregator,
         producer=producer,
         consumer=consumer,
         rtvi_observer_params=rtvi_observer_params,
+        template=cfg.template,
         injector=injector,
         dispatch_worker=stack.dispatch_worker,
         exec_worker=stack.exec_worker,
@@ -394,7 +520,7 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
     )
 
 
-def seed_greeting_messages(fast_context: LLMContext, slow_context: LLMContext) -> None:
+def seed_greeting_messages(fast_context: LLMContext, slow_context: LLMContext | None) -> None:
     """Add the per-session greeting turn to both contexts (design §5.3).
 
     A lone "developer"-role message with no user turn gets rejected (400
@@ -406,14 +532,18 @@ def seed_greeting_messages(fast_context: LLMContext, slow_context: LLMContext) -
     handler so tests can drive the exact same greeting content without a
     real `WorkerRunner`/RTVI event loop (design §8.1
     test_greeting_turn_emits_no_material).
+
+    scenario-assembly ADR-6：`slow_context` 为 `None`（关闭态，没有慢脑分支）
+    时只种快脑那条问候，不报错、不构造占位慢脑上下文。
     """
     fast_context.add_message(
         {"role": "user", "content": "Start by concisely introducing yourself."}
     )
-    slow_context.add_message({"role": "user", "content": "(会话开始,用户尚未提问)"})
+    if slow_context is not None:
+        slow_context.add_message({"role": "user", "content": "(会话开始,用户尚未提问)"})
 
 
-async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> None:
+async def run_bot(transport: BaseTransport, runner_args: RunnerArguments, cfg: Config) -> None:
     """Run the voice bot for this session.
 
     Args:
@@ -422,6 +552,9 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
         runner_args: Runner session arguments. Carries the request ``body``
             (e.g. dial-out settings, SIP call details) and ``session_id``; the
             standard web/telephony pipelines don't need it.
+        cfg: This session's own config snapshot (scenario-assembly ADR-1) —
+            resolved fresh per session by `bot()`, never the module-level
+            preflight `cfg`.
     """
     logger.info("Starting bot")
 
@@ -460,6 +593,18 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments) -> Non
 async def bot(runner_args: RunnerArguments):
     """Main bot entry point."""
 
+    # scenario-assembly ADR-1(契约 §0.3 会话级解析原子性约束,FR-3)：这两行必须
+    # 紧邻、其间不得插入 `await`。`load_dotenv(override=True)` 改的是进程级
+    # `os.environ`,asyncio 单线程事件循环下两行同步代码之间没有让出点,保证这
+    # 次会话读到的是自己触发的那次 `.env` 更新,不会被另一个并发会话插队。
+    # 中间插入 `await` 会让并发会话读到半更新的 `os.environ`——另一个会话的
+    # `load_dotenv` 可能在这次 `await` 让出期间抢先跑,覆盖掉这次
+    # `load_config()` 尚未读取的变量,造成"部分字段来自旧配置"的串台。这是本次
+    # 会话唯一在生产路径上被消费的 `Config`——模块级 `cfg`(见文件顶部)只用于
+    # 启动预检。
+    load_dotenv(override=True)
+    session_cfg = load_config()
+
     transport_params = {
         "webrtc": lambda: TransportParams(
             audio_in_enabled=True,
@@ -474,7 +619,7 @@ async def bot(runner_args: RunnerArguments):
 
     transport = await create_transport(runner_args, transport_params)
 
-    await run_bot(transport, runner_args)
+    await run_bot(transport, runner_args, session_cfg)
 
 
 if __name__ == "__main__":

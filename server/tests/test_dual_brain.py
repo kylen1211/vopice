@@ -929,13 +929,18 @@ class TestAssemblePipeline:
         async def queue_frames(self, frames):
             self.queued.extend(frames)
 
-    def test_pipeline_shape(self, bot_module):
+    def test_pipeline_shape(self, bot_module_dual_brain):
         """U3：Consumer 必须在快脑分支内、且在 fast_pair.user() 之前；
-        慢脑分支不得含任何输出件(transport.output()/TTS)。"""
-        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        慢脑分支不得含任何输出件(transport.output()/TTS)。
+
+        scenario-assembly T-3：本类断言的是**开启态**管线形状（双脑分支挂载），
+        改用 T-2 的开启态 fixture `bot_module_dual_brain`（默认关闭态
+        `bot_module` 装不出 `ParallelPipeline`/慢脑分支，见 SA-06）。
+        """
+        assert hasattr(bot_module_dual_brain, "assemble_pipeline"), "assemble_pipeline 尚未定义"
 
         transport = self._FakeTransport()
-        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+        assembled = bot_module_dual_brain.assemble_pipeline(bot_module_dual_brain.cfg, transport)
 
         top_level_processors = assembled.pipeline.processors
         parallel = next(p for p in top_level_processors if isinstance(p, ParallelPipeline))
@@ -956,15 +961,19 @@ class TestAssemblePipeline:
         assert assembled.tts in fast_branch, "TTS 必须在快脑分支内"
         assert assembled.tts not in slow_branch, "慢脑分支不得含 TTS"
 
-    def test_rtvi_ignores_slow_branch(self, bot_module):
+    def test_rtvi_ignores_slow_branch(self, bot_module_dual_brain):
         """U5：ignored_sources 恰含慢脑三件(slow_llm/句聚合/Producer)且不含快脑
         LLM；并显式断言 `user_llm_enabled is False`(§5.1.1 第二条泄漏路径——
         注入模板经 `messages[-1]` 走 `user-llm-text` 上面板,eval 抓不到,只能
-        靠这个参数 + 本条断言兜住)。"""
-        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        靠这个参数 + 本条断言兜住)。
+
+        scenario-assembly T-3：开启态 fixture，理由同 `test_pipeline_shape`
+        （关闭态下 `ignored_sources` 恒为空列表，见 SA-05）。
+        """
+        assert hasattr(bot_module_dual_brain, "assemble_pipeline"), "assemble_pipeline 尚未定义"
 
         transport = self._FakeTransport()
-        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+        assembled = bot_module_dual_brain.assemble_pipeline(bot_module_dual_brain.cfg, transport)
 
         params = assembled.rtvi_observer_params
         ignored = list(params.ignored_sources)
@@ -977,8 +986,11 @@ class TestAssemblePipeline:
         assert assembled.fast_llm not in ignored, "快脑 LLM 绝不能进 ignored_sources"
         assert params.user_llm_enabled is False, "user_llm_enabled 必须显式为 False"
 
-    def test_greeting_turn_emits_no_material(self, bot_module):
+    def test_greeting_turn_emits_no_material(self, bot_module_dual_brain):
         """T5.5(design §5.3/§8.1)：开场白轮零注入帧、零完成标记帧、零 slow-failed。
+
+        scenario-assembly T-3：本用例断言 `slow_context` 上的内容，关闭态下
+        `slow_context` 为 `None`，故改用开启态 fixture `bot_module_dual_brain`。
 
         真实网关是否对开场白 no-op 消息("(会话开始,用户尚未提问)")返回零字符是
         运行期 LLM 行为(由 `prompts.SLOW_BRAIN_PROMPT` 的"无深析价值则零输出"
@@ -999,12 +1011,14 @@ class TestAssemblePipeline:
         选择理由)，`TestAssemblePipeline` 用纯 pytest 风格是为了直接吃
         `bot_module` fixture，两者结合就只能这样绕。
         """
-        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
-        assert hasattr(bot_module, "seed_greeting_messages"), "seed_greeting_messages 尚未定义"
+        assert hasattr(bot_module_dual_brain, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        assert hasattr(bot_module_dual_brain, "seed_greeting_messages"), (
+            "seed_greeting_messages 尚未定义"
+        )
 
         transport = self._FakeTransport()
-        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
-        bot_module.seed_greeting_messages(assembled.fast_context, assembled.slow_context)
+        assembled = bot_module_dual_brain.assemble_pipeline(bot_module_dual_brain.cfg, transport)
+        bot_module_dual_brain.seed_greeting_messages(assembled.fast_context, assembled.slow_context)
 
         slow_messages = assembled.slow_context.get_messages()
         assert any(
@@ -1126,16 +1140,21 @@ class TestAssemblePipeline:
         branches = parallel.processors
         return branches[0].processors, branches[1].processors
 
-    def test_dispatch_injector_at_fast_branch_head(self, bot_module):
+    def test_dispatch_injector_at_fast_branch_head(self, bot_module_dual_brain):
         """C-09 步骤1 / design.md §E L2:新增的 `_DispatchMaterialInjector`
         位于快脑分支头部,且对外输出分支数量与改动前一致(仍仅快脑分支含
         `transport.output()`/TTS)——与本类既有 `test_pipeline_shape` 断言
         "consumer 必须在快脑分支内、慢脑分支不得含输出件"是同一形状的直接
-        延伸(task 卡 T-6 Interfaces 节)。"""
-        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        延伸(task 卡 T-6 Interfaces 节)。
+
+        scenario-assembly T-3：本用例依赖 `_fast_and_slow_branches` 解析
+        `ParallelPipeline` 的两个分支，改用开启态 fixture `bot_module_dual_brain`
+        （关闭态无 `ParallelPipeline`，见 SA-05）。
+        """
+        assert hasattr(bot_module_dual_brain, "assemble_pipeline"), "assemble_pipeline 尚未定义"
 
         transport = self._FakeTransport()
-        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+        assembled = bot_module_dual_brain.assemble_pipeline(bot_module_dual_brain.cfg, transport)
 
         fast_branch, slow_branch = self._fast_and_slow_branches(assembled)
         # `fast_branch[0]` 是分支内部的 `PipelineSource` 标记(框架内部实现细
@@ -1153,13 +1172,17 @@ class TestAssemblePipeline:
         assert assembled.tts in fast_branch, "TTS 必须仍在快脑分支内"
         assert assembled.tts not in slow_branch, "慢脑分支不得含 TTS"
 
-    def test_dispatch_tools_registered_on_fast_context(self, bot_module):
+    def test_dispatch_tools_registered_on_fast_context(self, bot_module_dual_brain):
         """`fast_context.tools` 恰含两个派活工具(契约 §0.2 T1/T2,design.md
-        §E L2:"fast_context.tools 恰含两个工具")。"""
-        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        §E L2:"fast_context.tools 恰含两个工具")。
+
+        scenario-assembly T-3：改用 T-2 的开启态 fixture `bot_module_dual_brain`
+        （task 卡 T-3 白名单第 2 条钉死的 6 处调用点之一）。
+        """
+        assert hasattr(bot_module_dual_brain, "assemble_pipeline"), "assemble_pipeline 尚未定义"
 
         transport = self._FakeTransport()
-        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+        assembled = bot_module_dual_brain.assemble_pipeline(bot_module_dual_brain.cfg, transport)
 
         tools_schema = assembled.fast_context.tools
         registered = {wrapper.function for wrapper in tools_schema.direct_functions}
@@ -1168,13 +1191,17 @@ class TestAssemblePipeline:
         )
         assert len(tools_schema.direct_functions) == 2, "fast_context.tools 不得含重复/多余项"
 
-    def test_dispatch_app_resources_and_new_fields(self, bot_module):
+    def test_dispatch_app_resources_and_new_fields(self, bot_module_dual_brain):
         """`app_resources` 非空;`AssembledPipeline` 新增四字段可取(契约
-        §0.1/数据模型 §2,design.md §E L2)。"""
-        assert hasattr(bot_module, "assemble_pipeline"), "assemble_pipeline 尚未定义"
+        §0.1/数据模型 §2,design.md §E L2)。
+
+        scenario-assembly T-3：改用 T-2 的开启态 fixture `bot_module_dual_brain`
+        （task 卡 T-3 白名单第 2 条钉死的 6 处调用点之一）。
+        """
+        assert hasattr(bot_module_dual_brain, "assemble_pipeline"), "assemble_pipeline 尚未定义"
 
         transport = self._FakeTransport()
-        assembled = bot_module.assemble_pipeline(bot_module.cfg, transport)
+        assembled = bot_module_dual_brain.assemble_pipeline(bot_module_dual_brain.cfg, transport)
 
         app_resources = assembled.worker.app_resources
         assert app_resources is not None, "app_resources 必须非空"
