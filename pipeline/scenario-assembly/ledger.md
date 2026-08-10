@@ -2,7 +2,7 @@
 change_id: scenario-assembly
 grade: L3
 contract_tier: cases
-stage: s5
+stage: s6
 stage_status: running
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
@@ -98,7 +98,7 @@ uncovered:
   sa: SA-20
   fr: FR-3/FR-8
   reason: 契约外
-  status: open
+  status: resolved
 - id: U-004
   sa: SA-21
   fr: FR-7
@@ -234,3 +234,12 @@ budget:
 2026-08-10T19:13:16 set stage_status=done
 2026-08-10T19:13:16 set stage=s5
 2026-08-10T19:13:16 set stage_status=running
+2026-08-10T19:14:37 s5集成闸门绿:frozen ok/generated-hash 20一致/contract-runtime 19/19/tests全绿/mutation注入3存活0;派qa-tester做test-report
+2026-08-10T19:35:31 set uncovered[2].status=resolved
+2026-08-10T19:35:42 qa-tester test-report完成DONE_WITH_CONCERNS:19机检19/19,12FR全覆盖,manual SA-18/19/21通过,SA-20因qa-tester无浏览器/麦克风标'无法验证'留待真机;交主会话呈用户
+2026-08-10T19:35:42 用户拍板:①R-14 TTS听感推迟用户自跑,需要时通知配合;②主会话现场起bot(webrtc,localhost:7860),用户本人两次真机连接补验SA-20——connect1 template=voice_chat正常对话后断开,改.env SCENARIO=english_tutor(会话级重读,未重启进程),connect2 template=english_tutor stt=assemblyai真实连接确认code-switch(转写含中英文);验毕.env已改回默认、bot进程已停;SA-20判通过,U-003 resolved
+2026-08-10T19:35:42 附带发现登记债务D-020:AssemblyAI中英混说识别准确度不如纯中文(用户实测复现英文名Kylen被误识别为'开了'),非实现缺陷,不阻塞收尾;test-report.md/regression-run.md已同步更新
+2026-08-10T19:35:42 set pending=
+2026-08-10T19:35:42 set stage_status=done
+2026-08-10T19:35:42 set stage=s6
+2026-08-10T19:35:42 set stage_status=running

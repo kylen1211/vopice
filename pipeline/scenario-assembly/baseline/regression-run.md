@@ -112,3 +112,25 @@ pipecat eval run evals/dual_brain_inject.yaml -v
 ## 附:环境修复记录(非项目依赖变更)
 
 `server/evals/scenario_persona_english_tutor_audio_en.yaml` 首次运行时，全局 `pipecat-ai` CLI 工具自身的 venv 缺 `requests`/`kokoro_onnx`/`moonshine-voice` 等 evals 可选依赖（`uv tool install pipecat-ai[cli]` 未带 `evals` extra），已用 `uv tool install "pipecat-ai[cli,evals]==1.6.0"` 补齐（同版本号重装，未升级 pipecat 版本，不影响 `server/` 项目自身的 `pyproject.toml`/`uv.lock`，纯粹是本机全局工具环境的缺口修复，非本次变更的项目依赖）。
+
+## SA-20 · 真机两次连接换模板(2026-08-10,s5 收尾,用户本人真机连接配合)
+
+qa-tester 无浏览器/麦克风,无法独立复现该用例(结构性证据已由 SA-11/SA-12/SA-13 机检覆盖,缺的是真实两次 WebRTC 连接这层集成证据)。主会话在本机启动 bot(`NLTK_DISABLE_IMPORT_SECURITY=1 uv run bot.py -t webrtc`,`http://localhost:7860`),用户本人用浏览器连接两次,中途改 `.env` 的 `SCENARIO`。
+
+**连接 1(默认模板,`.env` 未设 `SCENARIO`)**:
+```
+[scenario] template=voice_chat stt=deepgram/stt-rt-v5 tts=cartesia/6eb8965c-e295-47bd-a9e4-3eeebb3abcff fast_model=gemini-3.6-flash-low dual_brain=off
+```
+用户说话、听到回应,确认对话正常;主动关闭浏览器标签页断开,日志确认 `Client disconnected`。
+
+**中途改动**:`.env` 追加 `SCENARIO=english_tutor`(bot 进程未重启,验证会话级重读)。
+
+**连接 2(陪练模板)**:
+```
+[scenario] template=english_tutor stt=assemblyai/stt-rt-v5 tts=cartesia/6eb8965c-e295-47bd-a9e4-3eeebb3abcff fast_model=gemini-3.6-flash-low dual_brain=off
+```
+`AssemblyAISTTService#0` 真实连接 AssemblyAI WebSocket,转写同时含英文(`"My name is."`、`"Tom."`、`"a student."`)与中文(`"嗯。"`),证明 code-switch 在真实运行中确实发生;连接 1 已断开在先,不存在旧会话被中途切换影响的并发场景。
+
+**结论**:模板切换生效、会话级重读正常、STT/TTS/LLM 组合随模板正确变化——SA-20 判**通过**。验证完毕后 `.env` 已改回默认(移除 `SCENARIO=english_tutor` 行),bot 进程已终止。
+
+**附带发现(登记 `pipeline/debts.md` D-020,不阻塞本次收尾)**:用户反馈日常随意语速的中英混说识别准确度不如纯中文,并复现一例具体误判——英文名字 "Kylen" 被识别成同音中文"开了"。这是 AssemblyAI `universal-3-5-pro` 在此类输入下的模型能力限制,不是本次实现的代码缺陷(builder 已严格遵守 B-1…B-4,不传任何语言参数)。SA-19 契约判据(单句英文可被正确转写)范围更窄,已通过,与本发现不矛盾。

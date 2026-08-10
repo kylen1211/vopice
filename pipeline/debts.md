@@ -168,6 +168,21 @@ debts:
     source: scenario-assembly
     ruling: >-
       2026-08-10 用户批准 scenario-assembly 设计([A])时一并授权登记(随批事项③),本变更不修。
+  - id: D-020
+    desc: >-
+      AssemblyAI universal-3-5-pro 中英 code-switch 真机实测(SA-20,2026-08-10 用户本人真机连接):
+      日常随意语速的中英混说场景识别准确度不如纯中文——用户报"纯中文识别比较准";实测复现一例具体误判:
+      用户说英文名字 "Kylen",被识别成同音中文"开了"(专有名词/人名类词汇被按读音误转写成中文,而非保留
+      英文)。builder 严格遵守 B-1…B-4(不传任何语言参数,靠模型原生 code-switch),配置侧无实现缺陷;
+      属模型本身在此类输入下的识别能力限制,design R-12 已知悉"仍要求真机实证"但未预见此类误判模式。
+      不阻塞本变更收尾(SA-19 契约判据是"单句英文可被正确转写",范围更窄,已通过)。
+    module: server/bot.py
+    ttl: 2026-09-30
+    source: scenario-assembly
+    ruling: >-
+      2026-08-10 用户真机验证 SA-20 时口头发现,未要求本轮更换 STT provider 或重新设计,留债后续
+      观察/评估(例如引导用户放慢语速、提示词层面减少专有名词依赖,或后续换模型/参数,design R-15
+      已铺好"per-provider 模型旋钮"的改动面)。
 ---
 
 # voice-agent · 项目债务簿
