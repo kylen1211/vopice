@@ -1,0 +1,43 @@
+name: scenario_persona_voice_chat
+
+# SA-19 (contract/cases.md §1, FR-10): persona baseline sample for the
+# default `voice_chat` template. Same fixed question set as
+# scenario_persona_english_tutor.yaml (text mode) so the two `response`
+# outputs are directly comparable — this is the "no persona override, no
+# services override" control run.
+#
+# Judge criteria anchor on: (a) generic-assistant identity (not a teacher),
+# (b) reply is entirely in Chinese regardless of what's asked (default
+# LANGUAGE_SECTION: "Always reply in Chinese (Mandarin), regardless of the
+# language of the input text.").
+#
+#   SCENARIO=voice_chat uv run bot.py -t eval
+#   PYTHONPATH=$(pwd) pipecat eval run evals/scenario_persona_voice_chat.yaml -v
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "你是谁？"
+    expect:
+      - event: response
+        eval: >-
+          回复把自己定位为一个通用的语音助手/助理,而不是英语老师或教学角色;
+          不包含"严格教师"/"纠正你的语法"/"英语课"一类教学定位表述
+
+  - user: "帮我做个决定，晚饭吃火锅还是烤肉？"
+    expect:
+      - event: response
+        eval: "回复针对晚饭该吃火锅还是烤肉给出建议或帮助用户权衡，全文用中文作答"
+
+  - user: "Can you teach me one English sentence?"
+    expect:
+      - event: response
+        eval: >-
+          回复整体仍然用中文表达(即使引用了一个英文例句用来回答问题也可以),
+          不会切换成大段英文讲解或进入英语教学流程，也不体现英语老师式的
+          纠错/严格教学态度

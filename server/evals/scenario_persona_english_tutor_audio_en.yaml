@@ -1,0 +1,53 @@
+name: scenario_persona_english_tutor_audio_en
+
+# SA-19 (contract/cases.md §1, FR-10; design.md R-12/R-14): the audio-input
+# half of the english_tutor persona sample. Must run against a bot booted
+# with SCENARIO=english_tutor (STT = AssemblyAI universal-3-5-pro,
+# ADR-8/B-1..B-4) — this scenario is the real-machine evidence that
+# AssemblyAI's native code-switch actually transcribes an English utterance
+# correctly, which voice_chat's Soniox STT (language_hints=[ZH]) could not
+# do (design R-12, the problem this STT swap was introduced to solve).
+#
+# `user: modality: audio` is scenario-wide (the pipecat eval scenario format
+# has no per-turn modality override), so this fixed English-input turn lives
+# in its own file rather than inside scenario_persona_english_tutor.yaml
+# (which stays text mode for the apples-to-apples persona comparison with
+# voice_chat).
+#
+# `judge: modality: text` (the default, omitted) — TTS is skipped
+# automatically, so `response` resolves to the LLM's text output and this
+# run incurs no TTS cost. `user_transcription` only fires in audio mode
+# (contract/cases.md's own eval-harness doc note) and is asserted on
+# directly: seeing the English content preserved there IS the AssemblyAI
+# code-switch evidence design R-12 asks for ("看不到英语被正确转写就判失败").
+# Kokoro (local, no API key, no per-run cost) synthesizes the question.
+#
+#   SCENARIO=english_tutor uv run bot.py -t eval
+#   PYTHONPATH=$(pwd) pipecat eval run evals/scenario_persona_english_tutor_audio_en.yaml -v
+
+user:
+  modality: audio
+  speech:
+    service: kokoro
+    voice: af_heart
+    sample_rate: 16000
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "Can you help me practice speaking English?"
+    expect:
+      - event: user_transcription
+        eval: >-
+          转写内容是英文的，语义上是在询问/表达想练习说英语这件事，没有被
+          错误识别成中文或无意义乱码（允许 STT 常见的小拼写/用词误差，只要
+          整体仍是可理解的英文句子）
+      - event: response
+        eval: >-
+          回复正面回应了要练习英语这件事（例如同意帮忙、开始一个练习、或
+          给出英文例句/短语），符合英语教学场景，而不是答非所问

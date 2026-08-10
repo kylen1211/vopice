@@ -24,12 +24,20 @@
 # 前置校验(硬性,design.md §8.1.1 明写):必须在 bot 的日志里看到
 # `slow-failed` 才算注入生效,否则这个场景的结论无效,不能上报 PASS。
 #
-# 跑法(cwd 必须是 server/,PYTHONPATH/NLTK 前置同其余场景约定):
+# 前置条件(修订 R-5,scenario-assembly 变更,2026-08-10):慢脑默认停用
+# (`DUAL_BRAIN_ENABLED` 默认 false),故 fault_run/.env 指向的 `evals/fault.env`
+# 必须显式含 `DUAL_BRAIN_ENABLED=true`,否则关闭态下根本不装配慢脑分支,
+# 这个故障注入场景在启动期就已经静默失效(不会出现 `slow-failed`,也不会有
+# 任何补充轮)——`fault.env` 本机 gitignored,该行由用户手工加,不在本清单
+# 或任何入库文件里写真实密钥。
+#
+# 跑法(cwd 必须是 server/,PYTHONPATH/NLTK 前置同其余场景约定;`eval suite`
+# 命令不接受 `-v`,详情走 `-d`/`--debug` 落 `<run>.debug.log`):
 #
 #   cd /home/ky/git/voice-agent/server
 #   set -a && source .env && set +a
-#   PYTHONPATH="$(pwd)" uv run pipecat eval suite \
-#     evals/dual_brain_fault.manifest.yaml -v \
+#   PYTHONPATH="$(pwd)" pipecat eval suite \
+#     evals/dual_brain_fault.manifest.yaml \
 #     --name dual_brain_fault-$(date +%Y%m%d_%H%M%S)
 #   grep 'slow-failed' eval-runs/dual_brain_fault-<ts>/logs/*.log
 

@@ -1,0 +1,49 @@
+name: scenario_persona_english_tutor
+
+# SA-19 (contract/cases.md §1, FR-10): persona baseline sample for the
+# `english_tutor` template. Same fixed question set as
+# scenario_persona_voice_chat.yaml (text mode) — the "identity_section +
+# language_section both overridden" comparison run.
+#
+# Judge criteria are anchored to research/tutor-persona-final.md §① (the
+# user-confirmed final copy), not invented: "a strict English teacher, not a
+# casual conversation partner", corrects grammar/sentence-structure/
+# word-choice mistakes directly (but never pronunciation), and the language
+# policy is "lead in Chinese for instructions/explanations, English for
+# practice material and demonstrations" (teaching-phase mode, Chinese-led +
+# English practice material) — this is the FR-4/SA-22 "language section
+# overridable" structural difference made observable in the persona's actual
+# spoken output, distinguishing it from voice_chat's "always reply in
+# Chinese, no English teaching content" baseline above.
+#
+#   SCENARIO=english_tutor uv run bot.py -t eval
+#   PYTHONPATH=$(pwd) pipecat eval run evals/scenario_persona_english_tutor.yaml -v
+
+judge:
+  eval:
+    factory: "judge_factory.judge_llm"
+
+turns:
+  - expect:
+      - event: response
+
+  - user: "你是谁？"
+    expect:
+      - event: response
+        eval: >-
+          回复把自己定位为一个严格的英语老师/英语教学角色(不是随便聊天的
+          陪练伙伴),而不是通用助手；可以提到会纠正语法/句式/用词错误，
+          但不承诺纠正发音
+
+  - user: "帮我做个决定，晚饭吃火锅还是烤肉？"
+    expect:
+      - event: response
+        eval: "回复用中文主导作答（讲解/引导用中文），围绕晚饭该吃火锅还是烤肉给出帮助或引导用户练习相关英文表达都算通过"
+
+  - user: "Can you teach me one English sentence?"
+    expect:
+      - event: response
+        eval: >-
+          回复体现"中文主导讲解、英文用于练习素材/示范"的教学阶段语言策略：
+          用中文说明或引导，同时给出至少一个具体的英文例句/短语作为练习素材，
+          而不是像 voice_chat 那样只用中文一带而过、不给出实际英文练习内容
