@@ -2,7 +2,7 @@
 change_id: scenario-assembly
 grade: L2
 contract_tier: cases
-stage: s1a
+stage: s1b
 stage_status: done
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
@@ -13,14 +13,17 @@ loop_counts:
 rollback_count: 0
 frozen:
   prd:
-    hash: null
+    hash: b72a1c1d3087b231d3e9357cb5cd4194c61007167e5b522a870eb25cdd6647b2
   contract:
     hash: null
     based_on: null
   tasks:
     hash: null
     based_on: null
-approvals: []
+approvals:
+- point: prd
+  at: 2026-08-10T08:40Z
+  hash: b72a1c1d3087b231d3e9357cb5cd4194c61007167e5b522a870eb25cdd6647b2
 worktrees: []
 generated: []
 uncovered: []
@@ -47,3 +50,18 @@ budget:
 2026-08-10T16:07:11 用户确认 s1a 调研结论(2026-08-10);范围锚定:场景模板定义+会话间切换装配,不含 ServiceSwitcher/双脑
 2026-08-10T16:07:11 set pending=
 2026-08-10T16:07:11 set stage_status=done
+2026-08-10T16:07:11 set stage=s1b
+2026-08-10T16:07:11 set stage_status=running
+2026-08-10T16:17:08 set stage_status=waiting_human
+2026-08-10T16:17:08 set pending=PRD 待批(硬批准点①)
+2026-08-10T16:25:01 PRD呈批用户意见[E]三条:①FR-4本次保持强制不可覆盖,但s2a须预留低成本升级路径(用户预告后期必做语气可调);②开放问题①性质已向用户澄清(仅影响FR-3实现方式非决策);③FR-7陪练模板钉为英语陪练/英语教师人设,旧库实测无现成文案,已派外部检索tutor-persona参考(落research/)。PM修订中
+2026-08-10T16:27:28 set pending=PRD 呈批暂缓:等 tutor-persona 外部检索回来核对是否触及 PRD 范围,并批后做最后一轮修订再呈(用户要求攒批一次改)
+2026-08-10T16:35:38 用户拍板:新增范围——慢脑默认停用(配置开关控制装配是否挂双脑分支,代码与测试保留,dual_brain eval 改为开关开启时适用);并入本变更与人设检索发现攒同一轮 PRD 修订。依据:现无开关(SLOW_LLM_MODEL必需+无条件装配,codegraph实测);派活不受影响(独立worker用快脑模型)
+2026-08-10T16:38:59 用户拍板:陪练模板角色定位=严格定义的英语教师(业界回避严格教师系商业留存考量,个人使用无此顾虑);FR-7 文案呈批待确认项收敛为仅中英配比一项
+2026-08-10T16:40:56 用户拍板:发音纠错定性=可做但属后期高级功能(专用发音评测工具链提取音素指标),本期出范围入非目标;本期人设文案仍不得承诺纠发音
+2026-08-10T16:42:11 set pending=PRD 终版待批(硬批准点①,攒批修订已全部落盘)
+2026-08-10T16:43:09 set frozen.prd.hash=b72a1c1d3087b231d3e9357cb5cd4194c61007167e5b522a870eb25cdd6647b2
+2026-08-10T16:43:09 set approvals[+]={point: prd, at: 2026-08-10T08:40Z, hash: b72a1c1d3087b231d3e9357cb5cd4194c61007167e5b522a870eb25cdd6647b2}
+2026-08-10T16:43:09 set pending=
+2026-08-10T16:43:09 PRD 批准冻结(硬批准点①,用户[A]);12条FR终版;无UI需求跳过ui-designer
+2026-08-10T16:43:09 set stage_status=done
