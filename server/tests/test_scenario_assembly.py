@@ -112,6 +112,11 @@ def test_template_drives_prompt_and_service_construction(bot_module, monkeypatch
         "english_tutor 声明 stt_provider=assemblyai，装出的 stt 必须是 AssemblyAISTTService"
     )
 
+    # s6 review Important-2 可选加固：生效的 fast_llm_model 真的传进了构造
+    # 对象（不只是 Config 上的一个字段），钉死 ADR-5 合并结果的落地那一步。
+    assert assembled_voice.fast_llm._settings.model == cfg_voice.fast_llm_model
+    assert assembled_tutor.fast_llm._settings.model == cfg_tutor.fast_llm_model
+
 
 def test_dual_brain_off_degrades_pipeline_to_single_chain(bot_module):
     """SA-05(FR-12)：关闭态（`bot_module` 默认 `DUAL_BRAIN_ENABLED` 未设置）
@@ -233,3 +238,41 @@ def test_dispatch_unaffected_by_dual_brain_off(bot_module):
 
     assert assembled.dispatch_worker is not None
     assert assembled.exec_worker is not None
+
+
+def test_scenario_log_line_uses_effective_stt_model_per_provider(bot_module, monkeypatch):
+    """s6 review Important-1：`[scenario]` 观测行的 `stt=<provider>/<model>`
+    段必须打各 provider 真实生效的模型名。`cfg.stt_model` 只被 soniox
+    builder 消费——deepgram/assemblyai builder 各自硬编码自己的模型
+    （B-3 硬约束不变，`_build_assemblyai_stt` 依旧不读 `cfg.stt_model`），
+    `_effective_stt_model()` 只是给日志用的事实源，不传进任何 Service
+    构造器。三种 provider 逐一核对，并在 deepgram 上核对真实打出的日志行。
+    """
+    cfg_soniox = bot_module.load_config()
+    assert cfg_soniox.stt_provider == "soniox"
+    assert bot_module._effective_stt_model(cfg_soniox) == cfg_soniox.stt_model, (
+        "soniox 的生效模型就是 cfg.stt_model 本身"
+    )
+
+    monkeypatch.setenv("STT_PROVIDER", "deepgram")
+    monkeypatch.setenv("DEEPGRAM_API_KEY", "deepgram-test-key")
+    cfg_deepgram = bot_module.load_config()
+    assert bot_module._effective_stt_model(cfg_deepgram) == "nova-3-general"
+    assert bot_module._effective_stt_model(cfg_deepgram) != cfg_deepgram.stt_model, (
+        "deepgram builder 不读 cfg.stt_model，生效模型必须与它不同"
+    )
+
+    monkeypatch.setenv("SCENARIO", "english_tutor")
+    monkeypatch.delenv("STT_PROVIDER", raising=False)
+    cfg_tutor = bot_module.load_config()
+    assert cfg_tutor.stt_provider == "assemblyai"
+    assert bot_module._effective_stt_model(cfg_tutor) == "universal-3-5-pro"
+    assert bot_module._effective_stt_model(cfg_tutor) != cfg_tutor.stt_model, (
+        "assemblyai builder 不读 cfg.stt_model，生效模型必须与它不同"
+    )
+
+    with _capture_logs() as captured:
+        bot_module.assemble_pipeline(cfg_deepgram, _FakeTransport())
+    assert any("stt=deepgram/nova-3-general" in line for line in captured), (
+        "观测行必须打 deepgram 真实生效模型 nova-3-general，而不是 cfg.stt_model 的 soniox 档位名"
+    )

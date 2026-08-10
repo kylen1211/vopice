@@ -144,6 +144,25 @@ STT_BUILDERS = {
     "deepgram": _build_deepgram_stt,
     "assemblyai": _build_assemblyai_stt,
 }
+
+
+# scenario-assembly s6 review Important-1：`c.stt_model` 只被 `_build_soniox_stt`
+# 消费（deepgram/assemblyai 各自硬编码自己的模型档位，B-3 硬约束不读
+# `c.stt_model`，此表不改变那条约束、也不传进任何 Service 构造器）——
+# `[scenario]` 观测行若直接打 `cfg.stt_model` 会在非 soniox provider 下打出
+# 一个根本没被使用的档位名，误导后续排查（如 debts.md D-020）。这张表把三家
+# 各自实际生效的模型值集中成一个事实源，只供日志使用。
+_STT_EFFECTIVE_MODEL_OVERRIDES = {
+    "deepgram": "nova-3-general",
+    "assemblyai": "universal-3-5-pro",
+}
+
+
+def _effective_stt_model(cfg: Config) -> str:
+    """Log-only：返回 `cfg.stt_provider` 下真实生效的 STT 模型名。"""
+    return _STT_EFFECTIVE_MODEL_OVERRIDES.get(cfg.stt_provider, cfg.stt_model)
+
+
 def _build_elevenlabs_tts(c: Config):
     return ElevenLabsTTSService(
         api_key=c.tts_api_key,
@@ -278,7 +297,7 @@ def assemble_pipeline(cfg: Config, transport: BaseTransport) -> AssembledPipelin
     # scenario-assembly ADR-1 第 3 点(契约 §0.4)：装配起点打一行 INFO，作为
     # "这次会话到底用了哪个模板/生效组合"的现场证据(FR-3/FR-8 的运行期可观测锚)。
     logger.info(
-        f"[scenario] template={cfg.template.id} stt={cfg.stt_provider}/{cfg.stt_model} "
+        f"[scenario] template={cfg.template.id} stt={cfg.stt_provider}/{_effective_stt_model(cfg)} "
         f"tts={cfg.tts_provider}/{cfg.tts_voice} fast_model={cfg.fast_llm_model} "
         f"dual_brain={'on' if dual_brain_enabled else 'off'}"
     )

@@ -5,7 +5,10 @@ import re
 
 import pytest
 
+import prompts
+import scenarios
 from config import ConfigError, load_config
+from scenarios import ScenarioTemplate, ServiceChoice
 
 REQUIRED_ENV = {
     "LLM_BASE_URL": "http://127.0.0.1:8045/v1",
@@ -461,3 +464,38 @@ def test_template_provider_override_wins_over_env_var(monkeypatch):
     cfg = load_config()
 
     assert cfg.stt_provider == "assemblyai"
+
+
+def test_template_override_merges_stt_model_tts_voice_tts_model_fast_llm_model(monkeypatch):
+    """s6 review Important-2（ADR-5 生效值合并，P50 防线）：`stt_model`/
+    `tts_voice`/`tts_model`/`fast_llm_model` 四条"模板覆盖 > 环境变量 > 内置
+    默认"合并表达式（config.py:265-274）此前从未被任何用例走到模板覆盖
+    分支——v1 两个模板都只声明了 `stt_provider` 覆盖。这里显式声明四个
+    services 覆盖值，钉死合并结果等于模板覆盖值；同时断言 `cfg.llm_model`
+    仍等于环境变量值——这半句正是 ADR-5 单列 `fast_llm_model` 的唯一理由：
+    防"换个陪练模板静默把派活委派轮模型（cfg.llm_model）也换掉"这个越界
+    副作用（P50）的机械保障。"""
+    _set_new_required_env(monkeypatch)
+    override_template = ScenarioTemplate(
+        id="voice_chat",
+        label="覆盖测试模板",
+        identity_section=prompts.IDENTITY_DEFAULT_SECTION,
+        services=ServiceChoice(
+            stt_model="m1",
+            tts_voice="v1",
+            tts_model="m2",
+            fast_llm_model="fast-1",
+        ),
+    )
+    monkeypatch.setitem(scenarios.TEMPLATES, "voice_chat", override_template)
+
+    cfg = load_config()
+
+    assert cfg.stt_model == "m1"
+    assert cfg.tts_voice == "v1"
+    assert cfg.tts_model == "m2"
+    assert cfg.fast_llm_model == "fast-1"
+    assert cfg.llm_model == NEW_REQUIRED_ENV["LLM_MODEL"], (
+        "fast_llm_model 的模板覆盖不得连带改变 llm_model"
+        "（派活委派轮模型，P50 越界副作用防线）"
+    )
