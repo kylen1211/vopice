@@ -157,6 +157,17 @@ debts:
       面对回答问题,现在改成了任务,所以他的角色还没调整,这个没问题,后期优化就是专门做这个"。判定根因
       =慢脑角色定位(原设计"高级辅助答疑" -> 现设计"派发任务")转型未跟随调整的架构层面缺口,本轮不修,
       留债后续做"快慢脑协作角色重新定位"专项优化时一并处理。
+  - id: D-019
+    desc: >-
+      CAPABILITY_BOUNDARY_SECTION 首句 "If the user asks you to do one of these things…" 指代悬空——
+      其指代的能力枚举句已在 commit e94b874(task-dispatch T-3)随派活能力声明改写时删除;且该段
+      "不具备执行类能力"的旧表述与已上线的派活(dispatch_task)能力相左。既有问题,非 scenario-assembly
+      引入,s2a 架构评审(2026-08-10)发现。修法方向:重写该段使指代闭合、与派活能力声明一致。
+    module: server/prompts.py
+    ttl: 2026-09-30
+    source: scenario-assembly
+    ruling: >-
+      2026-08-10 用户批准 scenario-assembly 设计([A])时一并授权登记(随批事项③),本变更不修。
 ---
 
 # voice-agent · 项目债务簿

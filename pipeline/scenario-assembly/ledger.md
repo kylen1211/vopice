@@ -2,7 +2,7 @@
 change_id: scenario-assembly
 grade: L2
 contract_tier: cases
-stage: s1b
+stage: s2a
 stage_status: done
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
@@ -13,10 +13,10 @@ loop_counts:
 rollback_count: 0
 frozen:
   prd:
-    hash: b72a1c1d3087b231d3e9357cb5cd4194c61007167e5b522a870eb25cdd6647b2
+    hash: a97aabb957d58bc97d2d4ccd1cd3d59974c8e4f566a8e094daf3596f2d127d32
   contract:
-    hash: null
-    based_on: null
+    hash: 630277ca11c256df600752cf2d49bbb1eb36fbe2c845fe9044a22acd94cd60d9
+    based_on: a97aabb957d58bc97d2d4ccd1cd3d59974c8e4f566a8e094daf3596f2d127d32
   tasks:
     hash: null
     based_on: null
@@ -24,6 +24,13 @@ approvals:
 - point: prd
   at: 2026-08-10T08:40Z
   hash: b72a1c1d3087b231d3e9357cb5cd4194c61007167e5b522a870eb25cdd6647b2
+- point: prd-refreeze
+  at: 2026-08-10T09:30Z
+  hash: a97aabb957d58bc97d2d4ccd1cd3d59974c8e4f566a8e094daf3596f2d127d32
+  reason: FR-4护栏句事实纠错(用户随设计批准授权)
+- point: contract
+  at: 2026-08-10T09:30Z
+  hash: 630277ca11c256df600752cf2d49bbb1eb36fbe2c845fe9044a22acd94cd60d9
 worktrees: []
 generated: []
 uncovered: []
@@ -65,3 +72,16 @@ budget:
 2026-08-10T16:43:09 set pending=
 2026-08-10T16:43:09 PRD 批准冻结(硬批准点①,用户[A]);12条FR终版;无UI需求跳过ui-designer
 2026-08-10T16:43:09 set stage_status=done
+2026-08-10T16:43:09 set stage=s2a
+2026-08-10T16:43:09 set stage_status=running
+2026-08-10T17:04:36 set stage_status=waiting_human
+2026-08-10T17:04:36 set pending=设计与契约待批(硬批准点②);随批决策:FR-4 PRD事实纠错回改授权、人设文案并行起草
+2026-08-10T17:07:59 设计批准([A],硬批准点②):拓扑=单进程多会话+会话级重读配置;scenarios.py注册表+六段prompt;DUAL_BRAIN_ENABLED默认关;D-003最小触碰;cases档17用例。随批授权:FR-4护栏句纠错回改PRD(PM执行中,改毕重冻结)、测试白名单3处、D-019登记(已入debts.md)。人设文案并行起草中
+2026-08-10T17:08:24 set frozen.prd.hash=a97aabb957d58bc97d2d4ccd1cd3d59974c8e4f566a8e094daf3596f2d127d32
+2026-08-10T17:08:24 set approvals[+]={point: prd-refreeze, at: 2026-08-10T09:30Z, hash: a97aabb957d58bc97d2d4ccd1cd3d59974c8e4f566a8e094daf3596f2d127d32, reason: FR-4护栏句事实纠错(用户随设计批准授权)}
+2026-08-10T17:08:24 set frozen.contract.hash=630277ca11c256df600752cf2d49bbb1eb36fbe2c845fe9044a22acd94cd60d9
+2026-08-10T17:08:24 set frozen.contract.based_on=a97aabb957d58bc97d2d4ccd1cd3d59974c8e4f566a8e094daf3596f2d127d32
+2026-08-10T17:08:24 set approvals[+]={point: contract, at: 2026-08-10T09:30Z, hash: 630277ca11c256df600752cf2d49bbb1eb36fbe2c845fe9044a22acd94cd60d9}
+2026-08-10T17:08:24 set pending=
+2026-08-10T17:08:24 s2a 冻结完成:PRD 重冻结(FR-4纠错)+design/contract 冻结,based_on 链闭合
+2026-08-10T17:08:24 set stage_status=done

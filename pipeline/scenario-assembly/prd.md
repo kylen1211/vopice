@@ -53,13 +53,13 @@
 
 ### FR-4(P0)身份段/协议段分层契约
 
-模板**只能**替换身份段(`OFFICIAL_SECTION` 语义位置的人设描述文本)。协议段(`CAPABILITY_BOUNDARY_SECTION` 能力边界;`DUAL_BRAIN_SECTION` 慢脑素材消化协议——**仅当慢脑开关开启时才注入(见 FR-12),关闭时该段不出现在 system_instruction 中;注入时同样不可被模板覆盖**)与语言/简洁风格段(`LANGUAGE_SECTION`、`CONCISENESS_SECTION`,含语音安全护栏句"避免 emoji/项目符号等无法朗读的格式")在任意模板下都必须**原样保留、顺序不变**,不可被模板覆盖。
+模板**只能**替换身份段中的人设描述文本(`OFFICIAL_SECTION`)。协议段(`CAPABILITY_BOUNDARY_SECTION` 能力边界;`DUAL_BRAIN_SECTION` 慢脑素材消化协议——**仅当慢脑开关开启时才注入(见 FR-12),关闭时该段不出现在 system_instruction 中;注入时同样不可被模板覆盖**)、语言/简洁风格段(`LANGUAGE_SECTION`、`CONCISENESS_SECTION`),以及**从身份段中独立提取出来的语音安全护栏段**(原句"避免 emoji/项目符号等无法朗读的格式"——**实测位于 `OFFICIAL_SECTION` 身份段内,而非语言/简洁段**;已按设计裁决提取为独立不可覆盖段,紧随身份段之后,详见 `design.md` ADR-3),在任意模板下都必须**原样保留、顺序不变**,不可被模板覆盖。
 
-> 产品决策(置信 70%):把 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 与协议段一起划为"模板不可覆盖",比现状盘点里"身份语义=OFFICIAL+LANGUAGE+CONCISENESS"的分类更严格——理由是语音安全护栏句就位于这两段之一,若允许模板整段覆盖,存在模板作者遗漏护栏句的风险。**反证条件(已被用户预告为后期必做,非假设)**:用户已拍板"后期需要按模板改变语气与风格",该升级——"`LANGUAGE_SECTION`/`CONCISENESS_SECTION` 允许模板覆盖但强制保留语音安全护栏句"——是确定会来的后续变更,不是"若未来需要"的或然场景;本次先做强制不可覆盖,是为该升级预留改动面小的落地路径(见下方设计约束),不是关死这条路。
+> 产品决策(置信 70%):把 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 与协议段一起划为"模板不可覆盖",比现状盘点里"身份语义=OFFICIAL+LANGUAGE+CONCISENESS"的分类更严格——理由(原依据有误,已按设计裁决订正):护栏句**实测位于身份段 `OFFICIAL_SECTION` 内,而非 `LANGUAGE_SECTION`/`CONCISENESS_SECTION`**,已提取为独立不可覆盖段(见上方护栏段说明),不再依赖这两段"兜底"护栏句;`LANGUAGE_SECTION`/`CONCISENESS_SECTION` 维持模板不可覆盖,是出于语气/简洁风格一致性的独立考虑。**反证条件(已被用户预告为后期必做,非假设)**:用户已拍板"后期需要按模板改变语气与风格",该升级——"`LANGUAGE_SECTION`/`CONCISENESS_SECTION` 允许模板覆盖但强制保留语音安全护栏句"——是确定会来的后续变更,不是"若未来需要"的或然场景;本次先做强制不可覆盖,是为该升级预留改动面小的落地路径(见下方设计约束),不是关死这条路。
 
 **设计约束(交 S2a,非本次实现范围,但装配层结构须为其预留)**:prompt 组合必须做成分段结构——每段(身份/协议/语言/简洁风格)在注册表/组合函数层面是独立可寻址的字段与拼接单元,而不是把五段现拼成一个不透明字符串常量后再整体处理。这样未来把 `LANGUAGE_SECTION`/`CONCISENESS_SECTION` 从"模板不可覆盖"升级为"模板可覆盖但强制保留护栏句"时,改动范围应能收敛在:①注册表新增可选字段、②组合函数里该段的取值逻辑(模板值优先、护栏句始终追加)、③对应校验测试三处,不触达管线装配顺序、不触达其余段落、不触达 STT/TTS/LLM 服务选择这条正交轴。S2a 方案是否满足该约束,是本条的验收依据之一。
 
-- **Given** 任意已注册模板且慢脑开关**开启**,**When** 装配出该模板的 `fast_llm.system_instruction`,**Then** `CAPABILITY_BOUNDARY_SECTION`、`DUAL_BRAIN_SECTION`、`LANGUAGE_SECTION`、`CONCISENESS_SECTION` 四段文本与顺序位置和变更前完全一致;且现有 `evals/r4_*.yaml`、`evals/dual_brain_*.yaml` 在开启态、任意模板下都能通过(回归判据,不因模板切换而失效)。慢脑开关**关闭**态下的 `DUAL_BRAIN_SECTION` 行为见 FR-12,不在本条判据范围内。
+- **Given** 任意已注册模板且慢脑开关**开启**,**When** 装配出该模板的 `fast_llm.system_instruction`,**Then** 协议段(`CAPABILITY_BOUNDARY_SECTION`、`DUAL_BRAIN_SECTION`)+ 语言/简洁段(`LANGUAGE_SECTION`、`CONCISENESS_SECTION`)+ 独立护栏段(语音安全护栏句)均不可被模板覆盖,文本与顺序位置和变更前完全一致;且现有 `evals/r4_*.yaml`、`evals/dual_brain_*.yaml` 在开启态、任意模板下都能通过(回归判据,不因模板切换而失效)。慢脑开关**关闭**态下的 `DUAL_BRAIN_SECTION` 行为见 FR-12,不在本条判据范围内。
 - **Given** S2a 输出的 prompt 组合设计,**When** 检视其数据结构与组合函数,**Then** 五段(身份/能力边界/语言/简洁风格/双脑协议)必须是各自独立的字段/组合单元,不存在"整段常量字符串、无法单独寻址某一段"的实现方式(呼应上方设计约束,防止未来升级时被迫重写整个 prompt 组合层)。
 
 ### FR-5(P0)服务选择限定既有云端 provider 白名单
