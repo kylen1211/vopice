@@ -2,8 +2,8 @@
 change_id: scenario-assembly
 grade: L3
 contract_tier: cases
-stage: s2b
-stage_status: done
+stage: s4
+stage_status: running
 pending: null
 base_commit: 8d11dd25f624f38fec935411108a33396804f8b1
 loop_counts:
@@ -42,8 +42,68 @@ approvals:
   reason: R1语言段+R2 assemblyai修订
   dry-run 19机检+4manual: null
 worktrees: []
-generated: []
-uncovered: []
+generated:
+- path: pipeline/scenario-assembly/generated/run-cases.sh
+  hash: 27bdfa8ab60e00b2677f1c0a55b6940e2eec088f3436a15cfc465aa47b859f77
+- path: pipeline/scenario-assembly/generated/cases/SA-02.sh
+  hash: 9ac61d3c44a9bddd7928091de42c46c0a07fb8794c638357d99bd2fb5ee15aae
+- path: pipeline/scenario-assembly/generated/cases/SA-13.sh
+  hash: 9d87ab4db80806a3a9e7e8aba59270ded8c926efc86c9670a60f711a3fdc9f59
+- path: pipeline/scenario-assembly/generated/cases/SA-14.sh
+  hash: b1a2fc7504734de959a03b7ffb33455d24425d2aef2aece605989b822d0bc73f
+- path: pipeline/scenario-assembly/generated/cases/SA-07.sh
+  hash: 3c8a660c04adb9a736bdafd510196a674b8172f5912f0dea83306b0af52535da
+- path: pipeline/scenario-assembly/generated/cases/SA-06.sh
+  hash: 761c1babf23bfa4693ebe27a9e2a9d47f98af3c8a147605147ed3be1bc3ec641
+- path: pipeline/scenario-assembly/generated/cases/SA-10.sh
+  hash: 99acb4476b456066e411dd79b7a1158fd83f30dd3f4227f4571e23f020d34446
+- path: pipeline/scenario-assembly/generated/cases/SA-17.sh
+  hash: dce735a957156c768823a85dcff0f696f0faeee2ecb29bd73b546e55be45aebf
+- path: pipeline/scenario-assembly/generated/cases/SA-08.sh
+  hash: c0e6f45e6060ebb446f9a34804bd3b4bf1d12024799700e514988bd2f871b4ae
+- path: pipeline/scenario-assembly/generated/cases/SA-09.sh
+  hash: 571828eea632f32aeff06a3614d4eef1ba1a1b095d7dea7c127d09099a739b30
+- path: pipeline/scenario-assembly/generated/cases/SA-04.sh
+  hash: 98c04470d7333558f905e6edac826d390a3c903238d9692a2efab9da84236bc8
+- path: pipeline/scenario-assembly/generated/cases/SA-22.sh
+  hash: 966af069dc85e135c9cf9d2ca79b582d4f6769174b4604f8dedd1cd57de918cc
+- path: pipeline/scenario-assembly/generated/cases/SA-15.sh
+  hash: 0de34eec9219f5c09b584df290662e3c0e95dd7cdbccc86a1b4ac79e124b30d5
+- path: pipeline/scenario-assembly/generated/cases/SA-12.sh
+  hash: 4c6a312238ed41f0a44441003343ebbc548306788a1ffaa0287185a528a9dec4
+- path: pipeline/scenario-assembly/generated/cases/SA-11.sh
+  hash: a3e4561db21e78c7301b65871c51d72407b11f4b6588541a4b8913d2c2e7ad20
+- path: pipeline/scenario-assembly/generated/cases/SA-23.sh
+  hash: 1a9981aad081f15ee6a5442e69f63a30caa1b897927afe068b302b523ece5365
+- path: pipeline/scenario-assembly/generated/cases/SA-03.sh
+  hash: 92db23c39175a764b118d6ceab90da11d2e7ed6afeb5eb1b0190faa1c09ceed5
+- path: pipeline/scenario-assembly/generated/cases/SA-16.sh
+  hash: 149d5d0fd9ee45c0d8e487b63ec176fd21f44bc6ba30465ef68c7d7c6af6d333
+- path: pipeline/scenario-assembly/generated/cases/SA-01.sh
+  hash: ebe157b80086e7984b44399a91c9680c7750a4b49257d5a5f15787d29b5bb784
+- path: pipeline/scenario-assembly/generated/cases/SA-05.sh
+  hash: 903455a220c79e7309b209a716be22bb09d0b525d8aaa58ebd67a7d7250d1407
+uncovered:
+- id: U-001
+  sa: SA-18
+  fr: FR-4/FR-9
+  reason: 契约外
+  status: open
+- id: U-002
+  sa: SA-19
+  fr: FR-10
+  reason: 契约外
+  status: open
+- id: U-003
+  sa: SA-20
+  fr: FR-3/FR-8
+  reason: 契约外
+  status: open
+- id: U-004
+  sa: SA-21
+  fr: FR-7
+  reason: 契约外
+  status: open
 parked: []
 budget:
   limit_tokens: null
@@ -115,3 +175,37 @@ budget:
 2026-08-10T17:43:18 set frozen.tasks.based_on=3597903221a54651fbba6bf49137c6413bdbff2cd23b35634c3e493f10177046
 2026-08-10T17:43:18 s2b闸门绿(gc=10 partial过/pc=0):任务卡冻结(4卡/FR零空洞/SA-01..23全落/15独占路径0重叠);T-2→T-3已知红态口径=派单方确认连续落地不设放行闸;冻结链prd→contract→tasks闭合
 2026-08-10T17:43:18 set stage_status=done
+2026-08-10T17:43:18 set stage=s3
+2026-08-10T17:43:18 set stage_status=running
+2026-08-10T17:43:37 用户授权后已向 server/evals/fault.env 追加 DUAL_BRAIN_ENABLED=true(仅追加未读内容,grep计数验证=1,文件确认gitignored);用户手工待办清零
+2026-08-10T17:45:57 set generated[+]={path: pipeline/scenario-assembly/generated/run-cases.sh, hash: 27bdfa8ab60e00b2677f1c0a55b6940e2eec088f3436a15cfc465aa47b859f77}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-02.sh, hash: 9ac61d3c44a9bddd7928091de42c46c0a07fb8794c638357d99bd2fb5ee15aae}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-13.sh, hash: 9d87ab4db80806a3a9e7e8aba59270ded8c926efc86c9670a60f711a3fdc9f59}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-14.sh, hash: b1a2fc7504734de959a03b7ffb33455d24425d2aef2aece605989b822d0bc73f}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-07.sh, hash: 3c8a660c04adb9a736bdafd510196a674b8172f5912f0dea83306b0af52535da}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-06.sh, hash: 761c1babf23bfa4693ebe27a9e2a9d47f98af3c8a147605147ed3be1bc3ec641}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-10.sh, hash: 99acb4476b456066e411dd79b7a1158fd83f30dd3f4227f4571e23f020d34446}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-17.sh, hash: dce735a957156c768823a85dcff0f696f0faeee2ecb29bd73b546e55be45aebf}
+2026-08-10T17:46:26 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-08.sh, hash: c0e6f45e6060ebb446f9a34804bd3b4bf1d12024799700e514988bd2f871b4ae}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-09.sh, hash: 571828eea632f32aeff06a3614d4eef1ba1a1b095d7dea7c127d09099a739b30}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-04.sh, hash: 98c04470d7333558f905e6edac826d390a3c903238d9692a2efab9da84236bc8}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-22.sh, hash: 966af069dc85e135c9cf9d2ca79b582d4f6769174b4604f8dedd1cd57de918cc}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-15.sh, hash: 0de34eec9219f5c09b584df290662e3c0e95dd7cdbccc86a1b4ac79e124b30d5}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-12.sh, hash: 4c6a312238ed41f0a44441003343ebbc548306788a1ffaa0287185a528a9dec4}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-11.sh, hash: a3e4561db21e78c7301b65871c51d72407b11f4b6588541a4b8913d2c2e7ad20}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-23.sh, hash: 1a9981aad081f15ee6a5442e69f63a30caa1b897927afe068b302b523ece5365}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-03.sh, hash: 92db23c39175a764b118d6ceab90da11d2e7ed6afeb5eb1b0190faa1c09ceed5}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-16.sh, hash: 149d5d0fd9ee45c0d8e487b63ec176fd21f44bc6ba30465ef68c7d7c6af6d333}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-01.sh, hash: ebe157b80086e7984b44399a91c9680c7750a4b49257d5a5f15787d29b5bb784}
+2026-08-10T17:46:27 set generated[+]={path: pipeline/scenario-assembly/generated/cases/SA-05.sh, hash: 903455a220c79e7309b209a716be22bb09d0b525d8aaa58ebd67a7d7250d1407}
+2026-08-10T17:46:40 set uncovered[+]={id: U-001, sa: SA-18, fr: FR-4/FR-9, reason: 契约外, status: open}
+2026-08-10T17:46:40 set uncovered[+]={id: U-002, sa: SA-19, fr: FR-10, reason: 契约外, status: open}
+2026-08-10T17:46:40 set uncovered[+]={id: U-003, sa: SA-20, fr: FR-3/FR-8, reason: 契约外, status: open}
+2026-08-10T17:46:40 set uncovered[+]={id: U-004, sa: SA-21, fr: FR-7, reason: 契约外, status: open}
+2026-08-10T17:46:46 set stage_status=done
+2026-08-10T17:46:46 set stage=s4
+2026-08-10T17:46:46 set stage_status=running
+2026-08-10T17:47:09 s3 生成完成:exit=10 partial;20个产物(run-cases.sh+19机检SA-01..17/22/23)登记generated;4条manual用例登记uncovered(SA-18→U-001 FR-4/FR-9需真机开启态复跑;SA-19→U-002 FR-10需两模板text+陪练audio真跑;SA-20→U-003 FR-3/FR-8需真机换模板;SA-21→U-004 FR-7人设文案人工确认门)
+2026-08-10T17:47:09 set stage_status=done
+2026-08-10T17:47:09 set stage=s4
+2026-08-10T17:47:09 set stage_status=running
